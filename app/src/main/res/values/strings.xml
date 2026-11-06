@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">ReconDrive</string>
+    <string name="car_app_name">ReconDrive Tactical</string>
+    <string name="app_description">Offline OSM Navigation with Tactical Fog of War Exploration for Android &amp; Android Auto</string>
+    
+    <!-- Android Auto Strings -->
+    <string name="nav_status_ready">TACTICAL RADAR READY</string>
+    <string name="nav_status_scanning">SURVEILLANCE ACTIVE • SCANNING</string>
+    <string name="nav_search_hint">Enter Destination or Grid Coordinates</string>
+    <string name="fog_cleared_format">%1$.1f km² UNCOVERED</string>
+    <string name="uncharted_streak_format">%1$.2f km UNCHARTED STREAK</string>
+</resources>
