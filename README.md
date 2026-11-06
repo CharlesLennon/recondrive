@@ -76,11 +76,22 @@ The map appearance and fog of war aesthetics are **completely decoupled** — mi
 | **🗺️ Map Skins**<br>*(Cartography Base)* | • **Tactical Obsidian**<br>• **Cyberpunk 2077**<br>• **Military Topo**<br>• **Midnight Monochrome**<br>• **Classic OSM Daylight**<br>• **Vintage Cartographer** | Controls terrain fill, water wash, highway line colors, active routing corridors, vehicle cursor tint, and road label typography. |
 | **🌫️ Fog Skins**<br>*(Exploration Shroud)* | • **Tactical Radar Shroud**<br>• **Dense Rolling Fog**<br>• **Matrix Glitch Void**<br>• **Charred Parchment**<br>• **Total Sensory Blackout**<br>• **80s CRT Phosphor** | Controls void darkness/opacity, laser perimeter glow width & blur, dashed border effects, explored track luminescence, and radar ring/particle overlays. |
 
-- **In-Vehicle Hot Swapping**: Switch map themes or fog skins directly from the Android Auto dashboard action strip (`Map: [...]`, `Fog: [...]`) without touching your phone.
+- **In-Vehicle Hot Swapping**: Switch map themes or fog skins directly from the Android Auto dashboard action strip (`Map: [...]`, `Fog: [...]`, `180m`, `95%`) without touching your phone.
 - **Handset Dialog**: Full Jetpack Compose visual skin picker with live swatches, active pairing indicators, and instant real-time canvas updates.
-- **Persistence**: Preferences are saved via `SkinManager` and persist across sessions.
+- **Persistence**: Preferences are saved via `SkinManager` and `FogPreferences` and persist across sessions.
 
-### 4. 🗺️ Offline Vector Maps & Routing
+### 4. 🎛️ Fog Range & Opacity Optics Calibration
+Fine-tune the exploration mechanics to match your preferred difficulty and immersion:
+- **Surveillance Range Slider (50m to 500m)**:
+  - Adjusts the baseline unmasking radius around your vehicle.
+  - Quick Presets: `60m Tight` (Hardcore narrow corridor exploration), `120m Urban`, `180m Standard Scout`, `260m Wide`, and `450m Satellite Sweep`.
+  - Velocity adaptation scales dynamically above and below the chosen baseline.
+- **Shroud Opacity Slider (20% to 100%)**:
+  - Adjusts the density and darkness of unexplored territory.
+  - Quick Presets: `30% Mist` (Faint translucent fog allowing subtle street contours underneath), `60% Haze`, `85% Dense`, and `100% Void` (Total pitch-black blackout).
+- **In-Car Android Auto Cycling**: Tap the `${range}m` or `${opacity}%` action buttons on your car dashboard to cycle presets on the fly.
+
+### 5. 🗺️ Offline Vector Maps & Routing
 - **Tactical Dark Map Palette**: Matte obsidian background (`#0A0D12`), glowing cyan primary corridors (`#00E5FF`), deep blue water bodies, and phosphor green explored tracks (`#00E676`).
 - **Offline `.mbtiles` Support**: Store entire countries or regional vector tile packs locally in the app storage directory with zero mobile data reliance.
 - **Offline Turn-by-Turn Engine**: Calculates routing geometry, step maneuvers, target coordinates, and trip durations on device.

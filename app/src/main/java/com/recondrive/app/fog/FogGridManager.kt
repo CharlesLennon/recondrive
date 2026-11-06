@@ -12,7 +12,10 @@ import kotlin.math.*
  * Tactical Fog of War Grid Manager
  * Handles real-time spatial indexing, circular beam unmasking, and exploration metrics.
  */
-class FogGridManager(context: Context) {
+class FogGridManager(
+    context: Context,
+    private val fogPreferences: FogPreferences? = null
+) {
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val db = Room.databaseBuilder(
@@ -58,11 +61,13 @@ class FogGridManager(context: Context) {
     fun processLocation(location: Location) {
         scope.launch {
             val speedKmh = location.speed * 3.6f
-            val scanRadiusMeters = when {
-                speedKmh > 60f -> 220.0
-                speedKmh > 25f -> 160.0
-                else -> 80.0
+            val baseRange = fogPreferences?.fogRangeMeters?.value?.toDouble() ?: 180.0
+            val speedFactor = when {
+                speedKmh > 60f -> 1.25
+                speedKmh > 25f -> 1.0
+                else -> 0.75
             }
+            val scanRadiusMeters = (baseRange * speedFactor).coerceIn(35.0, 650.0)
 
             // Calculate distance delta from previous fix
             var distanceDelta = 0.0

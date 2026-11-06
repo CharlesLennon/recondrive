@@ -29,6 +29,7 @@ import com.recondrive.app.ui.theme.*
 fun TacticalHudScreen(
     stats: ExplorationStats,
     skinManager: SkinManager,
+    fogPreferences: com.recondrive.app.fog.FogPreferences = com.recondrive.app.ReconApplication.instance.fogPreferences,
     currentSpeedKmh: Float = 48f,
     currentHeading: Float = 45f,
     currentLat: Double = 51.5074,
@@ -40,10 +41,13 @@ fun TacticalHudScreen(
 
     val mapSkin by skinManager.currentMapSkin.collectAsState()
     val fogSkin by skinManager.currentFogSkin.collectAsState()
+    val currentRange by fogPreferences.fogRangeMeters.collectAsState()
+    val currentOpacity by fogPreferences.fogOpacity.collectAsState()
 
     if (showSkinDialog) {
         SkinSelectorDialog(
             skinManager = skinManager,
+            fogPreferences = fogPreferences,
             onDismiss = { showSkinDialog = false }
         )
     }
@@ -267,10 +271,11 @@ fun TacticalHudScreen(
                     style = Stroke(width = 8f)
                 )
 
-                // Fog Cleared Boundary (Driven by Fog Skin Perimeter)
+                // Fog Cleared Boundary (Scaled dynamically by user Fog Range)
+                val canvasBeamRadius = (120f * (currentRange / 180f)).coerceIn(50f, 250f)
                 drawCircle(
                     color = Color(fogSkin.perimeterGlowColor),
-                    radius = 120f,
+                    radius = canvasBeamRadius,
                     center = Offset(cx, cy),
                     style = Stroke(width = fogSkin.borderStrokeWidth)
                 )
@@ -286,9 +291,9 @@ fun TacticalHudScreen(
                 drawPath(path = cursor, color = Color(mapSkin.vehicleCursorColor))
             }
 
-            // Top Overlay HUD Badge showing active skin pairing
+            // Top Overlay HUD Badge showing active skin pairing and optics settings
             Text(
-                text = "MAP: ${mapSkin.displayName}  |  FOG: ${fogSkin.displayName}",
+                text = "MAP: ${mapSkin.displayName} | FOG: ${fogSkin.displayName} | ${currentRange}m @ ${(currentOpacity * 100).toInt()}%",
                 color = Color(fogSkin.perimeterGlowColor),
                 fontSize = 10.sp,
                 fontWeight = FontWeight.Bold,

@@ -90,8 +90,12 @@ class CarSurfaceRenderer(
         if (!surface.isValid) return
 
         val skinManager = ReconApplication.instance.skinManager
+        val fogPrefs = ReconApplication.instance.fogPreferences
         val mapSkin: MapSkin = skinManager.currentMapSkin.value
         val fogSkin: FogSkin = skinManager.currentFogSkin.value
+
+        val configuredRangeMeters = fogPrefs.fogRangeMeters.value
+        val configuredOpacity = fogPrefs.fogOpacity.value
 
         try {
             val canvas = surface.lockCanvas(null) ?: return
@@ -145,8 +149,8 @@ class CarSurfaceRenderer(
             }
             canvas.drawPath(routePath, routePaint)
 
-            // 5. Draw Tactical Fog of War Shroud & Perimeter (Independent Fog Skin)
-            val beamRadius = 180f
+            // 5. Draw Tactical Fog of War Shroud & Perimeter (Scaled by user Fog Range & Opacity)
+            val beamRadius = (180f * (configuredRangeMeters / 180f)).coerceIn(70f, 380f)
 
             // Outer Fog Shroud (Mask outside cleared radius)
             val shroudPath = Path().apply {
@@ -155,7 +159,8 @@ class CarSurfaceRenderer(
             }
             fogShroudPaint.apply {
                 color = fogSkin.shroudColor
-                alpha = (fogSkin.shroudOpacity * 255).toInt()
+                val effectiveOpacity = (fogSkin.shroudOpacity * configuredOpacity).coerceIn(0.15f, 1.0f)
+                alpha = (effectiveOpacity * 255).toInt()
             }
             canvas.drawPath(shroudPath, fogShroudPaint)
 
@@ -201,7 +206,7 @@ class CarSurfaceRenderer(
             )
 
             // Bottom Skin Info & Exploration Status
-            val skinTag = "MAP: [${mapSkin.displayName}]  •  FOG: [${fogSkin.displayName}]"
+            val skinTag = "MAP: [${mapSkin.displayName}] • FOG: [${fogSkin.displayName}] • RANGE: ${configuredRangeMeters}m • OPACITY: ${(configuredOpacity * 100).toInt()}%"
             canvas.drawText(skinTag, 32f, surfaceHeight - 32f, textPaint)
 
             val stats = fogGridManager.stats.value

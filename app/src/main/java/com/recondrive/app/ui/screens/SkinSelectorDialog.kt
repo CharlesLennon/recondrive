@@ -1,5 +1,6 @@
 package com.recondrive.app.ui.screens
 
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -16,12 +17,15 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import com.recondrive.app.fog.FogPreferences
 import com.recondrive.app.skin.FogSkin
 import com.recondrive.app.skin.MapSkin
 import com.recondrive.app.skin.SkinManager
@@ -30,18 +34,21 @@ import com.recondrive.app.ui.theme.*
 @Composable
 fun SkinSelectorDialog(
     skinManager: SkinManager,
+    fogPreferences: FogPreferences,
     onDismiss: () -> Unit
 ) {
     val currentMapSkin by skinManager.currentMapSkin.collectAsState()
     val currentFogSkin by skinManager.currentFogSkin.collectAsState()
+    val currentRange by fogPreferences.fogRangeMeters.collectAsState()
+    val currentOpacity by fogPreferences.fogOpacity.collectAsState()
 
-    var selectedTab by remember { mutableIntStateOf(0) } // 0 = Map Skins, 1 = Fog Skins
+    var selectedTab by remember { mutableIntStateOf(0) } // 0 = Map, 1 = Fog, 2 = Calibration
 
     Dialog(onDismissRequest = onDismiss) {
         Surface(
             modifier = Modifier
                 .fillMaxWidth()
-                .fillMaxHeight(0.85f),
+                .fillMaxHeight(0.88f),
             shape = RoundedCornerShape(12.dp),
             color = TacticalObsidian,
             border = androidx.compose.foundation.BorderStroke(1.dp, TacticalBorder)
@@ -59,14 +66,14 @@ fun SkinSelectorDialog(
                 ) {
                     Column {
                         Text(
-                            text = "SKIN CUSTOMIZATION",
+                            text = "CUSTOMIZATION & FOG OPTICS",
                             color = ReconCyan,
-                            fontSize = 16.sp,
+                            fontSize = 15.sp,
                             fontWeight = FontWeight.Bold,
                             fontFamily = FontFamily.Monospace
                         )
                         Text(
-                            text = "Map and Fog skins operate completely independently",
+                            text = "Independent map cartography, fog skins & optics",
                             color = TextSecondary,
                             fontSize = 11.sp
                         )
@@ -83,7 +90,7 @@ fun SkinSelectorDialog(
 
                 Spacer(modifier = Modifier.height(12.dp))
 
-                // Tabs (Map Skins vs Fog Skins)
+                // 3 Independent Tabs
                 TabRow(
                     selectedTabIndex = selectedTab,
                     containerColor = TacticalSurface,
@@ -100,8 +107,8 @@ fun SkinSelectorDialog(
                         onClick = { selectedTab = 0 },
                         text = {
                             Text(
-                                text = "MAP THEMES (${MapSkin.values().size})",
-                                fontSize = 12.sp,
+                                text = "MAP",
+                                fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold,
                                 fontFamily = FontFamily.Monospace
                             )
@@ -112,8 +119,20 @@ fun SkinSelectorDialog(
                         onClick = { selectedTab = 1 },
                         text = {
                             Text(
-                                text = "FOG OF WAR (${FogSkin.values().size})",
-                                fontSize = 12.sp,
+                                text = "FOG",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                fontFamily = FontFamily.Monospace
+                            )
+                        }
+                    )
+                    Tab(
+                        selected = selectedTab == 2,
+                        onClick = { selectedTab = 2 },
+                        text = {
+                            Text(
+                                text = "RANGE & OPACITY",
+                                fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold,
                                 fontFamily = FontFamily.Monospace
                             )
@@ -123,17 +142,24 @@ fun SkinSelectorDialog(
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                // Content List
+                // Content Panel
                 Box(modifier = Modifier.weight(1f)) {
-                    if (selectedTab == 0) {
-                        MapSkinList(
+                    when (selectedTab) {
+                        0 -> MapSkinList(
                             currentSkin = currentMapSkin,
                             onSelect = { skinManager.setMapSkin(it) }
                         )
-                    } else {
-                        FogSkinList(
+                        1 -> FogSkinList(
                             currentSkin = currentFogSkin,
                             onSelect = { skinManager.setFogSkin(it) }
+                        )
+                        2 -> FogOpticsCalibrationPanel(
+                            currentRange = currentRange,
+                            currentOpacity = currentOpacity,
+                            currentFogSkin = currentFogSkin,
+                            currentMapSkin = currentMapSkin,
+                            onRangeChange = { fogPreferences.setFogRange(it) },
+                            onOpacityChange = { fogPreferences.setFogOpacity(it) }
                         )
                     }
                 }
@@ -156,15 +182,15 @@ fun SkinSelectorDialog(
                     ) {
                         Column {
                             Text(
-                                text = "ACTIVE PAIRING",
+                                text = "ACTIVE OPTICS PROFILE",
                                 color = TextSecondary,
-                                fontSize = 10.sp,
+                                fontSize = 9.sp,
                                 fontFamily = FontFamily.Monospace
                             )
                             Text(
-                                text = "${currentMapSkin.displayName} + ${currentFogSkin.displayName}",
+                                text = "${currentMapSkin.displayName} + ${currentFogSkin.displayName} • ${currentRange}m @ ${(currentOpacity * 100).toInt()}%",
                                 color = TextPrimary,
-                                fontSize = 12.sp,
+                                fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold
                             )
                         }
@@ -181,6 +207,245 @@ fun SkinSelectorDialog(
                                 fontSize = 11.sp,
                                 fontWeight = FontWeight.Bold,
                                 fontFamily = FontFamily.Monospace
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun FogOpticsCalibrationPanel(
+    currentRange: Int,
+    currentOpacity: Float,
+    currentFogSkin: FogSkin,
+    currentMapSkin: MapSkin,
+    onRangeChange: (Int) -> Unit,
+    onOpacityChange: (Float) -> Unit
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 4.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        // 1. Live Interactive Optics Mini-Radar
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(110.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .background(Color(currentMapSkin.backgroundColor))
+                .border(1.dp, Color(currentFogSkin.perimeterGlowColor).copy(alpha = 0.5f), RoundedCornerShape(8.dp)),
+            contentAlignment = Alignment.Center
+        ) {
+            Canvas(modifier = Modifier.fillMaxSize()) {
+                val cx = size.width / 2f
+                val cy = size.height / 2f
+
+                // Draw base road line
+                drawLine(
+                    color = Color(currentMapSkin.highwayColor),
+                    start = Offset(0f, cy + 20f),
+                    end = Offset(size.width, cy - 20f),
+                    strokeWidth = 4f
+                )
+
+                // Shroud overlay outside dynamic radius
+                val radiusPx = (40f + (currentRange - 50) * (55f / 450f)).coerceIn(35f, 100f)
+
+                // Cleared circle
+                drawCircle(
+                    color = Color(currentFogSkin.exploredRoadGlowColor),
+                    radius = radiusPx,
+                    center = Offset(cx, cy),
+                    style = Stroke(width = 3f)
+                )
+
+                // Shroud outside circle
+                val shroudAlpha = (currentFogSkin.shroudOpacity * currentOpacity).coerceIn(0.1f, 1.0f)
+                drawCircle(
+                    color = Color(currentFogSkin.shroudColor).copy(alpha = shroudAlpha),
+                    radius = size.width,
+                    center = Offset(cx, cy)
+                )
+
+                // Cutout cleared circle
+                drawCircle(
+                    color = Color(currentMapSkin.backgroundColor),
+                    radius = radiusPx,
+                    center = Offset(cx, cy)
+                )
+
+                // Reticle boundary
+                drawCircle(
+                    color = Color(currentFogSkin.perimeterGlowColor),
+                    radius = radiusPx,
+                    center = Offset(cx, cy),
+                    style = Stroke(width = currentFogSkin.borderStrokeWidth)
+                )
+
+                // Center vehicle dot
+                drawCircle(
+                    color = Color(currentMapSkin.vehicleCursorColor),
+                    radius = 5f,
+                    center = Offset(cx, cy)
+                )
+            }
+
+            Text(
+                text = "SURVEILLANCE BEAM: ${currentRange}m  •  OPACITY: ${(currentOpacity * 100).toInt()}%",
+                color = Color(currentFogSkin.perimeterGlowColor),
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Bold,
+                fontFamily = FontFamily.Monospace,
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 6.dp)
+            )
+        }
+
+        // 2. Fog Range Slider
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = TacticalSurface),
+            shape = RoundedCornerShape(8.dp),
+            border = androidx.compose.foundation.BorderStroke(1.dp, TacticalBorder)
+        ) {
+            Column(modifier = Modifier.padding(14.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = "FOG OF WAR RANGE",
+                        color = ReconCyan,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace
+                    )
+                    Text(
+                        text = "${currentRange} METERS",
+                        color = TextPrimary,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace
+                    )
+                }
+
+                Slider(
+                    value = currentRange.toFloat(),
+                    onValueChange = { onRangeChange(it.toInt()) },
+                    valueRange = 50f..500f,
+                    steps = 44, // 10m steps
+                    colors = SliderDefaults.colors(
+                        thumbColor = ReconCyan,
+                        activeTrackColor = ReconCyan,
+                        inactiveTrackColor = TacticalBorder
+                    )
+                )
+
+                // Quick Range Presets
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    val rangePresets = listOf(
+                        60 to "60m Tight",
+                        120 to "120m Urban",
+                        180 to "180m Standard",
+                        260 to "260m Wide",
+                        450 to "450m Sat"
+                    )
+                    for ((meters, label) in rangePresets) {
+                        Surface(
+                            color = if (currentRange == meters) ReconCyan else TacticalObsidian,
+                            shape = RoundedCornerShape(4.dp),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, if (currentRange == meters) ReconCyan else TacticalBorder),
+                            modifier = Modifier.clickable { onRangeChange(meters) }
+                        ) {
+                            Text(
+                                text = "${meters}m",
+                                color = if (currentRange == meters) TacticalObsidian else TextSecondary,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                fontFamily = FontFamily.Monospace,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
+                            )
+                        }
+                    }
+                }
+            }
+        }
+
+        // 3. Fog Opacity Slider
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = TacticalSurface),
+            shape = RoundedCornerShape(8.dp),
+            border = androidx.compose.foundation.BorderStroke(1.dp, TacticalBorder)
+        ) {
+            Column(modifier = Modifier.padding(14.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = "SHROUD OPACITY (DARKNESS)",
+                        color = ReconGreen,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace
+                    )
+                    Text(
+                        text = "${(currentOpacity * 100).toInt()}% DENSITY",
+                        color = TextPrimary,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace
+                    )
+                }
+
+                Slider(
+                    value = currentOpacity,
+                    onValueChange = { onOpacityChange(it) },
+                    valueRange = 0.20f..1.00f,
+                    steps = 15,
+                    colors = SliderDefaults.colors(
+                        thumbColor = ReconGreen,
+                        activeTrackColor = ReconGreen,
+                        inactiveTrackColor = TacticalBorder
+                    )
+                )
+
+                // Quick Opacity Presets
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    val opacityPresets = listOf(
+                        0.30f to "30% Mist",
+                        0.60f to "60% Haze",
+                        0.85f to "85% Dense",
+                        1.00f to "100% Void"
+                    )
+                    for ((opac, label) in opacityPresets) {
+                        val isCurrent = kotlin.math.abs(currentOpacity - opac) < 0.04f
+                        Surface(
+                            color = if (isCurrent) ReconGreen else TacticalObsidian,
+                            shape = RoundedCornerShape(4.dp),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, if (isCurrent) ReconGreen else TacticalBorder),
+                            modifier = Modifier.clickable { onOpacityChange(opac) }
+                        ) {
+                            Text(
+                                text = label,
+                                color = if (isCurrent) TacticalObsidian else TextSecondary,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                fontFamily = FontFamily.Monospace,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
                             )
                         }
                     }
@@ -214,7 +479,6 @@ private fun MapSkinList(
                         .padding(12.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // Swatches Preview
                     Row(
                         modifier = Modifier
                             .size(width = 54.dp, height = 36.dp)
@@ -286,7 +550,6 @@ private fun FogSkinList(
                         .padding(12.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // Fog Swatches Preview
                     Box(
                         modifier = Modifier
                             .size(width = 54.dp, height = 36.dp)

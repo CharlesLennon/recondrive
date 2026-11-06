@@ -65,17 +65,20 @@ class ReconCarNavigationScreen(carContext: CarContext) : Screen(carContext) {
         ).build()
 
         val skinManager = ReconApplication.instance.skinManager
+        val fogPrefs = ReconApplication.instance.fogPreferences
         val activeMap = skinManager.currentMapSkin.value
         val activeFog = skinManager.currentFogSkin.value
+        val currentRange = fogPrefs.fogRangeMeters.value
+        val currentOpacity = fogPrefs.fogOpacity.value
 
-        // In-Car Action Strip with independent Map and Fog skin toggles
+        // In-Car Action Strip with independent Map, Fog, Range, and Opacity controls
         val actionStrip = ActionStrip.Builder()
             .addAction(
                 Action.Builder()
-                    .setTitle("Map: ${activeMap.displayName.take(8)}")
+                    .setTitle("Map:${activeMap.displayName.take(5)}")
                     .setOnClickListener {
                         val next = skinManager.cycleNextMapSkin()
-                        CarToast.makeText(carContext, "Map Skin: ${next.displayName}", CarToast.LENGTH_SHORT).show()
+                        CarToast.makeText(carContext, "Map: ${next.displayName}", CarToast.LENGTH_SHORT).show()
                         surfaceRenderer.renderFrame()
                         invalidate()
                     }
@@ -83,10 +86,10 @@ class ReconCarNavigationScreen(carContext: CarContext) : Screen(carContext) {
             )
             .addAction(
                 Action.Builder()
-                    .setTitle("Fog: ${activeFog.displayName.take(8)}")
+                    .setTitle("Fog:${activeFog.displayName.take(5)}")
                     .setOnClickListener {
                         val next = skinManager.cycleNextFogSkin()
-                        CarToast.makeText(carContext, "Fog Skin: ${next.displayName}", CarToast.LENGTH_SHORT).show()
+                        CarToast.makeText(carContext, "Fog: ${next.displayName}", CarToast.LENGTH_SHORT).show()
                         surfaceRenderer.renderFrame()
                         invalidate()
                     }
@@ -94,14 +97,23 @@ class ReconCarNavigationScreen(carContext: CarContext) : Screen(carContext) {
             )
             .addAction(
                 Action.Builder()
-                    .setTitle("Intel")
+                    .setTitle("${currentRange}m")
                     .setOnClickListener {
-                        val stats = ReconApplication.instance.fogGridManager.stats.value
-                        CarToast.makeText(
-                            carContext,
-                            "Rank: ${stats.explorationRank.title} • Area: %.1f km²".format(stats.totalAreaKm2),
-                            CarToast.LENGTH_LONG
-                        ).show()
+                        val nextRange = fogPrefs.cycleNextRange()
+                        CarToast.makeText(carContext, "Fog Range: ${nextRange}m", CarToast.LENGTH_SHORT).show()
+                        surfaceRenderer.renderFrame()
+                        invalidate()
+                    }
+                    .build()
+            )
+            .addAction(
+                Action.Builder()
+                    .setTitle("${(currentOpacity * 100).toInt()}%")
+                    .setOnClickListener {
+                        val nextOpac = fogPrefs.cycleNextOpacity()
+                        CarToast.makeText(carContext, "Fog Opacity: ${(nextOpac * 100).toInt()}%", CarToast.LENGTH_SHORT).show()
+                        surfaceRenderer.renderFrame()
+                        invalidate()
                     }
                     .build()
             )
