@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 """
 ReconDrive Visual Asset & Screenshot Generator
-Generates high-resolution, authentic PNG screenshots for GitHub README:
-1. screenshot_01_android_auto_dashboard.png (Android Auto in-vehicle head unit display)
-2. screenshot_02_handset_tactical_hud.png (Handset Jetpack Compose Tactical HUD)
-3. screenshot_03_skin_selector_map_themes.png (Map Skin customization dialog)
-4. screenshot_04_skin_selector_fog_optics.png (Fog Range & Opacity calibration dialog)
+Generates high-resolution, pixel-perfect PNG screenshots for GitHub README:
+1. screenshot_01_android_auto_dashboard.png (Android Auto in-vehicle head unit display, 1280x720)
+2. screenshot_02_handset_tactical_hud.png (Handset Jetpack Compose Tactical HUD, 800x1400)
+3. screenshot_03_skin_selector_map_themes.png (Map Skin customization dialog, 800x1100)
+4. screenshot_04_skin_selector_fog_optics.png (Fog Range & Opacity calibration dialog, 800x1100)
 """
 
 import os
-from PIL import Image, ImageDraw, ImageFont, ImageFilter
+from PIL import Image, ImageDraw, ImageFont
 import math
 
 OUTPUT_DIR = "/root/recondrive/screenshots"
@@ -23,8 +23,10 @@ FONT_TEXT = ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf'
 FONT_TEXT_BOLD = ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf', 11)
 FONT_MONO = ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSansMono-Bold.ttf', 13)
 FONT_MONO_LG = ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSansMono-Bold.ttf', 36)
+FONT_MONO_XL = ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSansMono-Bold.ttf', 52)
 FONT_MONO_SM = ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf', 10)
 FONT_MONO_XS = ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSansMono.ttf', 9)
+
 
 # ==============================================================================
 # 1. SCREENSHOT 01: ANDROID AUTO IN-VEHICLE DISPLAY (1280 x 720)
@@ -73,12 +75,11 @@ def generate_screenshot_01():
 
     # 4. Fog of War Shroud & Glowing Cyan Boundary
     beamRadius = 180.0
-    # Perimeter Glow
-    for gr in (3, 2, 1):
+    for gr in (4, 3, 2, 1):
         draw.ellipse([(cx - beamRadius - gr, cy - beamRadius - gr), (cx + beamRadius + gr, cy + beamRadius + gr)], outline='#00E5FF', width=2)
 
     # Outer Shroud Mask (simulate dark shroud outside cleared beam)
-    mask = Image.new('L', (W, H), 245)
+    mask = Image.new('L', (W, H), 242)
     mask_draw = ImageDraw.Draw(mask)
     mask_draw.ellipse([(cx - beamRadius, cy - beamRadius), (cx + beamRadius, cy + beamRadius)], fill=0)
     shroud = Image.new('RGB', (W, H), '#070A0F')
@@ -92,35 +93,40 @@ def generate_screenshot_01():
 
     # 5. Vehicle Cursor (Arrow pointing 45° NE)
     arrow_pts = [
-        (cx + 12, cy - 12),
+        (cx + 14, cy - 14),
         (cx - 8, cy - 4),
         (cx - 4, cy + 4),
-        (cx - 12, cy + 12)
+        (cx - 14, cy + 14)
     ]
     draw.polygon(arrow_pts, fill='#00E5FF')
 
     # 6. Android Auto NavigationTemplate Header (Turn Card: Left Top)
-    card_w, card_h = 440, 130
+    card_w, card_h = 440, 142
     draw.rounded_rectangle([(24, 24), (24 + card_w, 24 + card_h)], radius=12, fill='#161B22', outline='#30363D', width=1)
     
-    # Maneuver Icon (Right Turn Arrow)
-    draw.rounded_rectangle([(38, 38), (98, 98)], radius=8, fill='#21262D')
-    draw.line([(54, 76), (54, 56), (82, 56)], fill='#00E5FF', width=5)
-    draw.polygon([(82, 48), (92, 56), (82, 64)], fill='#00E5FF')
+    # Maneuver Icon Box (64 x 64)
+    draw.rounded_rectangle([(38, 38), (102, 102)], radius=8, fill='#21262D')
+    # Right turn arrow graphic
+    draw.line([(56, 80), (56, 60), (84, 60)], fill='#00E5FF', width=5)
+    draw.polygon([(84, 52), (94, 60), (84, 68)], fill='#00E5FF')
 
-    draw.text((112, 38), "In 400 meters", fill='#8B949E', font=FONT_HEAD)
-    draw.text((112, 58), "Bear slight right onto", fill='#F0F6FC', font=FONT_TEXT)
-    draw.text((112, 74), "Recon Tactical Byway", fill='#00E5FF', font=FONT_TITLE)
+    draw.text((116, 36), "In 400 meters", fill='#8B949E', font=FONT_HEAD)
+    draw.text((116, 56), "Bear slight right onto", fill='#F0F6FC', font=FONT_TEXT)
+    draw.text((116, 74), "Recon Tactical Byway", fill='#00E5FF', font=FONT_TITLE)
 
-    # Lane Guidance Pills
-    draw.rounded_rectangle([(112, 106), (150, 126)], radius=4, fill='#21262D', outline='#00E5FF', width=1)
-    draw.text((124, 109), "➔", fill='#00E5FF', font=FONT_TEXT_BOLD)
-    draw.rounded_rectangle([(156, 106), (194, 126)], radius=4, fill='#21262D')
-    draw.text((168, 109), "↑", fill='#8B949E', font=FONT_TEXT_BOLD)
+    # Lane Guidance Pills (Turn Right active, Go Straight secondary)
+    draw.rounded_rectangle([(116, 108), (154, 130)], radius=4, fill='#21262D', outline='#00E5FF', width=1)
+    draw.text((127, 110), "➔", fill='#00E5FF', font=FONT_TEXT_BOLD)
+    draw.rounded_rectangle([(160, 108), (198, 130)], radius=4, fill='#21262D')
+    draw.text((172, 110), "↑", fill='#8B949E', font=FONT_TEXT_BOLD)
 
     # Trip Progress (Remaining 14.2 km • 18 min • 15:42 ETA)
-    draw.rounded_rectangle([(24, 162), (24 + card_w, 204)], radius=8, fill='#11161D', outline='#21262D', width=1)
-    draw.text((36, 174), "14.2 km  •  18 min  •  15:42 ETA", fill='#F0F6FC', font=FONT_MONO)
+    draw.rounded_rectangle([(24, 178), (24 + card_w, 222)], radius=8, fill='#11161D', outline='#21262D', width=1)
+    draw.text((40, 191), "14.2 km  •  18 min  •  15:42 ETA", fill='#F0F6FC', font=FONT_MONO)
+
+    # Speed limit roundel badge (50 km/h)
+    draw.ellipse([(24 + card_w - 56, 178 + 6), (24 + card_w - 24, 178 + 38)], outline='#FF3333', width=3, fill='#F0F6FC')
+    draw.text((24 + card_w - 49, 178 + 14), "50", fill='#0A0D12', font=FONT_MONO_SM)
 
     # 7. Android Auto In-Car Action Strip (Right Top)
     actions = [
@@ -131,10 +137,10 @@ def generate_screenshot_01():
     ]
     ax = W - 24
     for atxt, acol in reversed(actions):
-        tw = draw.textlength(atxt, font=FONT_MONO) + 24
+        tw = draw.textlength(atxt, font=FONT_MONO) + 28
         ax -= tw + 8
         draw.rounded_rectangle([(ax, 24), (ax + tw, 64)], radius=6, fill='#161B22', outline='#30363D', width=1)
-        draw.text((ax + 12, 36), atxt, fill=acol, font=FONT_MONO)
+        draw.text((ax + 14, 37), atxt, fill=acol, font=FONT_MONO)
 
     # 8. Bottom In-Car Status Strip
     draw.rectangle([(0, H - 48), (W, H)], fill='#0D1117')
@@ -148,6 +154,7 @@ def generate_screenshot_01():
     out_path = os.path.join(OUTPUT_DIR, "screenshot_01_android_auto_dashboard.png")
     img.save(out_path)
     print(f"Saved: {out_path} ({os.path.getsize(out_path)} bytes)")
+
 
 # ==============================================================================
 # 2. SCREENSHOT 02: HANDSET TACTICAL HUD (800 x 1400)
@@ -169,22 +176,35 @@ def generate_screenshot_02():
 
     # Skins Button
     draw.rounded_rectangle([(W - 210, 56), (W - 126, 92)], radius=4, fill='#121721', outline='#00E5FF', width=1)
-    draw.text((W - 194, 66), "SKINS", fill='#00E5FF', font=FONT_MONO_SM)
+    draw.text((W - 192, 68), "SKINS", fill='#00E5FF', font=FONT_MONO_SM)
 
     # Auto Linked Badge
     draw.rounded_rectangle([(W - 116, 56), (W - 24, 92)], radius=4, fill='#121721', outline='#00E676', width=1)
-    draw.text((W - 100, 66), "AUTO LINK", fill='#00E676', font=FONT_MONO_SM)
+    draw.text((W - 104, 68), "AUTO LINK", fill='#00E676', font=FONT_MONO_SM)
 
     # Speed & Heading Card
     draw.rounded_rectangle([(24, 114), (W - 24, 250)], radius=8, fill='#121721', outline='#21262D', width=1)
-    # Speed
-    draw.text((70, 134), "48", fill='#00E5FF', font=ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSansMono-Bold.ttf', 52))
-    draw.text((70, 204), "KM/H  (30 MPH)", fill='#8B949E', font=FONT_MONO_SM)
-    # Divider
-    draw.line([(W / 2, 134), (W / 2, 230)], fill='#21262D', width=1)
-    # Heading
-    draw.text((W / 2 + 60, 134), "45°", fill='#FFD600', font=ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSansMono-Bold.ttf', 52))
-    draw.text((W / 2 + 60, 204), "HEADING // NE", fill='#8B949E', font=FONT_MONO_SM)
+    
+    # Speed (Left Half Centered)
+    sp_val = "48"
+    sp_w = draw.textlength(sp_val, font=FONT_MONO_XL)
+    left_mid = 24 + (W - 48) * 0.25
+    draw.text((left_mid - sp_w / 2, 134), sp_val, fill='#00E5FF', font=FONT_MONO_XL)
+    lbl_sp = "KM/H  (30 MPH)"
+    lbl_sp_w = draw.textlength(lbl_sp, font=FONT_MONO_SM)
+    draw.text((left_mid - lbl_sp_w / 2, 204), lbl_sp, fill='#8B949E', font=FONT_MONO_SM)
+
+    # Divider Line
+    draw.line([(W / 2, 130), (W / 2, 234)], fill='#21262D', width=1)
+
+    # Heading (Right Half Centered)
+    hd_val = "45°"
+    hd_w = draw.textlength(hd_val, font=FONT_MONO_XL)
+    right_mid = 24 + (W - 48) * 0.75
+    draw.text((right_mid - hd_w / 2, 134), hd_val, fill='#FFD600', font=FONT_MONO_XL)
+    lbl_hd = "HEADING // NE"
+    lbl_hd_w = draw.textlength(lbl_hd, font=FONT_MONO_SM)
+    draw.text((right_mid - lbl_hd_w / 2, 204), lbl_hd, fill='#8B949E', font=FONT_MONO_SM)
 
     # Radar Map Canvas (Central Box)
     box_y = 274
@@ -204,15 +224,16 @@ def generate_screenshot_02():
     # Cleared Fog Reticle
     draw.ellipse([(rcx - 140, rcy - 140), (rcx + 140, rcy + 140)], outline='#00E5FF', width=3)
     
-    # Cursor
-    draw.polygon([(rcx + 10, rcy - 10), (rcx - 6, rcy - 2), (rcx - 2, rcy + 2), (rcx - 10, rcy + 10)], fill='#00E5FF')
+    # Vehicle Cursor
+    draw.polygon([(rcx + 12, rcy - 12), (rcx - 6, rcy - 2), (rcx - 2, rcy + 2), (rcx - 12, rcy + 12)], fill='#00E5FF')
 
     draw.text((40, box_y + 16), "SURVEILLANCE BEAM: 180M  •  OPACITY: 95%", fill='#00E5FF', font=FONT_MONO_SM)
     draw.text((40, box_y + box_h - 28), "MAP: [Tactical Obsidian]  |  FOG: [Tactical Radar]", fill='#8B949E', font=FONT_MONO_SM)
 
     # Exploration Intel Card
     card2_y = box_y + box_h + 24
-    draw.rounded_rectangle([(24, card2_y), (W - 24, card2_y + 190)], radius=8, fill='#121721', outline='#21262D', width=1)
+    card2_h = 190
+    draw.rounded_rectangle([(24, card2_y), (W - 24, card2_y + card2_h)], radius=8, fill='#121721', outline='#21262D', width=1)
     draw.text((44, card2_y + 18), "EXPLORATION INTEL", fill='#8B949E', font=FONT_MONO_SM)
     draw.text((W - 180, card2_y + 18), "TACTICAL VANGUARD", fill='#FFD600', font=FONT_MONO_SM)
 
@@ -225,18 +246,48 @@ def generate_screenshot_02():
     draw.line([(44, card2_y + 134), (W - 44, card2_y + 134)], fill='#21262D', width=1)
     draw.text((44, card2_y + 150), "Discovered Cells: 8,672  •  Next Rank at 25.0 km²", fill='#00E5FF', font=FONT_MONO_SM)
 
-    # Bottom Actions
-    act_y = card2_y + 214
+    # Middle Action Buttons
+    act_y = card2_y + card2_h + 20
     btn_w = (W - 60) // 2
-    draw.rounded_rectangle([(24, act_y), (24 + btn_w, act_y + 60)], radius=8, fill='#00E5FF')
-    draw.text((64, act_y + 20), "ENGAGE ROUTE", fill='#0A0D12', font=FONT_HEAD)
+    
+    # Left Button: ENGAGE ROUTE
+    draw.rounded_rectangle([(24, act_y), (24 + btn_w, act_y + 58)], radius=8, fill='#00E5FF')
+    txt_engage = "ENGAGE ROUTE"
+    te_w = draw.textlength(txt_engage, font=FONT_HEAD)
+    draw.text((24 + (btn_w - te_w) / 2, act_y + 22), txt_engage, fill='#0A0D12', font=FONT_HEAD)
 
-    draw.rounded_rectangle([(36 + btn_w, act_y), (W - 24, act_y + 60)], radius=8, fill='#121721', outline='#21262D', width=1)
-    draw.text((36 + btn_w + 40, act_y + 20), "OFFLINE MAPS", fill='#F0F6FC', font=FONT_HEAD)
+    # Right Button: OFFLINE MAPS
+    draw.rounded_rectangle([(36 + btn_w, act_y), (W - 24, act_y + 58)], radius=8, fill='#121721', outline='#21262D', width=1)
+    txt_maps = "OFFLINE MAPS"
+    tm_w = draw.textlength(txt_maps, font=FONT_HEAD)
+    draw.text((36 + btn_w + (btn_w - tm_w) / 2, act_y + 22), txt_maps, fill='#F0F6FC', font=FONT_HEAD)
+
+    # Bottom Android Navigation Bar (Tabs: HUD, ROUTE, SKINS, INTEL)
+    nav_y = H - 90
+    draw.rectangle([(0, nav_y), (W, H)], fill='#0D1117')
+    draw.line([(0, nav_y), (W, nav_y)], fill='#21262D', width=1)
+    
+    tabs = [
+        ("HUD", "#00E5FF", True),
+        ("ROUTE", "#8B949E", False),
+        ("SKINS", "#8B949E", False),
+        ("INTEL", "#8B949E", False),
+    ]
+    tab_step = W / len(tabs)
+    for i, (tname, tcol, is_active) in enumerate(tabs):
+        tx_c = i * tab_step + tab_step / 2
+        tw = draw.textlength(tname, font=FONT_HEAD)
+        draw.text((tx_c - tw / 2, nav_y + 16), tname, fill=tcol, font=FONT_HEAD)
+        if is_active:
+            draw.line([(tx_c - 16, nav_y + 36), (tx_c + 16, nav_y + 36)], fill='#00E5FF', width=2)
+
+    # Android Home Gesture Bar
+    draw.rounded_rectangle([(W / 2 - 60, H - 14), (W / 2 + 60, H - 10)], radius=2, fill='#484F58')
 
     out_path = os.path.join(OUTPUT_DIR, "screenshot_02_handset_tactical_hud.png")
     img.save(out_path)
     print(f"Saved: {out_path} ({os.path.getsize(out_path)} bytes)")
+
 
 # ==============================================================================
 # 3. SCREENSHOT 03: MAP SKINS CUSTOMIZATION DIALOG (800 x 1100)
@@ -257,19 +308,25 @@ def generate_screenshot_03():
     draw.text((mx + 24, my + 48), "Map cartography, fog skins & optics are completely decoupled", fill='#8B949E', font=FONT_TEXT)
     draw.text((mx + mw - 40, my + 24), "✕", fill='#8B949E', font=FONT_HEAD)
 
-    # Tabs
+    # 3 Balanced Tabs (Width = 680 / 3 = 226px each)
     tab_y = my + 84
+    tab_w = (mw - 40) // 3
     draw.rectangle([(mx + 20, tab_y), (mx + mw - 20, tab_y + 42)], fill='#121721')
     
-    # Selected Tab: MAP
-    draw.rectangle([(mx + 20, tab_y), (mx + 20 + 220, tab_y + 42)], fill='#1C2128')
-    draw.line([(mx + 20, tab_y + 40), (mx + 20 + 220, tab_y + 40)], fill='#00E5FF', width=3)
-    draw.text((mx + 50, tab_y + 14), "MAP THEMES (6)", fill='#00E5FF', font=FONT_HEAD)
+    # Selected Tab: MAP THEMES (Tab 0)
+    draw.rectangle([(mx + 20, tab_y), (mx + 20 + tab_w, tab_y + 42)], fill='#1C2128')
+    draw.line([(mx + 20, tab_y + 40), (mx + 20 + tab_w, tab_y + 40)], fill='#00E5FF', width=3)
+    
+    t0 = "MAP THEMES (6)"
+    draw.text((mx + 20 + (tab_w - draw.textlength(t0, font=FONT_HEAD)) / 2, tab_y + 14), t0, fill='#00E5FF', font=FONT_HEAD)
+    
+    t1 = "FOG SKINS (6)"
+    draw.text((mx + 20 + tab_w + (tab_w - draw.textlength(t1, font=FONT_HEAD)) / 2, tab_y + 14), t1, fill='#8B949E', font=FONT_HEAD)
+    
+    t2 = "RANGE & OPACITY"
+    draw.text((mx + 20 + 2 * tab_w + (tab_w - draw.textlength(t2, font=FONT_HEAD)) / 2, tab_y + 14), t2, fill='#8B949E', font=FONT_HEAD)
 
-    draw.text((mx + 270, tab_y + 14), "FOG SKINS (6)", fill='#8B949E', font=FONT_HEAD)
-    draw.text((mx + 480, tab_y + 14), "RANGE & OPACITY", fill='#8B949E', font=FONT_HEAD)
-
-    # List of Map Skins
+    # List of Map Skins (Full clean descriptions)
     skins = [
         ("Tactical Obsidian", "High-contrast stealth black with electric cyan corridors and deep navy water.", "#0A0D12", "#00E5FF", "#FFD600", "#06131D", True),
         ("Cyberpunk 2077", "Pitch-black void with screaming magenta arteries and electric cyan secondary roads.", "#05050A", "#FF007F", "#FFE600", "#0D0826", False),
@@ -292,7 +349,7 @@ def generate_screenshot_03():
         draw.ellipse([(mx + 86, sy + 38), (mx + 100, sy + 52)], fill=water)
 
         draw.text((mx + 126, sy + 18), name, fill='#00E5FF' if is_sel else '#F0F6FC', font=FONT_HEAD)
-        draw.text((mx + 126, sy + 42), desc[:70] + "...", fill='#8B949E', font=FONT_TEXT)
+        draw.text((mx + 126, sy + 42), desc, fill='#8B949E', font=FONT_TEXT)
 
         if is_sel:
             draw.text((mx + mw - 60, sy + 32), "✓", fill='#00E5FF', font=FONT_TITLE)
@@ -310,6 +367,7 @@ def generate_screenshot_03():
     out_path = os.path.join(OUTPUT_DIR, "screenshot_03_skin_selector_map_themes.png")
     img.save(out_path)
     print(f"Saved: {out_path} ({os.path.getsize(out_path)} bytes)")
+
 
 # ==============================================================================
 # 4. SCREENSHOT 04: FOG RANGE & OPACITY CALIBRATION DIALOG (800 x 1100)
@@ -330,16 +388,22 @@ def generate_screenshot_04():
     draw.text((mx + 24, my + 48), "Calibrate surveillance scan beam radius and shroud darkness", fill='#8B949E', font=FONT_TEXT)
     draw.text((mx + mw - 40, my + 24), "✕", fill='#8B949E', font=FONT_HEAD)
 
-    # Tabs
+    # 3 Balanced Tabs (Width = 680 / 3 = 226px each)
     tab_y = my + 84
+    tab_w = (mw - 40) // 3
     draw.rectangle([(mx + 20, tab_y), (mx + mw - 20, tab_y + 42)], fill='#121721')
-    draw.text((mx + 50, tab_y + 14), "MAP THEMES (6)", fill='#8B949E', font=FONT_HEAD)
-    draw.text((mx + 270, tab_y + 14), "FOG SKINS (6)", fill='#8B949E', font=FONT_HEAD)
+    
+    t0 = "MAP THEMES (6)"
+    draw.text((mx + 20 + (tab_w - draw.textlength(t0, font=FONT_HEAD)) / 2, tab_y + 14), t0, fill='#8B949E', font=FONT_HEAD)
+    
+    t1 = "FOG SKINS (6)"
+    draw.text((mx + 20 + tab_w + (tab_w - draw.textlength(t1, font=FONT_HEAD)) / 2, tab_y + 14), t1, fill='#8B949E', font=FONT_HEAD)
 
-    # Selected Tab: RANGE & OPACITY
-    draw.rectangle([(mx + 440, tab_y), (mx + mw - 20, tab_y + 42)], fill='#1C2128')
-    draw.line([(mx + 440, tab_y + 40), (mx + mw - 20, tab_y + 40)], fill='#00E5FF', width=3)
-    draw.text((mx + 460, tab_y + 14), "RANGE & OPACITY", fill='#00E5FF', font=FONT_HEAD)
+    # Selected Tab: RANGE & OPACITY (Tab 2)
+    draw.rectangle([(mx + 20 + 2 * tab_w, tab_y), (mx + mw - 20, tab_y + 42)], fill='#1C2128')
+    draw.line([(mx + 20 + 2 * tab_w, tab_y + 40), (mx + mw - 20, tab_y + 40)], fill='#00E5FF', width=3)
+    t2 = "RANGE & OPACITY"
+    draw.text((mx + 20 + 2 * tab_w + (tab_w - draw.textlength(t2, font=FONT_HEAD)) / 2, tab_y + 14), t2, fill='#00E5FF', font=FONT_HEAD)
 
     # 1. Live Interactive Optics Mini-Radar
     mini_y = tab_y + 60
@@ -349,14 +413,25 @@ def generate_screenshot_04():
     mcx = mx + mw / 2.0
     mcy = mini_y + mini_h / 2.0 - 10
     
+    # Faint concentric radar range circles
+    for rad in (30, 60, 90):
+        draw.ellipse([(mcx - rad, mcy - rad), (mcx + rad, mcy + rad)], outline='#16222F', width=1)
+    draw.line([(mcx - 100, mcy), (mcx + 100, mcy)], fill='#16222F', width=1)
+    draw.line([(mcx, mcy - 70), (mcx, mcy + 70)], fill='#16222F', width=1)
+
     # Road line
-    draw.line([(mx + 40, mcy + 30), (mx + mw - 40, mcy - 30)], fill='#00E5FF', width=4)
+    draw.line([(mx + 40, mcy + 30), (mx + mw - 40, mcy - 30)], fill='#00A8CC', width=4)
     # Explored track
     draw.line([(mcx - 120, mcy + 40), (mcx, mcy), (mcx + 120, mcy - 40)], fill='#00E676', width=6)
 
     # Cleared Circle (180m radius scaled)
-    draw.ellipse([(mcx - 68, mcy - 68), (mcx + 68, mcy + 68)], outline='#00E5FF', width=3)
-    # Shroud
+    for gr in (3, 2, 1):
+        draw.ellipse([(mcx - 68 - gr, mcy - 68 - gr), (mcx + 68 + gr, mcy + 68 + gr)], outline='#00E5FF', width=1)
+    draw.ellipse([(mcx - 68, mcy - 68), (mcx + 68, mcy + 68)], outline='#00E5FF', width=2)
+    
+    # Player marker
+    draw.polygon([(mcx + 8, mcy - 8), (mcx - 4, mcy - 2), (mcx - 2, mcy + 2), (mcx - 8, mcy + 8)], fill='#00E5FF')
+
     draw.text((mcx - 140, mini_y + mini_h - 26), "SURVEILLANCE BEAM: 180M  •  OPACITY: 95% DENSE", fill='#00E5FF', font=FONT_MONO_SM)
 
     # 2. Fog Range Slider Card
@@ -428,6 +503,7 @@ def generate_screenshot_04():
     out_path = os.path.join(OUTPUT_DIR, "screenshot_04_skin_selector_fog_optics.png")
     img.save(out_path)
     print(f"Saved: {out_path} ({os.path.getsize(out_path)} bytes)")
+
 
 if __name__ == '__main__':
     generate_screenshot_01()
