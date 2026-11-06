@@ -67,6 +67,7 @@ class MainActivity : ComponentActivity() {
 
                 TacticalHudScreen(
                     stats = stats,
+                    skinManager = ReconApplication.instance.skinManager,
                     currentSpeedKmh = currentSpeedKmh,
                     currentHeading = currentHeading,
                     currentLat = currentLat,

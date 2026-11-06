@@ -3,6 +3,7 @@ package com.recondrive.app.ui.screens
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -21,11 +22,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.recondrive.app.fog.ExplorationStats
+import com.recondrive.app.skin.SkinManager
 import com.recondrive.app.ui.theme.*
 
 @Composable
 fun TacticalHudScreen(
     stats: ExplorationStats,
+    skinManager: SkinManager,
     currentSpeedKmh: Float = 48f,
     currentHeading: Float = 45f,
     currentLat: Double = 51.5074,
@@ -33,13 +36,25 @@ fun TacticalHudScreen(
     onSearchClick: () -> Unit = {},
     onOfflinePacksClick: () -> Unit = {}
 ) {
+    var showSkinDialog by remember { mutableStateOf(false) }
+
+    val mapSkin by skinManager.currentMapSkin.collectAsState()
+    val fogSkin by skinManager.currentFogSkin.collectAsState()
+
+    if (showSkinDialog) {
+        SkinSelectorDialog(
+            skinManager = skinManager,
+            onDismiss = { showSkinDialog = false }
+        )
+    }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(TacticalObsidian)
             .padding(16.dp)
     ) {
-        // 1. Top Status Banner
+        // 1. Top Status Banner with Skins Toggle Button
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -50,7 +65,7 @@ fun TacticalHudScreen(
             Column {
                 Text(
                     text = "RECON // TACTICAL RADAR",
-                    color = ReconCyan,
+                    color = Color(mapSkin.highwayColor),
                     fontSize = 14.sp,
                     fontWeight = FontWeight.Bold,
                     fontFamily = FontFamily.Monospace
@@ -63,30 +78,60 @@ fun TacticalHudScreen(
                 )
             }
 
-            // Connection Badge
-            Surface(
-                color = TacticalSurface,
-                shape = RoundedCornerShape(4.dp),
-                border = androidx.compose.foundation.BorderStroke(1.dp, ReconGreen)
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                // Skins Selector Button
+                Surface(
+                    color = TacticalSurface,
+                    shape = RoundedCornerShape(4.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(fogSkin.perimeterGlowColor)),
+                    modifier = Modifier.clickable { showSkinDialog = true }
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.DirectionsCar,
-                        contentDescription = "Car",
-                        tint = ReconGreen,
-                        modifier = Modifier.size(16.dp)
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = "AUTO LINKED",
-                        color = ReconGreen,
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Bold,
-                        fontFamily = FontFamily.Monospace
-                    )
+                    Row(
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Palette,
+                            contentDescription = "Skins",
+                            tint = Color(fogSkin.perimeterGlowColor),
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = "SKINS",
+                            color = Color(fogSkin.perimeterGlowColor),
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.Monospace
+                        )
+                    }
+                }
+
+                // Android Auto Status Badge
+                Surface(
+                    color = TacticalSurface,
+                    shape = RoundedCornerShape(4.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, ReconGreen)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.DirectionsCar,
+                            contentDescription = "Car",
+                            tint = ReconGreen,
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = "AUTO LINKED",
+                            color = ReconGreen,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.Monospace
+                        )
+                    }
                 }
             }
         }
@@ -108,7 +153,7 @@ fun TacticalHudScreen(
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(
                     text = "%.0f".format(currentSpeedKmh),
-                    color = ReconCyan,
+                    color = Color(mapSkin.highwayColor),
                     fontSize = 42.sp,
                     fontWeight = FontWeight.Bold,
                     fontFamily = FontFamily.Monospace
@@ -132,7 +177,7 @@ fun TacticalHudScreen(
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(
                     text = "%.0f°".format(currentHeading),
-                    color = TacticalAmber,
+                    color = Color(mapSkin.routeColor),
                     fontSize = 42.sp,
                     fontWeight = FontWeight.Bold,
                     fontFamily = FontFamily.Monospace
@@ -148,14 +193,14 @@ fun TacticalHudScreen(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // 3. Tactical Radar Map & Fog Display
+        // 3. Tactical Radar Map & Fog Display (Live-driven by both independent skins!)
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f)
                 .clip(RoundedCornerShape(8.dp))
-                .background(Color(0xFF070A0F))
-                .border(1.dp, ReconCyan.copy(alpha = 0.4f), RoundedCornerShape(8.dp))
+                .background(Color(mapSkin.backgroundColor))
+                .border(1.dp, Color(fogSkin.perimeterGlowColor).copy(alpha = 0.5f), RoundedCornerShape(8.dp))
         ) {
             Canvas(modifier = Modifier.fillMaxSize()) {
                 val cx = size.width / 2f
@@ -164,7 +209,7 @@ fun TacticalHudScreen(
                 // Range rings
                 for (r in listOf(60f, 130f, 210f, 290f)) {
                     drawCircle(
-                        color = RadarGrid,
+                        color = Color(fogSkin.perimeterGlowColor).copy(alpha = 0.15f),
                         radius = r,
                         center = Offset(cx, cy),
                         style = Stroke(width = 1.5f)
@@ -173,19 +218,30 @@ fun TacticalHudScreen(
 
                 // Radar Crosshair
                 drawLine(
-                    color = RadarGrid,
+                    color = Color(fogSkin.perimeterGlowColor).copy(alpha = 0.15f),
                     start = Offset(cx - 20f, cy),
                     end = Offset(cx + 20f, cy),
                     strokeWidth = 1.5f
                 )
                 drawLine(
-                    color = RadarGrid,
+                    color = Color(fogSkin.perimeterGlowColor).copy(alpha = 0.15f),
                     start = Offset(cx, cy - 20f),
                     end = Offset(cx, cy + 20f),
                     strokeWidth = 1.5f
                 )
 
-                // Explored Road Track (Phosphor Green)
+                // Background Map Roads (Map Skin colors)
+                val bgRoad = Path().apply {
+                    moveTo(0f, cy + 80f)
+                    lineTo(size.width, cy - 40f)
+                }
+                drawPath(
+                    path = bgRoad,
+                    color = Color(mapSkin.minorRoadColor),
+                    style = Stroke(width = 3f)
+                )
+
+                // Explored Road Track (Driven by Fog Skin Explored Road Glow)
                 val road = Path().apply {
                     moveTo(cx - 140f, cy + 120f)
                     lineTo(cx - 60f, cy + 60f)
@@ -195,19 +251,31 @@ fun TacticalHudScreen(
                 }
                 drawPath(
                     path = road,
-                    color = ReconGreen,
+                    color = Color(fogSkin.exploredRoadGlowColor),
                     style = Stroke(width = 6f)
                 )
 
-                // Beam scanning boundary (Fog of War cleared zone)
-                drawCircle(
-                    color = ReconCyan,
-                    radius = 120f,
-                    center = Offset(cx, cy),
-                    style = Stroke(width = 2f)
+                // Active Route (Driven by Map Skin Route Color)
+                val route = Path().apply {
+                    moveTo(cx, cy)
+                    lineTo(cx + 80f, cy - 70f)
+                    lineTo(cx + 110f, cy - 160f)
+                }
+                drawPath(
+                    path = route,
+                    color = Color(mapSkin.routeColor),
+                    style = Stroke(width = 8f)
                 )
 
-                // Vehicle Cursor Arrow
+                // Fog Cleared Boundary (Driven by Fog Skin Perimeter)
+                drawCircle(
+                    color = Color(fogSkin.perimeterGlowColor),
+                    radius = 120f,
+                    center = Offset(cx, cy),
+                    style = Stroke(width = fogSkin.borderStrokeWidth)
+                )
+
+                // Vehicle Cursor Arrow (Map Skin Vehicle Color)
                 val cursor = Path().apply {
                     moveTo(cx, cy - 14f)
                     lineTo(cx + 10f, cy + 10f)
@@ -215,14 +283,15 @@ fun TacticalHudScreen(
                     lineTo(cx - 10f, cy + 10f)
                     close()
                 }
-                drawPath(path = cursor, color = ReconCyan)
+                drawPath(path = cursor, color = Color(mapSkin.vehicleCursorColor))
             }
 
-            // Overlay HUD Badge
+            // Top Overlay HUD Badge showing active skin pairing
             Text(
-                text = "SURVEILLANCE BEAM: 160M",
-                color = ReconCyan,
+                text = "MAP: ${mapSkin.displayName}  |  FOG: ${fogSkin.displayName}",
+                color = Color(fogSkin.perimeterGlowColor),
                 fontSize = 10.sp,
+                fontWeight = FontWeight.Bold,
                 fontFamily = FontFamily.Monospace,
                 modifier = Modifier
                     .align(Alignment.TopStart)
@@ -285,7 +354,7 @@ fun TacticalHudScreen(
                     Column(horizontalAlignment = Alignment.End) {
                         Text(
                             text = "%.2f km".format(stats.currentUnchartedStreakKm),
-                            color = ReconGreen,
+                            color = Color(fogSkin.exploredRoadGlowColor),
                             fontSize = 20.sp,
                             fontWeight = FontWeight.Bold,
                             fontFamily = FontFamily.Monospace
@@ -310,7 +379,7 @@ fun TacticalHudScreen(
             Button(
                 onClick = onSearchClick,
                 modifier = Modifier.weight(1f),
-                colors = ButtonDefaults.buttonColors(containerColor = ReconCyan),
+                colors = ButtonDefaults.buttonColors(containerColor = Color(mapSkin.highwayColor)),
                 shape = RoundedCornerShape(6.dp)
             ) {
                 Icon(
@@ -331,14 +400,14 @@ fun TacticalHudScreen(
 
             OutlinedButton(
                 onClick = onOfflinePacksClick,
-                colors = ButtonDefaults.outlinedButtonColors(contentColor = ReconCyan),
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(mapSkin.highwayColor)),
                 shape = RoundedCornerShape(6.dp),
                 border = androidx.compose.foundation.BorderStroke(1.dp, TacticalBorder)
             ) {
                 Icon(
                     imageVector = Icons.Default.Download,
                     contentDescription = null,
-                    tint = ReconCyan,
+                    tint = Color(mapSkin.highwayColor),
                     modifier = Modifier.size(16.dp)
                 )
                 Spacer(modifier = Modifier.width(6.dp))

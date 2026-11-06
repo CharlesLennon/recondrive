@@ -68,13 +68,25 @@ Drive into the unknown. As you travel, your vehicle's radar beam burns away a sh
   - **Uncharted Streak Tracker**: Records continuous distance driven into previously unvisited grid cells.
   - **Tactical Ranks**: *Recon Scout ➔ Sector Pathfinder ➔ Tactical Vanguard ➔ Master Cartographer ➔ Sovereign Surveyor*.
 
-### 3. 🗺️ Offline Vector Maps & Routing
+### 3. 🎨 Independent Map & Fog Skinning System
+The map appearance and fog of war aesthetics are **completely decoupled** — mix and match any map theme with any fog shroud style:
+
+| Subsystem | Included Preset Skins | Visual Characteristics |
+| :--- | :--- | :--- |
+| **🗺️ Map Skins**<br>*(Cartography Base)* | • **Tactical Obsidian**<br>• **Cyberpunk 2077**<br>• **Military Topo**<br>• **Midnight Monochrome**<br>• **Classic OSM Daylight**<br>• **Vintage Cartographer** | Controls terrain fill, water wash, highway line colors, active routing corridors, vehicle cursor tint, and road label typography. |
+| **🌫️ Fog Skins**<br>*(Exploration Shroud)* | • **Tactical Radar Shroud**<br>• **Dense Rolling Fog**<br>• **Matrix Glitch Void**<br>• **Charred Parchment**<br>• **Total Sensory Blackout**<br>• **80s CRT Phosphor** | Controls void darkness/opacity, laser perimeter glow width & blur, dashed border effects, explored track luminescence, and radar ring/particle overlays. |
+
+- **In-Vehicle Hot Swapping**: Switch map themes or fog skins directly from the Android Auto dashboard action strip (`Map: [...]`, `Fog: [...]`) without touching your phone.
+- **Handset Dialog**: Full Jetpack Compose visual skin picker with live swatches, active pairing indicators, and instant real-time canvas updates.
+- **Persistence**: Preferences are saved via `SkinManager` and persist across sessions.
+
+### 4. 🗺️ Offline Vector Maps & Routing
 - **Tactical Dark Map Palette**: Matte obsidian background (`#0A0D12`), glowing cyan primary corridors (`#00E5FF`), deep blue water bodies, and phosphor green explored tracks (`#00E676`).
 - **Offline `.mbtiles` Support**: Store entire countries or regional vector tile packs locally in the app storage directory with zero mobile data reliance.
 - **Offline Turn-by-Turn Engine**: Calculates routing geometry, step maneuvers, target coordinates, and trip durations on device.
 
-### 4. 📱 Mobile Handset Tactical HUD (Jetpack Compose)
-- Full-screen tactical dashboard with real-time velocity (KM/H & MPH), heading bearing tape, decimal coordinates, radar sweep canvas preview, and one-tap destination routing.
+### 5. 📱 Mobile Handset Tactical HUD (Jetpack Compose)
+- Full-screen tactical dashboard with real-time velocity (KM/H & MPH), heading bearing tape, decimal coordinates, radar sweep canvas preview, live skin pairing badge, and one-tap destination routing.
 
 ---
 
@@ -89,24 +101,30 @@ recondrive/
 │       ├── AndroidManifest.xml               # CarAppService & Navigation permissions
 │       ├── java/com/recondrive/app/
 │       │   ├── ReconApplication.kt           # App lifecycle & service orchestration
-│       │   ├── car/                          # Android Auto Subsystem
-│       │   │   ├── CarSurfaceRenderer.kt     # In-car OpenGL/Canvas surface painter
+│       │   ├── car/                          # 🚗 Android Auto Subsystem
+│       │   │   ├── CarSurfaceRenderer.kt     # In-car OpenGL/Canvas surface painter with skins
 │       │   │   ├── ReconCarAppService.kt     # Automotive service entry point
-│       │   │   ├── ReconCarNavigationScreen.kt # NavigationTemplate & maneuver cards
+│       │   │   ├── ReconCarNavigationScreen.kt # NavigationTemplate & in-car skin cyclers
 │       │   │   └── ReconCarSession.kt        # In-vehicle display session
-│       │   ├── fog/                          # Tactical Fog of War Engine
+│       │   ├── fog/                          # 🌫️ Tactical Fog of War Engine
 │       │   │   ├── ExplorationStats.kt       # Career rankings & metrics
 │       │   │   ├── FogGridManager.kt         # Spatial indexing & beam unmasking
 │       │   │   └── SpatialCell.kt            # Room DB Entity & Dao
-│       │   ├── map/                          # Vector Maps & Offline Data
+│       │   ├── map/                          # 🗺️ Vector Maps & Offline Data
 │       │   │   ├── OfflineTileRepository.kt  # Local .mbtiles manager
 │       │   │   └── TacticalMapStyle.kt       # Dark tactical JSON style
-│       │   ├── navigation/                   # Offline Routing Engine
+│       │   ├── navigation/                   # 🧭 Offline Routing Engine
 │       │   │   ├── NavigationStep.kt         # Step & Maneuver data model
 │       │   │   └── OfflineRoutingEngine.kt   # Turn-by-turn route solver
-│       │   └── ui/                           # Handset Jetpack Compose Interface
+│       │   ├── skin/                         # 🎨 Independent Skinning System
+│       │   │   ├── FogSkin.kt                # Fog shrouds, laser borders & overlays
+│       │   │   ├── MapSkin.kt                # OSM vector cartography themes
+│       │   │   └── SkinManager.kt            # Independent preference & cycle manager
+│       │   └── ui/                           # 📱 Handset Jetpack Compose Interface
 │       │       ├── MainActivity.kt           # GPS telemetry ingestion
-│       │       ├── screens/TacticalHudScreen.kt # Tactical HUD & Radar canvas
+│       │       ├── screens/
+│       │       │   ├── SkinSelectorDialog.kt # Visual dual-tab skin picker dialog
+│       │       │   └── TacticalHudScreen.kt  # Tactical HUD & Radar canvas
 │       │       └── theme/                    # Tactical obsidian & cyan palette
 │       └── res/
 │           ├── values/{colors,strings,themes}.xml

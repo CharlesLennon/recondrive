@@ -64,20 +64,37 @@ class ReconCarNavigationScreen(carContext: CarContext) : Screen(carContext) {
             DateTimeWithZone.create(System.currentTimeMillis() + 18 * 60 * 1000, java.util.TimeZone.getDefault())
         ).build()
 
-        // Action Strip (Search, Toggle Fog, Stats)
+        val skinManager = ReconApplication.instance.skinManager
+        val activeMap = skinManager.currentMapSkin.value
+        val activeFog = skinManager.currentFogSkin.value
+
+        // In-Car Action Strip with independent Map and Fog skin toggles
         val actionStrip = ActionStrip.Builder()
             .addAction(
                 Action.Builder()
-                    .setTitle("Fog: ON")
+                    .setTitle("Map: ${activeMap.displayName.take(8)}")
                     .setOnClickListener {
-                        isFogLayerActive = !isFogLayerActive
+                        val next = skinManager.cycleNextMapSkin()
+                        CarToast.makeText(carContext, "Map Skin: ${next.displayName}", CarToast.LENGTH_SHORT).show()
+                        surfaceRenderer.renderFrame()
                         invalidate()
                     }
                     .build()
             )
             .addAction(
                 Action.Builder()
-                    .setTitle("Career")
+                    .setTitle("Fog: ${activeFog.displayName.take(8)}")
+                    .setOnClickListener {
+                        val next = skinManager.cycleNextFogSkin()
+                        CarToast.makeText(carContext, "Fog Skin: ${next.displayName}", CarToast.LENGTH_SHORT).show()
+                        surfaceRenderer.renderFrame()
+                        invalidate()
+                    }
+                    .build()
+            )
+            .addAction(
+                Action.Builder()
+                    .setTitle("Intel")
                     .setOnClickListener {
                         val stats = ReconApplication.instance.fogGridManager.stats.value
                         CarToast.makeText(
