@@ -1,5 +1,6 @@
 # 🛰️ ReconDrive: Tactical OSM & Android Auto Exploration Navigator
 
+[![Build Android APK](https://github.com/CharlesLennon/recondrive/actions/workflows/build-apk.yml/badge.svg)](https://github.com/CharlesLennon/recondrive/actions/workflows/build-apk.yml)
 [![Android](https://img.shields.io/badge/Platform-Android%20%7C%20Android%20Auto-green.svg)](https://developer.android.com/training/cars/apps)
 [![Kotlin](https://img.shields.io/badge/Language-Kotlin%201.9.23-blue.svg)](https://kotlinlang.org/)
 [![UI](https://img.shields.io/badge/UI-Jetpack%20Compose-purple.svg)](https://developer.android.com/jetpack/compose)
@@ -8,9 +9,37 @@
 [![Fog of War](https://img.shields.io/badge/Mechanic-Tactical%20Fog%20of%20War-cyan.svg)]()
 [![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-> **An open-source Android & Android Auto GPS navigation platform featuring offline OpenStreetMap (OSM) vector tiles and a real-world gamified Tactical Fog of War exploration engine.**
+> **An open-source Android & Android Auto GPS navigation platform featuring offline OpenStreetMap (OSM) vector tiles, independent map/fog skins, and a real-world gamified Tactical Fog of War exploration engine.**
 
 Drive into the unknown. As you travel, your vehicle's radar beam burns away a shroud of tactical blackout fog, permanently cataloging explored road networks and rewarding real-world exploration.
+
+---
+
+## 📸 Visual Showcase & Interface Tour
+
+### 1. In-Vehicle Display (Android Auto Head Unit)
+Full hardware-accelerated map surface projection on the car dashboard showing explored road networks in glowing phosphor green, tactical route corridor in amber, and driver-safe `NavigationTemplate` maneuver card.
+
+![Android Auto Dashboard](screenshots/screenshot_01_android_auto_dashboard.png)
+*Fig 1. Android Auto head unit display running ReconDrive with active turn guidance, dynamic surveillance beam, and in-car skin/optics controls.*
+
+---
+
+### 2. Handset Tactical HUD (Jetpack Compose)
+Mobile portrait dashboard with high-visibility speedometer (KM/H & MPH), heading bearing tape, radar canvas preview, exploration stats card, and destination navigation actions.
+
+![Handset Tactical HUD](screenshots/screenshot_02_handset_tactical_hud.png)
+*Fig 2. Mobile handset tactical HUD with real-time speed, heading tape, active fog perimeter, and exploration rank.*
+
+---
+
+### 3. Decoupled Customization & Fog Optics
+Map cartography themes and Fog of War aesthetics are **completely decoupled** — pair any map style with any fog shroud style, and fine-tune surveillance beam range and shroud opacity:
+
+| 🗺️ Map Theme Picker (Decoupled Cartography) | 🎛️ Fog Range & Opacity Calibration |
+| :---: | :---: |
+| ![Map Themes](screenshots/screenshot_03_skin_selector_map_themes.png) | ![Fog Optics Calibration](screenshots/screenshot_04_skin_selector_fog_optics.png) |
+| *Fig 3. Selection dialog with color swatch previews for 6 map themes.* | *Fig 4. Live interactive mini-radar with range (50m–500m) and opacity (20%–100%) sliders.* |
 
 ---
 
@@ -148,11 +177,27 @@ recondrive/
 
 ---
 
+## 📦 Automated APK Builds via GitHub Actions
+
+Every commit pushed to `main` automatically triggers our cloud CI/CD pipeline on GitHub to build and verify a fresh Android APK (`app-debug.apk`):
+
+1. Go to the **[Actions Tab on GitHub](https://github.com/CharlesLennon/recondrive/actions/workflows/build-apk.yml)**.
+2. Select the latest workflow run (marked with a green checkmark `Assemble Tactical APK`).
+3. Under the **Artifacts** section at the bottom of the summary, click **`ReconDrive-Tactical-Debug-APK`** to download the compiled `.apk` directly to your phone or computer.
+4. Sideload the APK onto your Android phone (or install via `adb install app-debug.apk`).
+
+---
+
 ## 🛠️ Build & Testing Guide
 
-### Prerequisites
-- **JDK 17** (`openjdk-17-jdk`)
-- **Android Studio Hedgehog / Iguana / Jellyfish** (or command-line Android SDK Build Tools 34.0.0)
+### Manual Local Build
+If building on your machine with Android Studio or CLI:
+```bash
+git clone https://github.com/CharlesLennon/recondrive.git
+cd recondrive
+./gradlew assembleDebug
+```
+The resulting APK is generated at `app/build/outputs/apk/debug/app-debug.apk`.
 
 ### Testing on Android Auto Desktop Head Unit (DHU)
 Google provides the Desktop Head Unit emulator to test Android Auto apps on your PC without needing a physical vehicle:
