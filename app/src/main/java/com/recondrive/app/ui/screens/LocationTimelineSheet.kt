@@ -133,14 +133,14 @@ fun LocationTimelineSheet(
                                     fontFamily = FontFamily.Monospace
                                 )
                                 Text(
-                                    text = "%.1f km/h".format(currentSpeedKmh),
+                                    text = "%.0f MPH".format(currentSpeedKmh * 0.621371f),
                                     color = ReconGreen,
                                     fontSize = 18.sp,
                                     fontWeight = FontWeight.Bold,
                                     fontFamily = FontFamily.Monospace
                                 )
                                 Text(
-                                    text = "MAX: %.0f • AVG: %.0f".format(maxSpeed, avgSpeed),
+                                    text = "MAX: %.0f • AVG: %.0f MPH".format(maxSpeed * 0.621371f, avgSpeed * 0.621371f),
                                     color = TextSecondary,
                                     fontSize = 9.sp,
                                     fontFamily = FontFamily.Monospace
@@ -415,7 +415,7 @@ private fun TimelineEntryCard(
                         shape = RoundedCornerShape(4.dp)
                     ) {
                         Text(
-                            text = "%.1f km/h".format(entry.speedKmh),
+                            text = "%.0f mph".format(entry.speedKmh * 0.621371f),
                             color = when {
                                 entry.speedKmh > 70f -> ReconAmber
                                 entry.speedKmh > 15f -> ReconGreen

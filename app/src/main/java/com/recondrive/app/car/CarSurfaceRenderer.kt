@@ -198,9 +198,10 @@ class CarSurfaceRenderer(
             canvas.drawText("RECON // RADAR ACTIVE", 32f, 44f, textHeaderPaint)
 
             textPaint.color = mapSkin.labelColor
+            val speedMph = speedKmh * 0.621371f
             canvas.drawText(
-                "GRID: %.4f°N, %.4f°W  •  SPD: %.0f KM/H  •  HDG: %.0f°".format(
-                    vehicleLat, abs(vehicleLon), speedKmh, heading
+                "GRID: %.4f°N, %.4f°W  •  SPD: %.0f MPH (%.0f KM/H)  •  HDG: %.0f°".format(
+                    vehicleLat, abs(vehicleLon), speedMph, speedKmh, heading
                 ),
                 32f, 74f, textPaint
             )

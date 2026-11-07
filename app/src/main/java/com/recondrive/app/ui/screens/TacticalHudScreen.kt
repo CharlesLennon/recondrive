@@ -1,6 +1,7 @@
 package com.recondrive.app.ui.screens
 
 import androidx.compose.animation.*
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -17,9 +18,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontFamily
@@ -35,7 +34,14 @@ import com.recondrive.app.skin.SkinManager
 import com.recondrive.app.ui.theme.*
 import com.recondrive.app.update.AppUpdateManager
 import com.recondrive.app.update.UpdateState
+import kotlinx.coroutines.delay
 
+/**
+ * Clean J.A.R.V.I.S. AI Cockpit & Tactical HUD
+ * Features an intelligent prompt that types in like ChatGPT on load,
+ * followed by a smooth animated reveal of user-saved destinations and stacked contact groups.
+ * Speed defaults to MPH across all primary instrumentation.
+ */
 @Composable
 fun TacticalHudScreen(
     stats: ExplorationStats,
@@ -73,6 +79,48 @@ fun TacticalHudScreen(
     val mapUpdateState by osmMapUpdateManager.mapUpdateState.collectAsState()
     val isServiceRunning by com.recondrive.app.service.ExplorationTrackingService.isRunning.collectAsState()
     val destinations by savedDestinationRepository.destinations.collectAsState()
+
+    // -------------------------------------------------------------------------
+    // GPT-Style Typewriter Text Streaming Animation on Load
+    // -------------------------------------------------------------------------
+    val fullAiGreeting = remember { "Where to, sir? All tactical navigation subsystems online." }
+    var displayedAiGreeting by remember { mutableStateOf("") }
+    var isAiStreamingComplete by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        displayedAiGreeting = ""
+        isAiStreamingComplete = false
+        for (i in 1..fullAiGreeting.length) {
+            displayedAiGreeting = fullAiGreeting.substring(0, i)
+            delay(24L)
+        }
+        delay(120L)
+        isAiStreamingComplete = true
+    }
+
+    // Cursor blink animation while streaming
+    val cursorTransition = rememberInfiniteTransition(label = "cursor_blink")
+    val cursorAlpha by cursorTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(400, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "cursor_alpha"
+    )
+
+    // Holographic Arc Reactor Pulse
+    val pulseTransition = rememberInfiniteTransition(label = "arc_reactor")
+    val arcPulse by pulseTransition.animateFloat(
+        initialValue = 0.7f,
+        targetValue = 1.0f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1200, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "arc_pulse"
+    )
 
     // Dialogs
     if (showSyncDialog) {
@@ -139,7 +187,7 @@ fun TacticalHudScreen(
                     fontFamily = FontFamily.Monospace
                 )
                 Text(
-                    text = "GRID: %.4f°N, %.4f°W • ALL SYSTEMS NOMINAL".format(currentLat, kotlin.math.abs(currentLon)),
+                    text = "GRID: %.4f°N, %.4f°W • SYSTEMS NOMINAL".format(currentLat, kotlin.math.abs(currentLon)),
                     color = TextSecondary,
                     fontSize = 10.sp,
                     fontFamily = FontFamily.Monospace
@@ -147,7 +195,7 @@ fun TacticalHudScreen(
             }
 
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                // Update indicator if new APK build ready
+                // Update indicator if new build is available
                 val isUpdateAvailable = updateState is UpdateState.UpdateAvailable
                 if (isUpdateAvailable) {
                     Surface(
@@ -206,142 +254,34 @@ fun TacticalHudScreen(
             }
         }
 
-        Spacer(modifier = Modifier.height(10.dp))
+        Spacer(modifier = Modifier.height(12.dp))
 
         // =====================================================================
-        // 2. J.A.R.V.I.S. AI GREETING & HOLOGRAPHIC PROMPT ("Where to, sir?")
+        // 2. PRIMARY TELEMETRY COCKPIT (MPH Default, Heading & Fog Optics)
         // =====================================================================
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(containerColor = TacticalSurface),
-            shape = RoundedCornerShape(10.dp),
-            border = androidx.compose.foundation.BorderStroke(1.dp, Color(mapSkin.highwayColor).copy(alpha = 0.7f))
-        ) {
-            Column(modifier = Modifier.padding(14.dp)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    // Pulsing Holographic Arc Reactor Icon
-                    Box(
-                        modifier = Modifier
-                            .size(46.dp)
-                            .clip(CircleShape)
-                            .background(Color(mapSkin.highwayColor).copy(alpha = 0.15f))
-                            .border(1.5.dp, Color(mapSkin.highwayColor), CircleShape),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Canvas(modifier = Modifier.size(28.dp)) {
-                            drawCircle(color = Color(mapSkin.highwayColor), radius = size.minDimension / 4f)
-                            drawCircle(color = Color(mapSkin.highwayColor).copy(alpha = 0.35f), radius = size.minDimension / 2f, style = Stroke(width = 2f))
-                        }
-                    }
+        val currentSpeedMph = currentSpeedKmh * 0.621371f
 
-                    Spacer(modifier = Modifier.width(12.dp))
-
-                    Column(modifier = Modifier.weight(1f)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(
-                                text = "Where to, sir?",
-                                color = TextPrimary,
-                                fontSize = 18.sp,
-                                fontWeight = FontWeight.Bold,
-                                fontFamily = FontFamily.Monospace
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = "ONLINE",
-                                color = ReconGreen,
-                                fontSize = 9.sp,
-                                fontWeight = FontWeight.Bold,
-                                fontFamily = FontFamily.Monospace
-                            )
-                        }
-                        Text(
-                            text = if (isListeningVoice) "Listening for tactical command..." else "Stark Navigation AI online. Sussex grid unmasked.",
-                            color = if (isListeningVoice) ReconAmber else TextSecondary,
-                            fontSize = 11.sp
-                        )
-                    }
-
-                    // Voice Command Action Button
-                    IconButton(
-                        onClick = { isListeningVoice = !isListeningVoice },
-                        modifier = Modifier
-                            .size(36.dp)
-                            .background(if (isListeningVoice) ReconAmber else Color(mapSkin.highwayColor).copy(alpha = 0.2f), CircleShape)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Mic,
-                            contentDescription = "Voice Search",
-                            tint = if (isListeningVoice) TacticalObsidian else Color(mapSkin.highwayColor),
-                            modifier = Modifier.size(18.dp)
-                        )
-                    }
-                }
-
-                // Quick AI Action Buttons
-                Spacer(modifier = Modifier.height(10.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Button(
-                        onClick = {
-                            addDialogPersonName = null
-                            showAddDialog = true
-                        },
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(mapSkin.highwayColor)),
-                        shape = RoundedCornerShape(6.dp),
-                        modifier = Modifier.weight(1f),
-                        contentPadding = PaddingValues(vertical = 6.dp)
-                    ) {
-                        Icon(imageVector = Icons.Default.AddLocationAlt, contentDescription = null, tint = TacticalObsidian, modifier = Modifier.size(14.dp))
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(text = "ADD DESTINATION", color = TacticalObsidian, fontSize = 10.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
-                    }
-
-                    OutlinedButton(
-                        onClick = onSearchClick,
-                        colors = ButtonDefaults.outlinedButtonColors(contentColor = TextPrimary),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, TacticalBorder),
-                        shape = RoundedCornerShape(6.dp),
-                        modifier = Modifier.weight(1f),
-                        contentPadding = PaddingValues(vertical = 6.dp)
-                    ) {
-                        Icon(imageVector = Icons.Default.Map, contentDescription = null, tint = TextPrimary, modifier = Modifier.size(14.dp))
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(text = "OPEN MAP", color = TextPrimary, fontSize = 10.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
-                    }
-                }
-            }
-        }
-
-        Spacer(modifier = Modifier.height(14.dp))
-
-        // =====================================================================
-        // 3. PRIMARY TELEMETRY COCKPIT (Speed & Heading)
-        // =====================================================================
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .clip(RoundedCornerShape(8.dp))
+                .clip(RoundedCornerShape(10.dp))
                 .background(TacticalSurface)
-                .border(1.dp, TacticalBorder, RoundedCornerShape(8.dp))
+                .border(1.dp, TacticalBorder, RoundedCornerShape(10.dp))
                 .padding(vertical = 12.dp, horizontal = 16.dp),
             horizontalArrangement = Arrangement.SpaceAround,
             verticalAlignment = Alignment.CenterVertically
         ) {
+            // Speed Column (MPH Default!)
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(
-                    text = "%.0f".format(currentSpeedKmh),
+                    text = "%.0f".format(currentSpeedMph),
                     color = Color(mapSkin.highwayColor),
                     fontSize = 36.sp,
                     fontWeight = FontWeight.Bold,
                     fontFamily = FontFamily.Monospace
                 )
                 Text(
-                    text = "KM/H  (%.0f MPH)".format(currentSpeedKmh * 0.621371f),
+                    text = "MPH (%.0f KM/H)".format(currentSpeedKmh),
                     color = TextSecondary,
                     fontSize = 10.sp,
                     fontFamily = FontFamily.Monospace
@@ -355,6 +295,17 @@ fun TacticalHudScreen(
                 color = TacticalBorder
             )
 
+            // Heading Column
+            val headingName = when ((currentHeading / 45f).toInt() % 8) {
+                0 -> "N"
+                1 -> "NE"
+                2 -> "E"
+                3 -> "SE"
+                4 -> "S"
+                5 -> "SW"
+                6 -> "W"
+                else -> "NW"
+            }
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(
                     text = "%.0f°".format(currentHeading),
@@ -364,7 +315,7 @@ fun TacticalHudScreen(
                     fontFamily = FontFamily.Monospace
                 )
                 Text(
-                    text = "HEADING // NE",
+                    text = "HEADING // $headingName",
                     color = TextSecondary,
                     fontSize = 10.sp,
                     fontFamily = FontFamily.Monospace
@@ -378,6 +329,7 @@ fun TacticalHudScreen(
                 color = TacticalBorder
             )
 
+            // Fog Optics Column
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(
                     text = "${currentRange}m",
@@ -395,359 +347,282 @@ fun TacticalHudScreen(
             }
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // =====================================================================
-        // 4. SAVED DESTINATIONS & STACKED CARDS (User-Defined Sub-lists)
-        // =====================================================================
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Text(
-                text = "SAVED TARGETS // QUICK ENGAGE (${destinations.size})",
-                color = TextSecondary,
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Bold,
-                fontFamily = FontFamily.Monospace
-            )
-
-            Text(
-                text = "+ ADD",
-                color = Color(mapSkin.highwayColor),
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Bold,
-                fontFamily = FontFamily.Monospace,
-                modifier = Modifier.clickable {
-                    addDialogPersonName = null
-                    showAddDialog = true
-                }
-            )
-        }
-
-        Spacer(modifier = Modifier.height(8.dp))
-
-        // Group destinations:
-        // Top-level standalone destinations (personName == null)
-        val standaloneDestinations = destinations.filter { it.personName.isNullOrBlank() }
-        // Grouped by Person (personName != null)
-        val personGroups = destinations.filterNot { it.personName.isNullOrBlank() }.groupBy { it.personName!! }
-
-        if (standaloneDestinations.isEmpty() && personGroups.isEmpty()) {
-            Surface(
-                color = TacticalSurface,
-                shape = RoundedCornerShape(8.dp),
-                border = androidx.compose.foundation.BorderStroke(1.dp, TacticalBorder),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable {
-                        addDialogPersonName = null
-                        showAddDialog = true
-                    }
-            ) {
-                Column(
-                    modifier = Modifier.padding(18.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.AddLocationAlt,
-                        contentDescription = null,
-                        tint = Color(mapSkin.highwayColor),
-                        modifier = Modifier.size(28.dp)
-                    )
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Text(
-                        text = "NO SAVED DESTINATIONS YET",
-                        color = TextPrimary,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        fontFamily = FontFamily.Monospace
-                    )
-                    Spacer(modifier = Modifier.height(3.dp))
-                    Text(
-                        text = "Tap here or '+ ADD' to register your places or contacts.",
-                        color = TextSecondary,
-                        fontSize = 10.sp,
-                        fontFamily = FontFamily.Monospace
-                    )
-                }
-            }
-            Spacer(modifier = Modifier.height(8.dp))
-        }
-
-        // A. Render Top-Level Standalone Cards
-        for (dest in standaloneDestinations) {
-            DestinationCard(
-                destination = dest,
-                currentLat = currentLat,
-                currentLon = currentLon,
-                mapSkinHighwayColor = mapSkin.highwayColor,
-                onNavigate = {
-                    onNavigateToDestination(dest.name, dest.lat, dest.lon)
-                },
-                onDelete = {
-                    savedDestinationRepository.removeDestination(dest.id)
-                }
-            )
-            Spacer(modifier = Modifier.height(8.dp))
-        }
-
-        // B. Render Stacked Cards (Grouped by Person / Contact)
-        for ((person, places) in personGroups) {
-            val isExpanded = expandedContacts[person] ?: false
-            StackedPersonCard(
-                personName = person,
-                destinations = places,
-                isExpanded = isExpanded,
-                currentLat = currentLat,
-                currentLon = currentLon,
-                mapSkinHighwayColor = mapSkin.highwayColor,
-                onToggleExpand = {
-                    expandedContacts[person] = !isExpanded
-                },
-                onAddDestinationToPerson = {
-                    addDialogPersonName = person
-                    showAddDialog = true
-                },
-                onNavigate = { name, lat, lon ->
-                    onNavigateToDestination(name, lat, lon)
-                },
-                onDeleteDestination = { destId ->
-                    savedDestinationRepository.removeDestination(destId)
-                }
-            )
-            Spacer(modifier = Modifier.height(10.dp))
-        }
-
-        Spacer(modifier = Modifier.height(12.dp))
-
-        // =====================================================================
-        // 5. MINI TACTICAL RADAR HUD & SENSORS
-        // =====================================================================
-        Text(
-            text = "LIVE TACTICAL RADAR CANVAS",
-            color = TextSecondary,
-            fontSize = 11.sp,
-            fontWeight = FontWeight.Bold,
-            fontFamily = FontFamily.Monospace
-        )
-        Spacer(modifier = Modifier.height(6.dp))
-
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(190.dp)
-                .clip(RoundedCornerShape(8.dp))
-                .background(Color(mapSkin.backgroundColor))
-                .border(1.dp, Color(fogSkin.perimeterGlowColor).copy(alpha = 0.5f), RoundedCornerShape(8.dp))
-        ) {
-            Canvas(modifier = Modifier.fillMaxSize()) {
-                val cx = size.width / 2f
-                val cy = size.height / 2f
-
-                // Background minor road network with contrast casing
-                val bgRoad = Path().apply {
-                    moveTo(0f, cy + 80f)
-                    lineTo(size.width, cy - 40f)
-                }
-                drawPath(
-                    path = bgRoad,
-                    color = Color.Black.copy(alpha = 0.5f),
-                    style = Stroke(width = 5.5f)
-                )
-                drawPath(
-                    path = bgRoad,
-                    color = Color(mapSkin.minorRoadColor),
-                    style = Stroke(width = 3.5f)
-                )
-
-                // Explored Road Track (Driven by Fog Skin Explored Road Glow)
-                val road = Path().apply {
-                    moveTo(cx - 140f, cy + 120f)
-                    lineTo(cx - 60f, cy + 60f)
-                    lineTo(cx, cy)
-                    lineTo(cx + 80f, cy - 70f)
-                    lineTo(cx + 180f, cy - 110f)
-                }
-                drawPath(
-                    path = road,
-                    color = Color(fogSkin.exploredRoadGlowColor),
-                    style = Stroke(width = 6f)
-                )
-
-                // Active Route (Driven by Map Skin Route Color)
-                val route = Path().apply {
-                    moveTo(cx, cy)
-                    lineTo(cx + 80f, cy - 70f)
-                    lineTo(cx + 110f, cy - 160f)
-                }
-                drawPath(
-                    path = route,
-                    color = Color(mapSkin.routeColor),
-                    style = Stroke(width = 8f)
-                )
-
-                // Fog Shroud Mask & Cleared Surveillance Boundary (Scaled by user Fog Range & Opacity)
-                val canvasBeamRadius = (60f + (currentRange - 50) * (180f / 450f)).coerceIn(40f, 260f)
-
-                val hudShroud = Path().apply {
-                    addRect(androidx.compose.ui.geometry.Rect(0f, 0f, size.width, size.height))
-                }
-                val hudHole = Path().apply {
-                    addOval(androidx.compose.ui.geometry.Rect(center = Offset(cx, cy), radius = canvasBeamRadius))
-                }
-                val maskedHudShroud = Path().apply {
-                    op(hudShroud, hudHole, androidx.compose.ui.graphics.PathOperation.Difference)
-                }
-                val effectiveOpacity = (fogSkin.shroudOpacity * currentOpacity).coerceIn(0.10f, 1.0f)
-                drawPath(
-                    path = maskedHudShroud,
-                    color = Color(fogSkin.shroudColor).copy(alpha = effectiveOpacity)
-                )
-
-                // Glowing reticle boundary
-                drawCircle(
-                    color = Color(fogSkin.perimeterGlowColor),
-                    radius = canvasBeamRadius,
-                    center = Offset(cx, cy),
-                    style = Stroke(width = fogSkin.borderStrokeWidth)
-                )
-
-                // Vehicle Cursor Arrow (Map Skin Vehicle Color)
-                val cursor = Path().apply {
-                    moveTo(cx, cy - 14f)
-                    lineTo(cx + 10f, cy + 10f)
-                    lineTo(cx, cy + 6f)
-                    lineTo(cx - 10f, cy + 10f)
-                    close()
-                }
-                drawPath(path = cursor, color = Color(mapSkin.vehicleCursorColor))
-            }
-
-            // Top Overlay HUD Badge showing active skin pairing and optics settings
-            Text(
-                text = "MAP: ${mapSkin.displayName} | FOG: ${fogSkin.displayName} | ${currentRange}m @ ${(currentOpacity * 100).toInt()}%",
-                color = Color(fogSkin.perimeterGlowColor),
-                fontSize = 10.sp,
-                fontWeight = FontWeight.Bold,
-                fontFamily = FontFamily.Monospace,
-                modifier = Modifier
-                    .align(Alignment.TopStart)
-                    .padding(10.dp)
-            )
-        }
-
         Spacer(modifier = Modifier.height(14.dp))
 
         // =====================================================================
-        // 6. EXPLORATION CAREER INTEL
+        // 3. J.A.R.V.I.S. AI GREETING (Types in like GPT on load)
         // =====================================================================
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(containerColor = TacticalSurface),
-            shape = RoundedCornerShape(8.dp),
-            border = androidx.compose.foundation.BorderStroke(1.dp, TacticalBorder)
+            shape = RoundedCornerShape(12.dp),
+            border = androidx.compose.foundation.BorderStroke(1.dp, Color(mapSkin.highwayColor).copy(alpha = 0.7f))
         ) {
             Column(modifier = Modifier.padding(14.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // Pulsing Holographic Arc Reactor Core
+                    Box(
+                        modifier = Modifier
+                            .size(48.dp)
+                            .clip(CircleShape)
+                            .background(Color(mapSkin.highwayColor).copy(alpha = 0.15f * arcPulse))
+                            .border(1.5.dp, Color(mapSkin.highwayColor), CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Canvas(modifier = Modifier.size(28.dp)) {
+                            drawCircle(color = Color(mapSkin.highwayColor), radius = (size.minDimension / 4f) * arcPulse)
+                            drawCircle(color = Color(mapSkin.highwayColor).copy(alpha = 0.4f), radius = size.minDimension / 2f, style = Stroke(width = 2f))
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.width(12.dp))
+
+                    Column(modifier = Modifier.weight(1f)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = "J.A.R.V.I.S.",
+                                color = Color(mapSkin.highwayColor),
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                fontFamily = FontFamily.Monospace
+                            )
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "ONLINE",
+                                color = ReconGreen,
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Bold,
+                                fontFamily = FontFamily.Monospace
+                            )
+                        }
+
+                        // GPT Typewriter Streaming Text
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = displayedAiGreeting,
+                                color = TextPrimary,
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Bold,
+                                fontFamily = FontFamily.Monospace,
+                                lineHeight = 21.sp
+                            )
+                            if (!isAiStreamingComplete) {
+                                Text(
+                                    text = "▋",
+                                    color = ReconCyan.copy(alpha = cursorAlpha),
+                                    fontSize = 16.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    fontFamily = FontFamily.Monospace
+                                )
+                            }
+                        }
+
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = if (isListeningVoice) "Listening for voice command coordinates..." else "Standing by for tactical destination instructions.",
+                            color = if (isListeningVoice) ReconAmber else TextSecondary,
+                            fontSize = 11.sp
+                        )
+                    }
+
+                    // Voice Command Action Button
+                    IconButton(
+                        onClick = { isListeningVoice = !isListeningVoice },
+                        modifier = Modifier
+                            .size(38.dp)
+                            .background(if (isListeningVoice) ReconAmber else Color(mapSkin.highwayColor).copy(alpha = 0.2f), CircleShape)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Mic,
+                            contentDescription = "Voice Search",
+                            tint = if (isListeningVoice) TacticalObsidian else Color(mapSkin.highwayColor),
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                }
+
+                // Quick AI Action Buttons
+                Spacer(modifier = Modifier.height(12.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Button(
+                        onClick = {
+                            addDialogPersonName = null
+                            showAddDialog = true
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(mapSkin.highwayColor)),
+                        shape = RoundedCornerShape(6.dp),
+                        modifier = Modifier.weight(1f),
+                        contentPadding = PaddingValues(vertical = 8.dp)
+                    ) {
+                        Icon(imageVector = Icons.Default.AddLocationAlt, contentDescription = null, tint = TacticalObsidian, modifier = Modifier.size(14.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(text = "ADD DESTINATION", color = TacticalObsidian, fontSize = 11.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
+                    }
+
+                    OutlinedButton(
+                        onClick = onSearchClick,
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = TextPrimary),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, TacticalBorder),
+                        shape = RoundedCornerShape(6.dp),
+                        modifier = Modifier.weight(1f),
+                        contentPadding = PaddingValues(vertical = 8.dp)
+                    ) {
+                        Icon(imageVector = Icons.Default.Map, contentDescription = null, tint = TextPrimary, modifier = Modifier.size(14.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(text = "OPEN MAP", color = TextPrimary, fontSize = 11.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // =====================================================================
+        // 4. SAVED DESTINATIONS & STACKED CARDS (Loads after GPT text streams in)
+        // =====================================================================
+        val standaloneDestinations = destinations.filter { it.personName.isNullOrBlank() }
+        val personGroups = destinations.filterNot { it.personName.isNullOrBlank() }.groupBy { it.personName!! }
+
+        AnimatedVisibility(
+            visible = isAiStreamingComplete,
+            enter = fadeIn(animationSpec = tween(400)) + slideInVertically(
+                animationSpec = tween(400),
+                initialOffsetY = { 40 }
+            )
+        ) {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                // Section Header Row
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "EXPLORATION INTEL",
+                        text = "SAVED TARGETS // QUICK ENGAGE (${destinations.size})",
                         color = TextSecondary,
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,
                         fontFamily = FontFamily.Monospace
                     )
+
                     Text(
-                        text = stats.explorationRank.title.uppercase(),
-                        color = Color(android.graphics.Color.parseColor(stats.explorationRank.badgeHex)),
+                        text = "+ ADD",
+                        color = Color(mapSkin.highwayColor),
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold,
-                        fontFamily = FontFamily.Monospace
+                        fontFamily = FontFamily.Monospace,
+                        modifier = Modifier.clickable {
+                            addDialogPersonName = null
+                            showAddDialog = true
+                        }
                     )
                 }
 
                 Spacer(modifier = Modifier.height(8.dp))
 
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween
-                ) {
-                    Column {
-                        Text(
-                            text = "%.2f km²".format(stats.totalAreaKm2),
-                            color = TextPrimary,
-                            fontSize = 18.sp,
-                            fontWeight = FontWeight.Bold,
-                            fontFamily = FontFamily.Monospace
-                        )
-                        Text(text = "Territory Uncovered", color = TextSecondary, fontSize = 11.sp)
+                // Empty State
+                if (standaloneDestinations.isEmpty() && personGroups.isEmpty()) {
+                    Surface(
+                        color = TacticalSurface,
+                        shape = RoundedCornerShape(8.dp),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, TacticalBorder),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                addDialogPersonName = null
+                                showAddDialog = true
+                            }
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(20.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.AddLocationAlt,
+                                contentDescription = null,
+                                tint = Color(mapSkin.highwayColor),
+                                modifier = Modifier.size(30.dp)
+                            )
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(
+                                text = "NO SAVED DESTINATIONS YET",
+                                color = TextPrimary,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                fontFamily = FontFamily.Monospace
+                            )
+                            Spacer(modifier = Modifier.height(3.dp))
+                            Text(
+                                text = "Tap here or '+ ADD' to register your places or contacts.",
+                                color = TextSecondary,
+                                fontSize = 11.sp,
+                                fontFamily = FontFamily.Monospace
+                            )
+                        }
                     }
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
 
-                    Column(horizontalAlignment = Alignment.End) {
-                        Text(
-                            text = "%.2f km".format(stats.currentUnchartedStreakKm),
-                            color = Color(fogSkin.exploredRoadGlowColor),
-                            fontSize = 18.sp,
-                            fontWeight = FontWeight.Bold,
-                            fontFamily = FontFamily.Monospace
-                        )
-                        Text(text = "Uncharted Streak", color = TextSecondary, fontSize = 11.sp)
-                    }
+                // A. Render Top-Level Standalone Cards
+                for (dest in standaloneDestinations) {
+                    DestinationCard(
+                        destination = dest,
+                        currentLat = currentLat,
+                        currentLon = currentLon,
+                        mapSkinHighwayColor = mapSkin.highwayColor,
+                        onNavigate = {
+                            onNavigateToDestination(dest.name, dest.lat, dest.lon)
+                        },
+                        onDelete = {
+                            savedDestinationRepository.removeDestination(dest.id)
+                        }
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
+
+                // B. Render Stacked Cards (Grouped by Person / Contact)
+                for ((person, places) in personGroups) {
+                    val isExpanded = expandedContacts[person] ?: false
+                    StackedPersonCard(
+                        personName = person,
+                        destinations = places,
+                        isExpanded = isExpanded,
+                        currentLat = currentLat,
+                        currentLon = currentLon,
+                        mapSkinHighwayColor = mapSkin.highwayColor,
+                        onToggleExpand = {
+                            expandedContacts[person] = !isExpanded
+                        },
+                        onAddDestinationToPerson = {
+                            addDialogPersonName = person
+                            showAddDialog = true
+                        },
+                        onNavigate = { name, lat, lon ->
+                            onNavigateToDestination(name, lat, lon)
+                        },
+                        onDeleteDestination = { destId ->
+                            savedDestinationRepository.removeDestination(destId)
+                        }
+                    )
+                    Spacer(modifier = Modifier.height(10.dp))
                 }
             }
         }
 
-        Spacer(modifier = Modifier.height(14.dp))
-
-        // Bottom Tactical Actions
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Button(
-                onClick = onSearchClick,
-                modifier = Modifier.weight(1f),
-                colors = ButtonDefaults.buttonColors(containerColor = Color(mapSkin.highwayColor)),
-                shape = RoundedCornerShape(6.dp)
-            ) {
-                Icon(imageVector = Icons.Default.Navigation, contentDescription = null, tint = TacticalObsidian, modifier = Modifier.size(16.dp))
-                Spacer(modifier = Modifier.width(6.dp))
-                Text(text = "ENGAGE RADAR MAP", color = TacticalObsidian, fontWeight = FontWeight.Bold, fontSize = 11.sp, fontFamily = FontFamily.Monospace)
-            }
-
-            OutlinedButton(
-                onClick = onOfflinePacksClick,
-                colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(mapSkin.highwayColor)),
-                shape = RoundedCornerShape(6.dp),
-                border = androidx.compose.foundation.BorderStroke(1.dp, TacticalBorder)
-            ) {
-                Icon(imageVector = Icons.Default.Download, contentDescription = null, tint = Color(mapSkin.highwayColor), modifier = Modifier.size(16.dp))
-                Spacer(modifier = Modifier.width(6.dp))
-                Text(text = "OFFLINE MAPS", color = TextPrimary, fontSize = 11.sp, fontFamily = FontFamily.Monospace)
-            }
-
-            OutlinedButton(
-                onClick = onOpenTimeline,
-                colors = ButtonDefaults.outlinedButtonColors(contentColor = ReconGreen),
-                shape = RoundedCornerShape(6.dp),
-                border = androidx.compose.foundation.BorderStroke(1.dp, ReconGreen.copy(alpha = 0.5f))
-            ) {
-                Icon(imageVector = Icons.Default.Timeline, contentDescription = null, tint = ReconGreen, modifier = Modifier.size(16.dp))
-                Spacer(modifier = Modifier.width(6.dp))
-                Text(text = "TIMELINE", color = ReconGreen, fontWeight = FontWeight.Bold, fontSize = 11.sp, fontFamily = FontFamily.Monospace)
-            }
-        }
+        Spacer(modifier = Modifier.height(24.dp))
     }
 }
 
 /**
  * Standard Standalone Saved Destination Card
  * Only shows photo thumbnail if user added a photo!
+ * Displays distance in miles as default.
  */
 @Composable
 private fun DestinationCard(
@@ -759,6 +634,7 @@ private fun DestinationCard(
     onDelete: () -> Unit
 ) {
     val distanceKm = UkOsmDataEngine.calculateDistanceKm(currentLat, currentLon, destination.lat, destination.lon)
+    val distanceMiles = distanceKm * 0.621371
 
     Card(
         modifier = Modifier
@@ -798,8 +674,10 @@ private fun DestinationCard(
                         "HOME" -> Icons.Default.Home
                         "WORK" -> Icons.Default.Work
                         "STAR" -> Icons.Default.Star
-                        "GYM" -> Icons.Default.FitnessCenter
+                        "HEART" -> Icons.Default.Favorite
                         "COFFEE" -> Icons.Default.LocalCafe
+                        "GYM" -> Icons.Default.FitnessCenter
+                        "AIRPORT" -> Icons.Default.Flight
                         else -> Icons.Default.Place
                     }
                     Icon(imageVector = iconVector, contentDescription = null, tint = Color(mapSkinHighwayColor), modifier = Modifier.size(20.dp))
@@ -816,14 +694,16 @@ private fun DestinationCard(
                     fontWeight = FontWeight.Bold,
                     fontFamily = FontFamily.Monospace
                 )
+                if (destination.addressOrSubtext.isNotBlank()) {
+                    Text(
+                        text = destination.addressOrSubtext,
+                        color = TextSecondary,
+                        fontSize = 11.sp,
+                        maxLines = 1
+                    )
+                }
                 Text(
-                    text = destination.addressOrSubtext,
-                    color = TextSecondary,
-                    fontSize = 11.sp,
-                    maxLines = 1
-                )
-                Text(
-                    text = "%.1f km away • Tap to Engage".format(distanceKm),
+                    text = "%.1f mi (%.1f km) • %.4f°N, %.4f°W".format(distanceMiles, distanceKm, destination.lat, kotlin.math.abs(destination.lon)),
                     color = Color(mapSkinHighwayColor),
                     fontSize = 10.sp,
                     fontFamily = FontFamily.Monospace
@@ -854,6 +734,7 @@ private fun DestinationCard(
  * Stacked Cards for People / Contact Sub-lists
  * Displays visual multi-card stacked layer behind the card.
  * Expands on tap to reveal all places belonging to that person.
+ * Displays distance in miles as default.
  */
 @Composable
 private fun StackedPersonCard(
@@ -869,7 +750,7 @@ private fun StackedPersonCard(
     onDeleteDestination: (id: String) -> Unit
 ) {
     Box(modifier = Modifier.fillMaxWidth()) {
-        // Background Stacked Card Layers (Physical stacked cards effect!)
+        // Background Stacked Card Layers (Physical stacked cards visual effect)
         Box(
             modifier = Modifier
                 .padding(start = 10.dp, top = 8.dp, end = 2.dp)
@@ -976,7 +857,8 @@ private fun StackedPersonCard(
                         Spacer(modifier = Modifier.height(8.dp))
 
                         for (subDest in destinations) {
-                            val subDist = UkOsmDataEngine.calculateDistanceKm(currentLat, currentLon, subDest.lat, subDest.lon)
+                            val subDistKm = UkOsmDataEngine.calculateDistanceKm(currentLat, currentLon, subDest.lat, subDest.lon)
+                            val subDistMi = subDistKm * 0.621371
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -1018,14 +900,16 @@ private fun StackedPersonCard(
                                         fontWeight = FontWeight.Bold,
                                         fontFamily = FontFamily.Monospace
                                     )
+                                    if (subDest.addressOrSubtext.isNotBlank()) {
+                                        Text(
+                                            text = subDest.addressOrSubtext,
+                                            color = TextSecondary,
+                                            fontSize = 10.sp,
+                                            maxLines = 1
+                                        )
+                                    }
                                     Text(
-                                        text = subDest.addressOrSubtext,
-                                        color = TextSecondary,
-                                        fontSize = 10.sp,
-                                        maxLines = 1
-                                    )
-                                    Text(
-                                        text = "%.1f km away".format(subDist),
+                                        text = "%.1f mi (%.1f km) away".format(subDistMi, subDistKm),
                                         color = Color(mapSkinHighwayColor),
                                         fontSize = 9.sp,
                                         fontFamily = FontFamily.Monospace

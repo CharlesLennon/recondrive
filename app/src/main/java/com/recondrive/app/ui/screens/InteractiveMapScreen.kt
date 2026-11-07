@@ -67,6 +67,7 @@ fun InteractiveMapScreen(
     val fogRange by fogPreferences.fogRangeMeters.collectAsState()
     val fogOpacity by fogPreferences.fogOpacity.collectAsState()
     val tileRevision by osmTileManager.revision.collectAsState()
+    val timelineEntries by com.recondrive.app.ReconApplication.instance.locationTimelineManager.timelineEntries.collectAsState()
 
     // Interactive Viewport State (Default: Vehicle Current Position, default zoom 12.5f for clear regional overview)
     var cameraLat by remember { mutableDoubleStateOf(initialWaypoint?.first ?: currentLat) }
@@ -477,17 +478,19 @@ fun InteractiveMapScreen(
             // F. DRAW FOG OF WAR SHROUD & EXPLORED TRAILS (If enabled)
             // -----------------------------------------------------------------
             val vehicleScreenPos = project(currentLat, currentLon)
+
+            // Dynamic ground resolution calculation (pixels per meter at current viewport zoom)
+            // In Web Mercator, 1 degree longitude = 111,320m * cos(latitude).
+            val cosLat = cos(Math.toRadians(currentLat)).coerceAtLeast(0.01)
+            val deltaLon1m = 1.0 / (111320.0 * cosLat)
+            val p1m = project(currentLat, currentLon + deltaLon1m)
+            val pixelsPerMeter = kotlin.math.abs(p1m.x - vehicleScreenPos.x).toFloat().coerceAtLeast(0.001f)
+
             if (isFogLayerActive) {
                 val nativeCanvas = drawContext.canvas.nativeCanvas
 
                 // Surveillance Radar Beam Radius: Anchored 1:1 to real-world meters at the current Web Mercator zoom
-                // In Web Mercator, 1 degree longitude = 111,320m * cos(latitude).
-                // We project a point 1 meter away to calculate the exact pixel-to-meter ratio for the active camera viewport:
-                val cosLat = cos(Math.toRadians(currentLat)).coerceAtLeast(0.01)
-                val deltaLon1m = 1.0 / (111320.0 * cosLat)
-                val p1m = project(currentLat, currentLon + deltaLon1m)
-                val pixelsPerMeter = kotlin.math.abs(p1m.x - vehicleScreenPos.x).toDouble()
-                val geoBeamRadius = (pixelsPerMeter * fogRange.toDouble()).toFloat()
+                val geoBeamRadius = (pixelsPerMeter * fogRange.toFloat())
 
                 // Relative to zoom level: expands when zooming in, contracts when zooming out
                 // Floor at 12f so when zoomed all the way out to UK view, the cursor reticle stays clearly visible
@@ -556,19 +559,24 @@ fun InteractiveMapScreen(
                     nativeCanvas.drawCircle(vehicleScreenPos.x, vehicleScreenPos.y, screenBeamRadius * 0.88f, innerRingPaint)
                 }
 
-                // 5. Explored Road Trajectory Glowing Track
-                val exploredTrail = Path().apply {
-                    val p1 = project(currentLat - 0.008, currentLon - 0.005)
-                    val p2 = project(currentLat - 0.004, currentLon - 0.002)
-                    moveTo(p1.x, p1.y)
-                    lineTo(p2.x, p2.y)
-                    lineTo(vehicleScreenPos.x, vehicleScreenPos.y)
+                // 5. Explored Road Trajectory Glowing Track (Real Timeline Breadcrumbs)
+                if (timelineEntries.size >= 2) {
+                    val realTrail = Path().apply {
+                        val first = timelineEntries.first()
+                        val p0 = project(first.latitude, first.longitude)
+                        moveTo(p0.x, p0.y)
+                        for (entry in timelineEntries.drop(1)) {
+                            val pt = project(entry.latitude, entry.longitude)
+                            lineTo(pt.x, pt.y)
+                        }
+                        lineTo(vehicleScreenPos.x, vehicleScreenPos.y)
+                    }
+                    drawPath(
+                        path = realTrail,
+                        color = Color(fogSkin.exploredRoadGlowColor).copy(alpha = 0.85f),
+                        style = Stroke(width = 4.5f, cap = StrokeCap.Round)
+                    )
                 }
-                drawPath(
-                    path = exploredTrail,
-                    color = Color(fogSkin.exploredRoadGlowColor),
-                    style = Stroke(width = 6f)
-                )
 
                 // 6. Fog Texture & Grid Overlay (Dynamic Fog Skin Styling)
                 val overlayPaint = android.graphics.Paint().apply {
@@ -754,9 +762,13 @@ fun InteractiveMapScreen(
             val radGps = Math.toRadians((currentHeading - 90.0).toDouble())
             val radDev = Math.toRadians((deviceHeading - 90.0).toDouble())
 
-            // Vector lengths dynamically scaled by vehicle speed (longer when driving fast, short probe when stationary)
-            val gpsVectorLen = (32f + currentSpeedKmh * 1.6f).coerceIn(32f, 220f)
-            val devVectorLen = (32f + currentSpeedKmh * 1.2f).coerceIn(32f, 180f)
+            // Vector lengths anchored to ground meters so they scale up naturally when zooming in (never shrink on zoom in)
+            // 28 meters GPS forward projection + speed boost; 24 meters device compass probe
+            val groundMetersGps = (28f + currentSpeedKmh * 0.8f)
+            val groundMetersDev = (24f + currentSpeedKmh * 0.6f)
+
+            val gpsVectorLen = (groundMetersGps * pixelsPerMeter).coerceIn(48f, 500f)
+            val devVectorLen = (groundMetersDev * pixelsPerMeter).coerceIn(42f, 440f)
 
             val tipGpsX = vehicleScreenPos.x + gpsVectorLen * cos(radGps).toFloat()
             val tipGpsY = vehicleScreenPos.y + gpsVectorLen * sin(radGps).toFloat()
@@ -1212,8 +1224,9 @@ fun InteractiveMapScreen(
                         fontFamily = FontFamily.Monospace
                     )
                     val liveDrift = ((currentHeading - deviceHeading + 540f) % 360f) - 180f
+                    val speedMph = currentSpeedKmh * 0.621371f
                     Text(
-                        text = "GPS: %.0f° • COMPASS: %.0f° • Δ %+.0f°".format(currentHeading, deviceHeading, liveDrift),
+                        text = "SPD: %.0f MPH • GPS: %.0f° • COMPASS: %.0f° • Δ %+.0f°".format(speedMph, currentHeading, deviceHeading, liveDrift),
                         color = if (abs(liveDrift) > 15f) ReconAmber else ReconCyan,
                         fontSize = 9.sp,
                         fontFamily = FontFamily.Monospace,
@@ -1284,8 +1297,9 @@ fun InteractiveMapScreen(
 
                         Spacer(modifier = Modifier.height(8.dp))
 
+                        val distMi = distKm * 0.621371
                         Text(
-                            text = "Coords: %.4f°N, %.4f°W  •  Distance: %.1f km  •  ETA: ~%d min".format(wp.first, abs(wp.second), distKm, etaMinutes),
+                            text = "Coords: %.4f°N, %.4f°W  •  Distance: %.1f mi (%.1f km)  •  ETA: ~%d min".format(wp.first, abs(wp.second), distMi, distKm, etaMinutes),
                             color = ReconCyan,
                             fontSize = 10.sp,
                             fontFamily = FontFamily.Monospace
