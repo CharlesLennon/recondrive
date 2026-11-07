@@ -8,7 +8,8 @@ enum class RfCategory {
     CAR_KEY,
     CCTV_SURVEILLANCE,
     DRONE_UAV,
-    ACCESS_POINT
+    ACCESS_POINT,
+    CELL_TOWER
 }
 
 /**
@@ -136,5 +137,5 @@ data class DetectedRfTarget(
      * Whether this target represents stationary physical infrastructure.
      */
     val isStationary: Boolean
-        get() = category == RfCategory.ACCESS_POINT || category == RfCategory.CCTV_SURVEILLANCE
+        get() = category == RfCategory.ACCESS_POINT || category == RfCategory.CCTV_SURVEILLANCE || category == RfCategory.CELL_TOWER
 }

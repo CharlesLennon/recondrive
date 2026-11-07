@@ -70,11 +70,16 @@ class MainActivity : ComponentActivity() {
         val list = mutableListOf(
             Manifest.permission.ACCESS_FINE_LOCATION,
             Manifest.permission.ACCESS_COARSE_LOCATION,
+            Manifest.permission.READ_PHONE_STATE,
             Manifest.permission.RECORD_AUDIO,
             Manifest.permission.CAMERA
         )
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            list.add(Manifest.permission.ACTIVITY_RECOGNITION)
+        }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             list.add(Manifest.permission.POST_NOTIFICATIONS)
+            list.add(Manifest.permission.NEARBY_WIFI_DEVICES)
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             list.add(Manifest.permission.BLUETOOTH_SCAN)
@@ -110,10 +115,13 @@ class MainActivity : ComponentActivity() {
             when (perm) {
                 Manifest.permission.ACCESS_FINE_LOCATION,
                 Manifest.permission.ACCESS_COARSE_LOCATION -> "Location"
+                Manifest.permission.READ_PHONE_STATE -> "Cell Towers"
                 Manifest.permission.RECORD_AUDIO -> "Mic (Siren)"
-                Manifest.permission.CAMERA -> "Camera (NIR)"
+                Manifest.permission.CAMERA -> "Camera (NIR/ANPR)"
                 Manifest.permission.BLUETOOTH_SCAN,
                 Manifest.permission.BLUETOOTH_CONNECT -> "Bluetooth"
+                Manifest.permission.NEARBY_WIFI_DEVICES -> "Nearby Wi-Fi"
+                Manifest.permission.ACTIVITY_RECOGNITION -> "Drive Motion"
                 Manifest.permission.POST_NOTIFICATIONS -> "Notifications"
                 else -> perm.substringAfterLast(".")
             }
@@ -607,10 +615,16 @@ class MainActivity : ComponentActivity() {
         val permissionsToRequest = mutableListOf(
             Manifest.permission.ACCESS_FINE_LOCATION,
             Manifest.permission.ACCESS_COARSE_LOCATION,
-            Manifest.permission.RECORD_AUDIO
+            Manifest.permission.READ_PHONE_STATE,
+            Manifest.permission.RECORD_AUDIO,
+            Manifest.permission.CAMERA
         )
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            permissionsToRequest.add(Manifest.permission.ACTIVITY_RECOGNITION)
+        }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             permissionsToRequest.add(Manifest.permission.POST_NOTIFICATIONS)
+            permissionsToRequest.add(Manifest.permission.NEARBY_WIFI_DEVICES)
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             permissionsToRequest.add(Manifest.permission.BLUETOOTH_SCAN)

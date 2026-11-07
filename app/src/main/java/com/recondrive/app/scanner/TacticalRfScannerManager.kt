@@ -262,7 +262,7 @@ class TacticalRfScannerManager(
         // Update relative bearing and distance of all pinned stationary devices relative to vehicle's new position
         var updatedStationary = false
         for ((id, target) in targetMap) {
-            if (target.category == RfCategory.ACCESS_POINT || target.category == RfCategory.CCTV_SURVEILLANCE) {
+            if (target.category == RfCategory.ACCESS_POINT || target.category == RfCategory.CCTV_SURVEILLANCE || target.category == RfCategory.CELL_TOWER) {
                 val tLat = target.detectedLat ?: continue
                 val tLon = target.detectedLon ?: continue
                 val dLatM = (tLat - lat) * 111320.0
@@ -289,6 +289,7 @@ class TacticalRfScannerManager(
                 hasReceivedRealLocation = true
                 // Prune any default startup coordinates (e.g. Brighton placeholder)
                 targetMap.clear()
+                stationaryPinpointMap.clear()
             }
             ingestPublicCctvCameras(lat, lon, heading)
             if (_isSimulationEnabled.value) {
@@ -721,6 +722,18 @@ class TacticalRfScannerManager(
                     DevicePinpoint(id = cellId, pinnedLat = instLat, pinnedLon = instLon)
                 }
 
+                // Reset pin if previous pin is grossly divergent from live signal power
+                // (e.g. pinned before GPS fix or vehicle travelled far away)
+                val prevCellDist = hypot((tracker.pinnedLat - lastKnownLat) * 111320.0, (tracker.pinnedLon - lastKnownLon) * 111320.0 * cos(Math.toRadians(lastKnownLat)))
+                if (!hasReceivedRealLocation || (prevCellDist > 1200.0 && distMeters < 500.0) || prevCellDist > 2500.0) {
+                    tracker.pinnedLat = instLat
+                    tracker.pinnedLon = instLon
+                    tracker.totalWeight = 0.0
+                    tracker.weightedSumLat = 0.0
+                    tracker.weightedSumLon = 0.0
+                    tracker.sampleCount = 0
+                }
+
                 val weight = (120.0 + dbm).coerceAtLeast(5.0) / distMeters.coerceAtLeast(10.0)
                 tracker.sampleCount++
                 tracker.totalWeight += weight
@@ -731,7 +744,8 @@ class TacticalRfScannerManager(
 
                 val dLatM = (tracker.pinnedLat - lastKnownLat) * 111320.0
                 val dLonM = (tracker.pinnedLon - lastKnownLon) * 111320.0 * cos(Math.toRadians(lastKnownLat))
-                val effectiveDist = hypot(dLatM, dLonM).coerceAtLeast(10.0)
+                val rawComputedDist = hypot(dLatM, dLonM).coerceAtLeast(10.0)
+                val effectiveDist = if (rawComputedDist > 1200.0) distMeters else rawComputedDist
 
                 var worldAngle = Math.toDegrees(atan2(dLonM, dLatM)).toFloat()
                 if (worldAngle < 0f) worldAngle += 360f
@@ -743,7 +757,7 @@ class TacticalRfScannerManager(
                     rawSsidOrBleName = operatorName,
                     macAddress = cellId,
                     vendor = operatorName,
-                    category = RfCategory.ACCESS_POINT,
+                    category = RfCategory.CELL_TOWER,
                     rssi = dbm,
                     estimatedDistanceMeters = effectiveDist,
                     frequencyMhz = if (cellTech.contains("5G")) 3500 else 1800,
@@ -811,6 +825,18 @@ class TacticalRfScannerManager(
                         DevicePinpoint(id = bssid, pinnedLat = instLat, pinnedLon = instLon)
                     }
 
+                    // Reset pin if previous pin is grossly divergent from live signal power
+                    // (e.g. pinned before GPS fix or vehicle travelled away and router is local)
+                    val prevDist = hypot((tracker.pinnedLat - lastKnownLat) * 111320.0, (tracker.pinnedLon - lastKnownLon) * 111320.0 * cos(Math.toRadians(lastKnownLat)))
+                    if (!hasReceivedRealLocation || (prevDist > 80.0 && dist < 35.0) || prevDist > 400.0) {
+                        tracker.pinnedLat = instLat
+                        tracker.pinnedLon = instLon
+                        tracker.totalWeight = 0.0
+                        tracker.weightedSumLat = 0.0
+                        tracker.weightedSumLon = 0.0
+                        tracker.sampleCount = 0
+                    }
+
                     // Weight by signal power: close readings dominate, averaging out RF multipath noise
                     val weight = (100.0 + rssi).coerceAtLeast(5.0) / dist.coerceAtLeast(1.0)
                     tracker.sampleCount++
@@ -830,7 +856,15 @@ class TacticalRfScannerManager(
                     // Accurate bearing and distance relative to vehicle's live position
                     val dLatM = (targetLat - lastKnownLat) * 111320.0
                     val dLonM = (targetLon - lastKnownLon) * 111320.0 * cos(Math.toRadians(lastKnownLat))
-                    effectiveDistance = hypot(dLatM, dLonM).coerceAtLeast(1.0)
+                    val rawComputedDist = hypot(dLatM, dLonM).coerceAtLeast(1.0)
+
+                    // Ground truth clamp: If direct RF path loss shows close proximity (dist < 35m),
+                    // never report 1km or large distances due to historical anchor drift!
+                    effectiveDistance = if (dist < 35.0 && rawComputedDist > 50.0) {
+                        dist
+                    } else {
+                        rawComputedDist
+                    }
 
                     var worldAngle = Math.toDegrees(atan2(dLonM, dLatM)).toFloat()
                     if (worldAngle < 0f) worldAngle += 360f

@@ -6,6 +6,8 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
@@ -164,6 +166,7 @@ fun TacticalScannerScreen(
     val keyCount = targetsInRange.count { it.category == RfCategory.CAR_KEY }
     val cctvCount = targetsInRange.count { it.category == RfCategory.CCTV_SURVEILLANCE }
     val droneCount = targetsInRange.count { it.category == RfCategory.DRONE_UAV }
+    val cellCount = targetsInRange.count { it.category == RfCategory.CELL_TOWER }
     val wifiCount = targetsInRange.count { it.category == RfCategory.ACCESS_POINT }
     val savedCount = targetsInRange.count { it.savedMetadata != null }
 
@@ -371,6 +374,19 @@ fun TacticalScannerScreen(
                     },
                     modifier = Modifier.weight(1f)
                 )
+            } else if (cellCount > 0) {
+                TelemetryThreatBadge(
+                    label = "CELL",
+                    count = cellCount,
+                    color = Color(0xFF00E5FF),
+                    icon = Icons.Default.CellTower,
+                    selected = selectedFilterCategory == RfCategory.CELL_TOWER && !filterSavedOnly,
+                    onClick = {
+                        filterSavedOnly = false
+                        selectedFilterCategory = if (selectedFilterCategory == RfCategory.CELL_TOWER) null else RfCategory.CELL_TOWER
+                    },
+                    modifier = Modifier.weight(1f)
+                )
             } else if (droneCount > 0) {
                 TelemetryThreatBadge(
                     label = "DRONE",
@@ -388,7 +404,7 @@ fun TacticalScannerScreen(
 
             TelemetryThreatBadge(
                 label = "TOTAL",
-                count = detectedTargets.size,
+                count = targetsInRange.size,
                 color = ReconGreen,
                 icon = Icons.Default.Sensors,
                 selected = selectedFilterCategory == null && !filterSavedOnly,
@@ -967,11 +983,13 @@ fun TacticalScannerScreen(
         // 4. CATEGORY & SAVED FILTER CHIPS
         // =====================================================================
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .horizontalScroll(rememberScrollState()),
             horizontalArrangement = Arrangement.spacedBy(5.dp)
         ) {
             FilterChipItem(
-                label = "ALL (${detectedTargets.size})",
+                label = "ALL (${targetsInRange.size})",
                 selected = selectedFilterCategory == null && !filterSavedOnly,
                 activeColor = ReconCyan,
                 onClick = {
@@ -1015,6 +1033,28 @@ fun TacticalScannerScreen(
                     selectedFilterCategory = RfCategory.CCTV_SURVEILLANCE
                 }
             )
+            if (cellCount > 0) {
+                FilterChipItem(
+                    label = "📡 CELL ($cellCount)",
+                    selected = selectedFilterCategory == RfCategory.CELL_TOWER && !filterSavedOnly,
+                    activeColor = Color(0xFF00E5FF),
+                    onClick = {
+                        filterSavedOnly = false
+                        selectedFilterCategory = RfCategory.CELL_TOWER
+                    }
+                )
+            }
+            if (wifiCount > 0) {
+                FilterChipItem(
+                    label = "📶 WI-FI ($wifiCount)",
+                    selected = selectedFilterCategory == RfCategory.ACCESS_POINT && !filterSavedOnly,
+                    activeColor = ReconGreen,
+                    onClick = {
+                        filterSavedOnly = false
+                        selectedFilterCategory = RfCategory.ACCESS_POINT
+                    }
+                )
+            }
             if (droneCount > 0) {
                 FilterChipItem(
                     label = "🛸 DRONE ($droneCount)",
@@ -1490,6 +1530,8 @@ private fun LiveScannerRoadMapCanvas(
                     target.category == RfCategory.VEHICLE -> ReconCyan
                     target.category == RfCategory.CCTV_SURVEILLANCE -> Color(0xFFFF5252)
                     target.category == RfCategory.DRONE_UAV -> Color(0xFFBA68C8)
+                    target.category == RfCategory.CELL_TOWER -> Color(0xFF00E5FF)
+                    target.category == RfCategory.ACCESS_POINT -> ReconGreen
                     else -> Color(0xFF64B5F6)
                 }
 
@@ -1574,6 +1616,8 @@ private fun LiveScannerRoadMapCanvas(
                             target.category == RfCategory.VEHICLE -> android.graphics.Color.parseColor("#00E5FF")
                             target.category == RfCategory.CCTV_SURVEILLANCE -> android.graphics.Color.parseColor("#FF5252")
                             target.category == RfCategory.DRONE_UAV -> android.graphics.Color.parseColor("#BA68C8")
+                            target.category == RfCategory.CELL_TOWER -> android.graphics.Color.parseColor("#00E5FF")
+                            target.category == RfCategory.ACCESS_POINT -> android.graphics.Color.parseColor("#66BB6A")
                             else -> android.graphics.Color.parseColor("#64B5F6")
                         }
                         textSize = 17f
@@ -1594,6 +1638,8 @@ private fun LiveScannerRoadMapCanvas(
                         target.category == RfCategory.VEHICLE -> "🚗 "
                         target.category == RfCategory.CCTV_SURVEILLANCE -> "📷 "
                         target.category == RfCategory.DRONE_UAV -> "🛸 "
+                        target.category == RfCategory.CELL_TOWER -> "📡 "
+                        target.category == RfCategory.ACCESS_POINT -> "📶 "
                         else -> "📡 "
                     }
                     val tagTitle = "$titlePrefix${target.displayName}"
@@ -1791,6 +1837,8 @@ private fun RfTargetHorizontalCard(
         target.category == RfCategory.VEHICLE -> ReconCyan
         target.category == RfCategory.CCTV_SURVEILLANCE -> Color(0xFFFF5252)
         target.category == RfCategory.DRONE_UAV -> Color(0xFFBA68C8)
+        target.category == RfCategory.CELL_TOWER -> Color(0xFF00E5FF)
+        target.category == RfCategory.ACCESS_POINT -> ReconGreen
         else -> TextSecondary
     }
 
@@ -1800,6 +1848,8 @@ private fun RfTargetHorizontalCard(
         target.category == RfCategory.VEHICLE -> Icons.Default.DirectionsCar
         target.category == RfCategory.CCTV_SURVEILLANCE -> Icons.Default.Videocam
         target.category == RfCategory.DRONE_UAV -> Icons.Default.Flight
+        target.category == RfCategory.CELL_TOWER -> Icons.Default.CellTower
+        target.category == RfCategory.ACCESS_POINT -> Icons.Default.Wifi
         else -> Icons.Default.Wifi
     }
 
@@ -2494,6 +2544,4 @@ private fun TacticalCctvViewfinder(
             scanY += 4f
         }
     }
-}
-    )
 }
