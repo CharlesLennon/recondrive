@@ -12,8 +12,8 @@ android {
         applicationId = "com.recondrive.app"
         minSdk = 26
         targetSdk = 34
-        versionCode = 11
-        versionName = "1.0.11-tactical"
+        versionCode = 12
+        versionName = "1.0.12-tactical"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -25,9 +25,22 @@ android {
         }
     }
 
+    signingConfigs {
+        create("tactical") {
+            storeFile = file("keystore/recondrive.jks")
+            storePassword = "recondrive_tactical_key"
+            keyAlias = "recondrive"
+            keyPassword = "recondrive_tactical_key"
+        }
+    }
+
     buildTypes {
+        debug {
+            signingConfig = signingConfigs.getByName("tactical")
+        }
         release {
             isMinifyEnabled = false
+            signingConfig = signingConfigs.getByName("tactical")
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"

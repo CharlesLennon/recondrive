@@ -1,7 +1,9 @@
 package com.recondrive.app.update
 
+import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageInstaller
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
@@ -186,6 +188,11 @@ class AppUpdateManager(private val context: Context) {
     /**
      * Triggers the Android system package installer via FileProvider.
      */
+    /**
+     * Triggers the Android system package installer.
+     * Uses modern PackageInstaller.Session streaming API as primary engine,
+     * with FileProvider ACTION_VIEW as fallback.
+     */
     fun installApk(apkFile: File) {
         try {
             if (!apkFile.exists() || apkFile.length() == 0L) {
@@ -209,69 +216,113 @@ class AppUpdateManager(private val context: Context) {
             // Ensure world-readable permissions on Linux filesystem level
             apkFile.setReadable(true, false)
 
-            val apkUri: Uri = FileProvider.getUriForFile(
-                context,
-                "${context.packageName}.fileprovider",
-                apkFile
-            )
-
-            // Explicitly grant read URI permissions to known system package installers across Android OEMs
-            val knownInstallers = listOf(
-                "com.google.android.packageinstaller",
-                "com.android.packageinstaller",
-                "com.google.android.apps.packageinstaller",
-                "com.samsung.android.packageinstaller",
-                "com.miui.packageinstaller",
-                "android"
-            )
-            for (pkg in knownInstallers) {
-                try {
-                    context.grantUriPermission(pkg, apkUri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                } catch (_: Exception) {}
+            // Primary Engine: Modern Android PackageInstaller.Session (streams APK binary directly to installer)
+            try {
+                Timber.i("Launching PackageInstaller.Session for ${apkFile.name}")
+                installViaPackageInstallerSession(apkFile)
+                return
+            } catch (e: Exception) {
+                Timber.w(e, "PackageInstaller.Session failed, falling back to FileProvider ACTION_VIEW")
             }
 
-            val installIntent = Intent(Intent.ACTION_VIEW).apply {
+            // Fallback Engine: FileProvider ACTION_VIEW Intent
+            installViaFileProvider(apkFile)
+
+        } catch (e: Exception) {
+            Timber.e(e, "Failed to launch package installer")
+            _updateState.value = UpdateState.Error("Installer launch failed: ${e.localizedMessage}")
+        }
+    }
+
+    private fun installViaPackageInstallerSession(apkFile: File) {
+        val packageInstaller = context.packageManager.packageInstaller
+        val sessionParams = PackageInstaller.SessionParams(PackageInstaller.SessionParams.MODE_FULL_INSTALL).apply {
+            setAppPackageName(context.packageName)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                setRequireUserAction(PackageInstaller.SessionParams.USER_ACTION_REQUIRED)
+            }
+        }
+        val sessionId = packageInstaller.createSession(sessionParams)
+        val session = packageInstaller.openSession(sessionId)
+
+        session.openWrite("package", 0, apkFile.length()).use { out ->
+            apkFile.inputStream().use { input ->
+                input.copyTo(out)
+            }
+            session.fsync(out)
+        }
+
+        val intent = Intent(context, AppUpdateInstallReceiver::class.java).apply {
+            action = AppUpdateInstallReceiver.ACTION_INSTALL_STATUS
+            `package` = context.packageName
+        }
+        val flags = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_MUTABLE
+        } else {
+            PendingIntent.FLAG_UPDATE_CURRENT
+        }
+        val pendingIntent = PendingIntent.getBroadcast(context, sessionId, intent, flags)
+        session.commit(pendingIntent.intentSender)
+        session.close()
+    }
+
+    private fun installViaFileProvider(apkFile: File) {
+        val apkUri: Uri = FileProvider.getUriForFile(
+            context,
+            "${context.packageName}.fileprovider",
+            apkFile
+        )
+
+        val knownInstallers = listOf(
+            "com.google.android.packageinstaller",
+            "com.android.packageinstaller",
+            "com.google.android.apps.packageinstaller",
+            "com.samsung.android.packageinstaller",
+            "com.miui.packageinstaller",
+            "android"
+        )
+        for (pkg in knownInstallers) {
+            try {
+                context.grantUriPermission(pkg, apkUri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            } catch (_: Exception) {}
+        }
+
+        val installIntent = Intent(Intent.ACTION_VIEW).apply {
+            setDataAndType(apkUri, "application/vnd.android.package-archive")
+            flags = Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                    Intent.FLAG_ACTIVITY_NEW_TASK or
+                    Intent.FLAG_ACTIVITY_CLEAR_TOP
+            putExtra(Intent.EXTRA_NOT_UNKNOWN_SOURCE, true)
+        }
+
+        val resolveInfos = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            context.packageManager.queryIntentActivities(
+                installIntent,
+                PackageManager.ResolveInfoFlags.of(PackageManager.MATCH_DEFAULT_ONLY.toLong())
+            )
+        } else {
+            @Suppress("DEPRECATION")
+            context.packageManager.queryIntentActivities(installIntent, PackageManager.MATCH_DEFAULT_ONLY)
+        }
+        for (info in resolveInfos) {
+            try {
+                context.grantUriPermission(info.activityInfo.packageName, apkUri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            } catch (_: Exception) {}
+        }
+
+        Timber.i("Launching Android Package Installer via ACTION_VIEW for $apkUri")
+        try {
+            context.startActivity(installIntent)
+        } catch (e: Exception) {
+            Timber.w(e, "Standard ACTION_VIEW package install failed, trying ACTION_INSTALL_PACKAGE fallback")
+            val fallbackIntent = Intent(Intent.ACTION_INSTALL_PACKAGE).apply {
                 setDataAndType(apkUri, "application/vnd.android.package-archive")
                 flags = Intent.FLAG_GRANT_READ_URI_PERMISSION or
                         Intent.FLAG_ACTIVITY_NEW_TASK or
                         Intent.FLAG_ACTIVITY_CLEAR_TOP
                 putExtra(Intent.EXTRA_NOT_UNKNOWN_SOURCE, true)
             }
-
-            // Also grant to any activities that resolve the intent (now visible via <queries>)
-            val resolveInfos = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                context.packageManager.queryIntentActivities(
-                    installIntent,
-                    PackageManager.ResolveInfoFlags.of(PackageManager.MATCH_DEFAULT_ONLY.toLong())
-                )
-            } else {
-                @Suppress("DEPRECATION")
-                context.packageManager.queryIntentActivities(installIntent, PackageManager.MATCH_DEFAULT_ONLY)
-            }
-            for (info in resolveInfos) {
-                try {
-                    context.grantUriPermission(info.activityInfo.packageName, apkUri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                } catch (_: Exception) {}
-            }
-
-            Timber.i("Launching Android Package Installer for $apkUri (resolving handlers: ${resolveInfos.size})")
-            try {
-                context.startActivity(installIntent)
-            } catch (e: Exception) {
-                Timber.w(e, "Standard ACTION_VIEW package install failed, trying ACTION_INSTALL_PACKAGE fallback")
-                val fallbackIntent = Intent(Intent.ACTION_INSTALL_PACKAGE).apply {
-                    setDataAndType(apkUri, "application/vnd.android.package-archive")
-                    flags = Intent.FLAG_GRANT_READ_URI_PERMISSION or
-                            Intent.FLAG_ACTIVITY_NEW_TASK or
-                            Intent.FLAG_ACTIVITY_CLEAR_TOP
-                    putExtra(Intent.EXTRA_NOT_UNKNOWN_SOURCE, true)
-                }
-                context.startActivity(fallbackIntent)
-            }
-
-        } catch (e: Exception) {
-            Timber.e(e, "Failed to launch package installer")
-            _updateState.value = UpdateState.Error("Installer launch failed: ${e.localizedMessage}")
+            context.startActivity(fallbackIntent)
         }
     }
 

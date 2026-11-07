@@ -104,6 +104,15 @@
             </intent-filter>
         </receiver>
 
+        <!-- System PackageInstaller Session Status Receiver -->
+        <receiver
+            android:name=".update.AppUpdateInstallReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.recondrive.app.ACTION_INSTALL_STATUS" />
+            </intent-filter>
+        </receiver>
+
         <!-- In-App APK Updater FileProvider -->
         <provider
             android:name="androidx.core.content.FileProvider"
