@@ -49,6 +49,7 @@ fun TacticalHudScreen(
     val currentRange by fogPreferences.fogRangeMeters.collectAsState()
     val currentOpacity by fogPreferences.fogOpacity.collectAsState()
     val updateState by updateManager.updateState.collectAsState()
+    val isServiceRunning by com.recondrive.app.service.ExplorationTrackingService.isRunning.collectAsState()
 
     if (showSkinDialog) {
         SkinSelectorDialog(
@@ -161,7 +162,6 @@ fun TacticalHudScreen(
                 }
 
                 // 24/7 Background Radar Status & Toggle Pill
-                val isServiceRunning by com.recondrive.app.service.ExplorationTrackingService.isRunning.collectAsState()
                 Surface(
                     color = TacticalSurface,
                     shape = RoundedCornerShape(4.dp),
