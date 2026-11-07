@@ -168,7 +168,7 @@ fun TacticalScannerScreen(
                     letterSpacing = 0.5.sp
                 )
                 Text(
-                    text = if (isScannerPaused) "SCANNER PAUSED (BACKGROUND IDLE)" else "24/7 BACKGROUND SPECTRUM ACTIVE • 2.4/5GHz • BLE",
+                    text = if (isScannerPaused) "SCANNER PAUSED (BACKGROUND IDLE)" else "24/7 LIVE PROXIMITY ACTIVE • WI-FI 2.4/5GHz • BLE • BT • P2P • CELL • MAD",
                     color = if (isScannerPaused) ReconAmber else TextSecondary,
                     fontSize = 8.5.sp,
                     fontFamily = FontFamily.Monospace
@@ -1556,16 +1556,52 @@ private fun RfTargetHorizontalCard(
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
                 Column {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(
+                            text = "~${"%.0f".format(target.estimatedDistanceMeters)}m • $motionTrendStr",
+                            color = categoryColor,
+                            fontSize = 8.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.Monospace
+                        )
+                        Surface(
+                            color = when {
+                                target.estimatedDistanceMeters < 5.0 -> ReconAmber.copy(alpha = 0.2f)
+                                target.estimatedDistanceMeters < 15.0 -> ReconCyan.copy(alpha = 0.15f)
+                                else -> TacticalSurface
+                            },
+                            shape = RoundedCornerShape(2.dp),
+                            border = androidx.compose.foundation.BorderStroke(
+                                0.5.dp,
+                                when {
+                                    target.estimatedDistanceMeters < 5.0 -> ReconAmber
+                                    target.estimatedDistanceMeters < 15.0 -> ReconCyan
+                                    else -> TacticalBorder
+                                }
+                            )
+                        ) {
+                            Text(
+                                text = when {
+                                    target.estimatedDistanceMeters < 5.0 -> "IMMEDIATE"
+                                    target.estimatedDistanceMeters < 15.0 -> "NEAR"
+                                    target.estimatedDistanceMeters < 40.0 -> "MEDIUM"
+                                    else -> "PERIMETER"
+                                },
+                                color = when {
+                                    target.estimatedDistanceMeters < 5.0 -> ReconAmber
+                                    target.estimatedDistanceMeters < 15.0 -> ReconCyan
+                                    else -> TextSecondary
+                                },
+                                fontSize = 6.5.sp,
+                                fontWeight = FontWeight.Bold,
+                                fontFamily = FontFamily.Monospace,
+                                modifier = Modifier.padding(horizontal = 3.dp, vertical = 0.5.dp)
+                            )
+                        }
+                    }
                     Text(
-                        text = "~${"%.0f".format(target.estimatedDistanceMeters)}m • $motionTrendStr",
-                        color = categoryColor,
-                        fontSize = 8.sp,
-                        fontWeight = FontWeight.Bold,
-                        fontFamily = FontFamily.Monospace
-                    )
-                    Text(
-                        text = target.macAddress,
-                        color = TextSecondary.copy(alpha = 0.7f),
+                        text = if (target.isRandomizedMac) "${target.macAddress} [RANDOM]" else target.macAddress,
+                        color = if (target.isRandomizedMac) ReconAmber.copy(alpha = 0.7f) else TextSecondary.copy(alpha = 0.7f),
                         fontSize = 7.5.sp,
                         fontFamily = FontFamily.Monospace
                     )

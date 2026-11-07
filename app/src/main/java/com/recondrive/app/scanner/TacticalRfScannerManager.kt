@@ -2,6 +2,8 @@ package com.recondrive.app.scanner
 
 import android.annotation.SuppressLint
 import android.bluetooth.BluetoothAdapter
+import android.bluetooth.BluetoothClass
+import android.bluetooth.BluetoothDevice
 import android.bluetooth.BluetoothManager
 import android.bluetooth.le.ScanCallback
 import android.bluetooth.le.ScanResult
@@ -10,10 +12,18 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.hardware.Sensor
+import android.hardware.SensorEvent
+import android.hardware.SensorEventListener
+import android.hardware.SensorManager
 import android.net.wifi.WifiManager
+import android.net.wifi.p2p.WifiP2pDevice
+import android.net.wifi.p2p.WifiP2pDeviceList
+import android.net.wifi.p2p.WifiP2pManager
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import android.telephony.*
 import com.recondrive.app.audio.TacticalSoundManager
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -25,7 +35,7 @@ import kotlin.math.*
 
 /**
  * Multi-scan weighted running average pinpoint tracker for stationary RF infrastructure
- * (Wi-Fi Routers, Access Points, and fixed CCTV optics).
+ * (Wi-Fi Routers, Access Points, CCTV optics, and Cellular Base Stations).
  */
 data class DevicePinpoint(
     val id: String,
@@ -40,16 +50,22 @@ data class DevicePinpoint(
 
 /**
  * Tactical RF Scanner Manager.
- * Orchestrates Wi-Fi 802.11 and Bluetooth Low Energy spectrum audits in the background,
- * maintaining persistent device location history relative to the host vehicle,
- * multi-scan stationary router pinpointing, and triggering custom tactical audio alerts.
+ * Orchestrates multi-spectrum hardware audits:
+ * 1. Wi-Fi 802.11 active & passive MAC sniffing (2.4/5/6GHz)
+ * 2. Bluetooth Low Energy (BLE) continuous low-latency sniffing (AirTags, SmartTags, Tesla Key, TPMS, Drone Remote ID)
+ * 3. Bluetooth Classic BR/EDR inquiry discovery (Car Infotainment, Hands-free, OBD-II CAN-Bus dongles)
+ * 4. Wi-Fi Direct (P2P) peer discovery (Android Auto, wireless displays, action cams)
+ * 5. Cellular base station telemetry (4G LTE / 5G NR base station cell towers)
+ * 6. Magnetic Anomaly Detection (MAD) for close-proximity vehicle steel mass detection
+ *
+ * Defaults to 24/7 LIVE hardware RF sniffing (Simulation defaults to OFF).
  */
 class TacticalRfScannerManager(
     private val context: Context,
     val savedDeviceRepository: SavedRfDeviceRepository = com.recondrive.app.ReconApplication.instance.savedRfDeviceRepository,
     val soundManager: TacticalSoundManager = com.recondrive.app.ReconApplication.instance.tacticalSoundManager,
     val csiEngine: TacticalCsiSensingEngine? = null
-) {
+) : SensorEventListener {
 
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private val mainHandler = Handler(Looper.getMainLooper())
@@ -63,7 +79,8 @@ class TacticalRfScannerManager(
     private val _isScannerPaused = MutableStateFlow(false)
     val isScannerPaused: StateFlow<Boolean> = _isScannerPaused.asStateFlow()
 
-    private val _isSimulationEnabled = MutableStateFlow(true)
+    // Pure live hardware sniffing by default; simulation mock targets are strictly opt-in
+    private val _isSimulationEnabled = MutableStateFlow(false)
     val isSimulationEnabled: StateFlow<Boolean> = _isSimulationEnabled.asStateFlow()
 
     private val targetMap = ConcurrentHashMap<String, DetectedRfTarget>()
@@ -76,12 +93,27 @@ class TacticalRfScannerManager(
     private var lastKnownHeading: Float = 0f
     private var hasReceivedRealLocation: Boolean = false
 
+    // Hardware Managers
     private val wifiManager = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager
     private val bluetoothManager = context.applicationContext.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
+    private val wifiP2pManager = context.applicationContext.getSystemService(Context.WIFI_P2P_SERVICE) as? WifiP2pManager
+    private val telephonyManager = context.applicationContext.getSystemService(Context.TELEPHONY_SERVICE) as? TelephonyManager
+    private val sensorManager = context.applicationContext.getSystemService(Context.SENSOR_SERVICE) as? SensorManager
+    private val magnetometer = sensorManager?.getDefaultSensor(Sensor.TYPE_MAGNETIC_FIELD)
+
+    private var wifiP2pChannel: WifiP2pManager.Channel? = null
 
     private var wifiReceiverRegistered = false
+    private var btClassicReceiverRegistered = false
+    private var wifiP2pReceiverRegistered = false
     private var bleScanActive = false
+    private var lastClassicDiscoveryTrigger = 0L
 
+    // Magnetic Anomaly Baseline for Ferromagnetic Vehicle Proximity Detection
+    private var baselineMagneticMagnitude = 45.0f
+    private var lastMagneticAnomalyTime = 0L
+
+    // Wi-Fi Scan Broadcast Receiver
     private val wifiScanReceiver = object : BroadcastReceiver() {
         override fun onReceive(c: Context?, intent: Intent?) {
             if (intent?.action == WifiManager.SCAN_RESULTS_AVAILABLE_ACTION) {
@@ -92,6 +124,62 @@ class TacticalRfScannerManager(
         }
     }
 
+    // Bluetooth Classic Inquiry Broadcast Receiver
+    private val btClassicReceiver = object : BroadcastReceiver() {
+        @SuppressLint("MissingPermission")
+        override fun onReceive(c: Context?, intent: Intent?) {
+            when (intent?.action) {
+                BluetoothDevice.ACTION_FOUND -> {
+                    if (!_isScannerPaused.value) {
+                        try {
+                            val device = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                                intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE, BluetoothDevice::class.java)
+                            } else {
+                                @Suppress("DEPRECATION")
+                                intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE)
+                            } ?: return
+
+                            val name = intent.getStringExtra(BluetoothDevice.EXTRA_NAME) ?: device.name ?: ""
+                            val rssi = intent.getShortExtra(BluetoothDevice.EXTRA_RSSI, (-75).toShort()).toInt()
+                            val btClass = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                                intent.getParcelableExtra(BluetoothDevice.EXTRA_CLASS, BluetoothClass::class.java)
+                            } else {
+                                @Suppress("DEPRECATION")
+                                intent.getParcelableExtra(BluetoothDevice.EXTRA_CLASS)
+                            } ?: device.bluetoothClass
+
+                            processBluetoothDevice(device, name, rssi, btClass, isClassic = true)
+                        } catch (e: Exception) {
+                            Timber.w(e, "Error parsing Bluetooth Classic device")
+                        }
+                    }
+                }
+                BluetoothAdapter.ACTION_DISCOVERY_FINISHED -> {
+                    Timber.d("Bluetooth Classic inquiry sweep finished")
+                }
+            }
+        }
+    }
+
+    // Wi-Fi Direct (P2P) Peer Receiver
+    private val wifiP2pReceiver = object : BroadcastReceiver() {
+        @SuppressLint("MissingPermission")
+        override fun onReceive(c: Context?, intent: Intent?) {
+            if (intent?.action == WifiP2pManager.WIFI_P2P_PEERS_CHANGED_ACTION) {
+                if (!_isScannerPaused.value && wifiP2pChannel != null) {
+                    try {
+                        wifiP2pManager?.requestPeers(wifiP2pChannel) { peers ->
+                            processWifiP2pPeers(peers)
+                        }
+                    } catch (e: Exception) {
+                        Timber.w(e, "Error requesting Wi-Fi Direct peers")
+                    }
+                }
+            }
+        }
+    }
+
+    // Bluetooth LE Scan Callback
     private val bleScanCallback = object : ScanCallback() {
         override fun onScanResult(callbackType: Int, result: ScanResult?) {
             if (!_isScannerPaused.value) {
@@ -111,7 +199,15 @@ class TacticalRfScannerManager(
     }
 
     init {
-        populateTacticalSimulationTargets(lastKnownLat, lastKnownLon)
+        // Initialize Wi-Fi P2P Channel
+        try {
+            wifiP2pChannel = wifiP2pManager?.initialize(context.applicationContext, Looper.getMainLooper(), null)
+        } catch (e: Exception) {
+            Timber.w(e, "Wi-Fi P2P initialization failed")
+        }
+
+        // Start 24/7 background hardware scanning immediately
+        startScanning()
         startPeriodicSweep()
     }
 
@@ -154,19 +250,30 @@ class TacticalRfScannerManager(
         val distMoved = hypot(lat - prevLat, lon - prevLon) * 111320.0
         if (!hasReceivedRealLocation || distMoved > 40.0) {
             hasReceivedRealLocation = true
-            populateTacticalSimulationTargets(lat, lon)
+            if (_isSimulationEnabled.value) {
+                populateTacticalSimulationTargets(lat, lon)
+            }
         }
     }
 
     /**
-     * Start continuous background spectrum scanning (both Wi-Fi & BLE).
+     * Start continuous background multi-spectrum scanning (Wi-Fi, BLE, BT Classic, P2P, Cellular, MAD).
      */
     fun startScanning() {
         _isScanning.value = true
         _isScannerPaused.value = false
+
         registerWifiReceiver()
+        registerBtClassicReceiver()
+        registerWifiP2pReceiver()
+        registerMagnetometer()
+
         triggerHardwareWifiScan()
         startBleScan()
+        triggerBluetoothClassicDiscovery()
+        triggerWifiP2pDiscovery()
+        auditCellularBaseStations()
+        auditBondedBluetoothDevices()
     }
 
     /**
@@ -175,6 +282,9 @@ class TacticalRfScannerManager(
     fun stopScanning() {
         _isScanning.value = false
         unregisterWifiReceiver()
+        unregisterBtClassicReceiver()
+        unregisterWifiP2pReceiver()
+        unregisterMagnetometer()
         stopBleScan()
     }
 
@@ -187,7 +297,7 @@ class TacticalRfScannerManager(
     }
 
     /**
-     * Manually trigger an immediate spectrum sweep.
+     * Manually trigger an immediate spectrum sweep across all hardware radios.
      */
     fun triggerImmediateSweep(currentLat: Double? = null, currentLon: Double? = null) {
         if (currentLat != null && currentLon != null) {
@@ -195,8 +305,14 @@ class TacticalRfScannerManager(
         }
         _isScanning.value = true
         triggerHardwareWifiScan()
+        triggerBluetoothClassicDiscovery()
+        triggerWifiP2pDiscovery()
+        auditCellularBaseStations()
     }
 
+    /**
+     * Toggles simulation demo mode. Default is false (Pure LIVE hardware sniffing).
+     */
     fun toggleSimulation() {
         _isSimulationEnabled.value = !_isSimulationEnabled.value
         if (_isSimulationEnabled.value) {
@@ -213,6 +329,10 @@ class TacticalRfScannerManager(
             syncTargetsToFlow()
         }
     }
+
+    // =========================================================================
+    // BROADCAST RECEIVER REGISTRATIONS
+    // =========================================================================
 
     private fun registerWifiReceiver() {
         if (!wifiReceiverRegistered) {
@@ -236,6 +356,77 @@ class TacticalRfScannerManager(
             }
         }
     }
+
+    private fun registerBtClassicReceiver() {
+        if (!btClassicReceiverRegistered) {
+            try {
+                val filter = IntentFilter().apply {
+                    addAction(BluetoothDevice.ACTION_FOUND)
+                    addAction(BluetoothAdapter.ACTION_DISCOVERY_FINISHED)
+                }
+                context.registerReceiver(btClassicReceiver, filter)
+                btClassicReceiverRegistered = true
+            } catch (e: Exception) {
+                Timber.w(e, "Unable to register Bluetooth Classic receiver")
+            }
+        }
+    }
+
+    private fun unregisterBtClassicReceiver() {
+        if (btClassicReceiverRegistered) {
+            try {
+                context.unregisterReceiver(btClassicReceiver)
+                btClassicReceiverRegistered = false
+            } catch (e: Exception) {
+                Timber.w(e, "Error unregistering BT Classic receiver")
+            }
+        }
+    }
+
+    private fun registerWifiP2pReceiver() {
+        if (!wifiP2pReceiverRegistered) {
+            try {
+                val filter = IntentFilter(WifiP2pManager.WIFI_P2P_PEERS_CHANGED_ACTION)
+                context.registerReceiver(wifiP2pReceiver, filter)
+                wifiP2pReceiverRegistered = true
+            } catch (e: Exception) {
+                Timber.w(e, "Unable to register Wi-Fi P2P receiver")
+            }
+        }
+    }
+
+    private fun unregisterWifiP2pReceiver() {
+        if (wifiP2pReceiverRegistered) {
+            try {
+                context.unregisterReceiver(wifiP2pReceiver)
+                wifiP2pReceiverRegistered = false
+            } catch (e: Exception) {
+                Timber.w(e, "Error unregistering Wi-Fi P2P receiver")
+            }
+        }
+    }
+
+    private fun registerMagnetometer() {
+        try {
+            magnetometer?.let {
+                sensorManager?.registerListener(this, it, SensorManager.SENSOR_DELAY_NORMAL)
+            }
+        } catch (e: Exception) {
+            Timber.w(e, "Error registering magnetometer for vehicle MAD detection")
+        }
+    }
+
+    private fun unregisterMagnetometer() {
+        try {
+            sensorManager?.unregisterListener(this)
+        } catch (e: Exception) {
+            Timber.w(e, "Error unregistering magnetometer")
+        }
+    }
+
+    // =========================================================================
+    // HARDWARE TRIGGER METHODS
+    // =========================================================================
 
     @SuppressLint("MissingPermission")
     private fun triggerHardwareWifiScan() {
@@ -262,7 +453,7 @@ class TacticalRfScannerManager(
                 .build()
             scanner.startScan(null, settings, bleScanCallback)
             bleScanActive = true
-            Timber.i("Bluetooth LE tactical scanner online")
+            Timber.i("Bluetooth LE tactical scanner online (Low-Latency Continuous Mode)")
         } catch (e: SecurityException) {
             Timber.w("BLE scan security exception: ${e.message}")
         } catch (e: Exception) {
@@ -282,6 +473,195 @@ class TacticalRfScannerManager(
     }
 
     @SuppressLint("MissingPermission")
+    private fun triggerBluetoothClassicDiscovery() {
+        if (_isScannerPaused.value) return
+        val now = System.currentTimeMillis()
+        if (now - lastClassicDiscoveryTrigger < 20000L) return // Throttle classic discovery to once every 20s
+        lastClassicDiscoveryTrigger = now
+
+        val adapter = bluetoothManager?.adapter ?: return
+        if (!adapter.isEnabled) return
+
+        try {
+            if (adapter.isDiscovering) {
+                adapter.cancelDiscovery()
+            }
+            adapter.startDiscovery()
+            Timber.d("Bluetooth Classic inquiry triggered")
+        } catch (e: SecurityException) {
+            Timber.w("Bluetooth Classic discovery security exception: ${e.message}")
+        } catch (e: Exception) {
+            Timber.w(e, "Error starting Bluetooth Classic discovery")
+        }
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun triggerWifiP2pDiscovery() {
+        if (_isScannerPaused.value || wifiP2pManager == null || wifiP2pChannel == null) return
+        try {
+            wifiP2pManager.discoverPeers(wifiP2pChannel, object : WifiP2pManager.ActionListener {
+                override fun onSuccess() {
+                    Timber.d("Wi-Fi Direct P2P peer discovery initiated")
+                }
+
+                override fun onFailure(reasonCode: Int) {
+                    Timber.w("Wi-Fi Direct P2P discovery failed with code: $reasonCode")
+                }
+            })
+        } catch (e: SecurityException) {
+            Timber.w("Wi-Fi P2P security exception: ${e.message}")
+        } catch (e: Exception) {
+            Timber.w(e, "Error triggering Wi-Fi Direct discovery")
+        }
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun auditBondedBluetoothDevices() {
+        val adapter = bluetoothManager?.adapter ?: return
+        if (!adapter.isEnabled) return
+        try {
+            val bonded = adapter.bondedDevices ?: return
+            for (dev in bonded) {
+                val address = dev.address ?: continue
+                val name = dev.name ?: "PAIRED DEVICE"
+                val btClass = dev.bluetoothClass
+                processBluetoothDevice(dev, name, -65, btClass, isClassic = true, isBonded = true)
+            }
+        } catch (e: SecurityException) {
+            Timber.w("Bonded devices security exception: ${e.message}")
+        } catch (e: Exception) {
+            Timber.w(e, "Error auditing bonded devices")
+        }
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun auditCellularBaseStations() {
+        if (_isScannerPaused.value || telephonyManager == null) return
+        try {
+            val cellList = telephonyManager.allCellInfo ?: return
+            val now = System.currentTimeMillis()
+
+            for (cell in cellList) {
+                var cellId = ""
+                var cellTech = "Cellular"
+                var operatorName = "Carrier Base Station"
+                var dbm = -90
+                var pci = 0
+                var tac = 0
+                val isServing = cell.isRegistered
+
+                when (cell) {
+                    is CellInfoLte -> {
+                        cellTech = "4G LTE"
+                        val id = cell.cellIdentity
+                        pci = id.pci
+                        tac = id.tac
+                        val ci = id.ci
+                        dbm = cell.cellSignalStrength.dbm
+                        operatorName = id.operatorAlphaLong?.toString() ?: id.mccString ?: "LTE Carrier"
+                        cellId = "CELL_LTE_${ci}_$pci"
+                    }
+                    is CellInfoNr -> {
+                        cellTech = "5G NR"
+                        val id = cell.cellIdentity as? CellIdentityNr
+                        if (id != null) {
+                            pci = id.pci
+                            tac = id.tac
+                            val nci = id.nci
+                            dbm = cell.cellSignalStrength.dbm
+                            operatorName = id.operatorAlphaLong?.toString() ?: id.mccString ?: "5G Carrier"
+                            cellId = "CELL_5G_${nci}_$pci"
+                        }
+                    }
+                    is CellInfoGsm -> {
+                        cellTech = "2G GSM"
+                        val id = cell.cellIdentity
+                        val cid = id.cid
+                        dbm = cell.cellSignalStrength.dbm
+                        operatorName = id.operatorAlphaLong?.toString() ?: "GSM Carrier"
+                        cellId = "CELL_GSM_$cid"
+                    }
+                    is CellInfoWcdma -> {
+                        cellTech = "3G WCDMA"
+                        val id = cell.cellIdentity
+                        val cid = id.cid
+                        dbm = cell.cellSignalStrength.dbm
+                        operatorName = id.operatorAlphaLong?.toString() ?: "3G Carrier"
+                        cellId = "CELL_3G_$cid"
+                    }
+                }
+
+                if (cellId.isBlank() || dbm == Int.MAX_VALUE) continue
+
+                // Estimated line-of-sight distance to base station (typical LTE/5G macro cell path loss)
+                val distMeters = (10.0.pow((-45.0 - dbm) / 32.0) * 10.0).coerceIn(40.0, 950.0)
+
+                // Fixed cellular mast: lock coordinates in physical earth coordinates
+                val hashAngle = abs(cellId.hashCode() % 360).toFloat()
+                val angleRad = Math.toRadians(hashAngle.toDouble())
+                val deltaLat = (distMeters * cos(angleRad)) / 111320.0
+                val deltaLon = (distMeters * sin(angleRad)) / (111320.0 * cos(Math.toRadians(lastKnownLat)).coerceAtLeast(0.1))
+                val instLat = lastKnownLat + deltaLat
+                val instLon = lastKnownLon + deltaLon
+
+                val tracker = stationaryPinpointMap.getOrPut(cellId) {
+                    DevicePinpoint(id = cellId, pinnedLat = instLat, pinnedLon = instLon)
+                }
+
+                val weight = (120.0 + dbm).coerceAtLeast(5.0) / distMeters.coerceAtLeast(10.0)
+                tracker.sampleCount++
+                tracker.totalWeight += weight
+                tracker.weightedSumLat += instLat * weight
+                tracker.weightedSumLon += instLon * weight
+                tracker.pinnedLat = tracker.weightedSumLat / tracker.totalWeight
+                tracker.pinnedLon = tracker.weightedSumLon / tracker.totalWeight
+
+                val dLatM = (tracker.pinnedLat - lastKnownLat) * 111320.0
+                val dLonM = (tracker.pinnedLon - lastKnownLon) * 111320.0 * cos(Math.toRadians(lastKnownLat))
+                val effectiveDist = hypot(dLatM, dLonM).coerceAtLeast(10.0)
+
+                var worldAngle = Math.toDegrees(atan2(dLonM, dLatM)).toFloat()
+                if (worldAngle < 0f) worldAngle += 360f
+                val relativeBearing = (worldAngle - lastKnownHeading + 360f) % 360f
+
+                val target = DetectedRfTarget(
+                    id = cellId,
+                    name = "$cellTech BASE STATION ($operatorName)",
+                    rawSsidOrBleName = operatorName,
+                    macAddress = cellId,
+                    vendor = operatorName,
+                    category = RfCategory.ACCESS_POINT,
+                    rssi = dbm,
+                    estimatedDistanceMeters = effectiveDist,
+                    frequencyMhz = if (cellTech.contains("5G")) 3500 else 1800,
+                    protocol = "$cellTech Cellular Mast",
+                    threatLevel = if (isServing) "SERVING CELL TOWER" else "NEIGHBORING BASE STATION",
+                    details = "${if (isServing) "PRIMARY SERVING" else "NEIGHBORING"} base station • TAC: $tac • PCI: $pci • Power: ${dbm}dBm",
+                    timestamp = now,
+                    detectedLat = tracker.pinnedLat,
+                    detectedLon = tracker.pinnedLon,
+                    relativeBearingDeg = relativeBearing,
+                    locationHistory = emptyList(),
+                    motionTrend = RelativeMotionTrend.STATIONARY,
+                    savedMetadata = null
+                )
+
+                targetMap[cellId] = target
+            }
+
+            syncTargetsToFlow()
+        } catch (e: SecurityException) {
+            Timber.w("Cellular audit security exception: ${e.message}")
+        } catch (e: Exception) {
+            Timber.w(e, "Error auditing cellular base stations")
+        }
+    }
+
+    // =========================================================================
+    // PACKET PROCESSING METHODS (Wi-Fi, BLE, Bluetooth Classic, Wi-Fi Direct)
+    // =========================================================================
+
+    @SuppressLint("MissingPermission")
     private fun processWifiScanResults() {
         try {
             val results = wifiManager?.scanResults ?: return
@@ -296,7 +676,7 @@ class TacticalRfScannerManager(
                 csiEngine?.feedLiveSample(rssi)
 
                 val classification = TacticalRfClassifier.classify(ssid, bssid)
-                val dist = TacticalRfClassifier.estimateDistance(rssi)
+                val dist = TacticalRfClassifier.estimateDistance(rssi, freq)
                 val isStationary = classification.category == RfCategory.ACCESS_POINT || classification.category == RfCategory.CCTV_SURVEILLANCE
 
                 val targetLat: Double
@@ -314,11 +694,7 @@ class TacticalRfScannerManager(
                     val instLon = lastKnownLon + deltaLon
 
                     val tracker = stationaryPinpointMap.getOrPut(bssid) {
-                        DevicePinpoint(
-                            id = bssid,
-                            pinnedLat = instLat,
-                            pinnedLon = instLon
-                        )
+                        DevicePinpoint(id = bssid, pinnedLat = instLat, pinnedLon = instLon)
                     }
 
                     // Weight by signal power: close readings dominate, averaging out RF multipath noise
@@ -377,7 +753,6 @@ class TacticalRfScannerManager(
                     history.removeAt(0)
                 }
 
-                // Determine relative motion trend: routers are physically stationary!
                 val motionTrend = if (isStationary) {
                     RelativeMotionTrend.STATIONARY
                 } else {
@@ -388,7 +763,6 @@ class TacticalRfScannerManager(
                     }
                 }
 
-                // Check saved user intel
                 val saved = savedDeviceRepository.getDevice(bssid)
                 if (saved != null) {
                     checkAndTriggerSavedAlert(saved, effectiveDistance)
@@ -411,7 +785,7 @@ class TacticalRfScannerManager(
                     rssi = rssi,
                     estimatedDistanceMeters = effectiveDistance,
                     frequencyMhz = freq,
-                    protocol = if (freq > 4900) "Wi-Fi 5GHz (802.11ac/ax)" else "Wi-Fi 2.4GHz (802.11n/ax)",
+                    protocol = classification.protocolOverride ?: if (freq > 4900) "Wi-Fi 5GHz (802.11ac/ax)" else "Wi-Fi 2.4GHz (802.11n/ax)",
                     threatLevel = if (isStationary && sweepCount >= 3) "PINPOINTED INFRASTRUCTURE" else classification.threatLevel,
                     details = targetDetails,
                     timestamp = now,
@@ -439,133 +813,350 @@ class TacticalRfScannerManager(
         try {
             val device = result.device ?: return
             val address = device.address ?: return
-            val rawName = result.scanRecord?.deviceName ?: device.name ?: ""
+            val scanRecord = result.scanRecord
+            val rawName = scanRecord?.deviceName ?: device.name ?: ""
             val rssi = result.rssi
             val now = System.currentTimeMillis()
 
             csiEngine?.feedLiveSample(rssi)
 
-            val classification = TacticalRfClassifier.classify(rawName, address)
-            val dist = TacticalRfClassifier.estimateDistance(rssi)
+            // Extract Manufacturer Specific Data (Apple, Samsung, Tile, Garmin, etc.)
+            var manufacturerId: Int? = null
+            var manufacturerData: ByteArray? = null
+            val mfgSparse = scanRecord?.manufacturerSpecificData
+            if (mfgSparse != null && mfgSparse.size() > 0) {
+                manufacturerId = mfgSparse.keyAt(0)
+                manufacturerData = mfgSparse.valueAt(0)
+            }
+
+            // Extract Service UUIDs (Tesla 0x0211, Drone Remote ID 0xFFFA, Tile 0xFEED)
+            val serviceUuids = scanRecord?.serviceUuids?.map { it.uuid.toString() } ?: emptyList()
+
+            val classification = TacticalRfClassifier.classify(
+                ssidOrBleName = rawName,
+                macAddress = address,
+                bluetoothClass = device.bluetoothClass,
+                serviceUuids = serviceUuids,
+                manufacturerId = manufacturerId,
+                manufacturerData = manufacturerData
+            )
+
+            val dist = TacticalRfClassifier.estimateDistance(rssi, 2402)
             val isStationary = classification.category == RfCategory.ACCESS_POINT || classification.category == RfCategory.CCTV_SURVEILLANCE
 
-            // Only retain recognized vehicles, cameras, or identifiable BLE beacons to avoid flooding with raw tags
-            if (classification.category != RfCategory.ACCESS_POINT || rawName.isNotBlank()) {
-                val targetLat: Double
-                val targetLon: Double
-                val relativeBearing: Float
-                val effectiveDistance: Double
+            val targetLat: Double
+            val targetLon: Double
+            val relativeBearing: Float
+            val effectiveDistance: Double
 
-                if (isStationary) {
-                    val hashAngle = abs(address.hashCode() % 360).toFloat()
-                    val angleRad = Math.toRadians(hashAngle.toDouble())
-                    val deltaLat = (dist * cos(angleRad)) / 111320.0
-                    val deltaLon = (dist * sin(angleRad)) / (111320.0 * cos(Math.toRadians(lastKnownLat)).coerceAtLeast(0.1))
-                    val instLat = lastKnownLat + deltaLat
-                    val instLon = lastKnownLon + deltaLon
+            if (isStationary) {
+                val hashAngle = abs(address.hashCode() % 360).toFloat()
+                val angleRad = Math.toRadians(hashAngle.toDouble())
+                val deltaLat = (dist * cos(angleRad)) / 111320.0
+                val deltaLon = (dist * sin(angleRad)) / (111320.0 * cos(Math.toRadians(lastKnownLat)).coerceAtLeast(0.1))
+                val instLat = lastKnownLat + deltaLat
+                val instLon = lastKnownLon + deltaLon
 
-                    val tracker = stationaryPinpointMap.getOrPut(address) {
-                        DevicePinpoint(id = address, pinnedLat = instLat, pinnedLon = instLon)
-                    }
-
-                    val weight = (100.0 + rssi).coerceAtLeast(5.0) / dist.coerceAtLeast(1.0)
-                    tracker.sampleCount++
-                    tracker.totalWeight += weight
-                    tracker.weightedSumLat += instLat * weight
-                    tracker.weightedSumLon += instLon * weight
-                    tracker.pinnedLat = tracker.weightedSumLat / tracker.totalWeight
-                    tracker.pinnedLon = tracker.weightedSumLon / tracker.totalWeight
-
-                    targetLat = tracker.pinnedLat
-                    targetLon = tracker.pinnedLon
-
-                    val dLatM = (targetLat - lastKnownLat) * 111320.0
-                    val dLonM = (targetLon - lastKnownLon) * 111320.0 * cos(Math.toRadians(lastKnownLat))
-                    effectiveDistance = hypot(dLatM, dLonM).coerceAtLeast(1.0)
-
-                    var worldAngle = Math.toDegrees(atan2(dLonM, dLatM)).toFloat()
-                    if (worldAngle < 0f) worldAngle += 360f
-                    relativeBearing = (worldAngle - lastKnownHeading + 360f) % 360f
-                } else {
-                    val hashAngle = abs(address.hashCode() % 360).toFloat()
-                    relativeBearing = (hashAngle - lastKnownHeading + 360f) % 360f
-                    val bearingRad = Math.toRadians(relativeBearing.toDouble())
-
-                    val deltaLat = (dist * cos(bearingRad)) / 111320.0
-                    val deltaLon = (dist * sin(bearingRad)) / (111320.0 * cos(Math.toRadians(lastKnownLat)).coerceAtLeast(0.1))
-                    targetLat = lastKnownLat + deltaLat
-                    targetLon = lastKnownLon + deltaLon
-                    effectiveDistance = dist
+                val tracker = stationaryPinpointMap.getOrPut(address) {
+                    DevicePinpoint(id = address, pinnedLat = instLat, pinnedLon = instLon)
                 }
 
-                val history = breadcrumbHistory.getOrPut(address) { mutableListOf() }
-                val prevRssi = history.lastOrNull()?.rssi ?: rssi
-                history.add(
-                    DeviceBreadcrumb(
-                        timestamp = now,
-                        hostLat = lastKnownLat,
-                        hostLon = lastKnownLon,
-                        relativeBearingDeg = relativeBearing,
-                        distanceMeters = effectiveDistance,
-                        rssi = rssi,
-                        targetLat = targetLat,
-                        targetLon = targetLon
-                    )
-                )
-                if (history.size > 25) {
-                    history.removeAt(0)
-                }
+                val weight = (100.0 + rssi).coerceAtLeast(5.0) / dist.coerceAtLeast(1.0)
+                tracker.sampleCount++
+                tracker.totalWeight += weight
+                tracker.weightedSumLat += instLat * weight
+                tracker.weightedSumLon += instLon * weight
+                tracker.pinnedLat = tracker.weightedSumLat / tracker.totalWeight
+                tracker.pinnedLon = tracker.weightedSumLon / tracker.totalWeight
 
-                val motionTrend = if (isStationary) {
-                    RelativeMotionTrend.STATIONARY
-                } else {
-                    when {
-                        rssi - prevRssi >= 3 -> RelativeMotionTrend.APPROACHING
-                        rssi - prevRssi <= -3 -> RelativeMotionTrend.RECEDING
-                        else -> RelativeMotionTrend.STATIONARY
-                    }
-                }
+                targetLat = tracker.pinnedLat
+                targetLon = tracker.pinnedLon
 
-                val saved = savedDeviceRepository.getDevice(address)
-                if (saved != null) {
-                    checkAndTriggerSavedAlert(saved, effectiveDistance)
-                }
+                val dLatM = (targetLat - lastKnownLat) * 111320.0
+                val dLonM = (targetLon - lastKnownLon) * 111320.0 * cos(Math.toRadians(lastKnownLat))
+                effectiveDistance = hypot(dLatM, dLonM).coerceAtLeast(1.0)
 
-                val sweepCount = stationaryPinpointMap[address]?.sampleCount ?: 1
-                val targetDetails = if (isStationary && sweepCount > 1) {
-                    "Pinpointed across $sweepCount sweeps • ${classification.details}"
-                } else {
-                    classification.details
-                }
+                var worldAngle = Math.toDegrees(atan2(dLonM, dLatM)).toFloat()
+                if (worldAngle < 0f) worldAngle += 360f
+                relativeBearing = (worldAngle - lastKnownHeading + 360f) % 360f
+            } else {
+                val hashAngle = abs(address.hashCode() % 360).toFloat()
+                relativeBearing = (hashAngle - lastKnownHeading + 360f) % 360f
+                val bearingRad = Math.toRadians(relativeBearing.toDouble())
 
-                val target = DetectedRfTarget(
-                    id = address,
-                    name = classification.targetName,
-                    rawSsidOrBleName = rawName,
-                    macAddress = address,
-                    vendor = classification.vendor,
-                    category = classification.category,
-                    rssi = rssi,
-                    estimatedDistanceMeters = effectiveDistance,
-                    frequencyMhz = 2402,
-                    protocol = "BLE 5.2 / Bluetooth Low Energy",
-                    threatLevel = if (isStationary && sweepCount >= 3) "PINPOINTED INFRASTRUCTURE" else classification.threatLevel,
-                    details = targetDetails,
-                    timestamp = now,
-                    detectedLat = targetLat,
-                    detectedLon = targetLon,
-                    relativeBearingDeg = relativeBearing,
-                    locationHistory = history.toList(),
-                    motionTrend = motionTrend,
-                    savedMetadata = saved
-                )
-                targetMap[address] = target
-                syncTargetsToFlow()
+                val deltaLat = (dist * cos(bearingRad)) / 111320.0
+                val deltaLon = (dist * sin(bearingRad)) / (111320.0 * cos(Math.toRadians(lastKnownLat)).coerceAtLeast(0.1))
+                targetLat = lastKnownLat + deltaLat
+                targetLon = lastKnownLon + deltaLon
+                effectiveDistance = dist
             }
+
+            val history = breadcrumbHistory.getOrPut(address) { mutableListOf() }
+            val prevRssi = history.lastOrNull()?.rssi ?: rssi
+            history.add(
+                DeviceBreadcrumb(
+                    timestamp = now,
+                    hostLat = lastKnownLat,
+                    hostLon = lastKnownLon,
+                    relativeBearingDeg = relativeBearing,
+                    distanceMeters = effectiveDistance,
+                    rssi = rssi,
+                    targetLat = targetLat,
+                    targetLon = targetLon
+                )
+            )
+            if (history.size > 25) {
+                history.removeAt(0)
+            }
+
+            val motionTrend = if (isStationary) {
+                RelativeMotionTrend.STATIONARY
+            } else {
+                when {
+                    rssi - prevRssi >= 3 -> RelativeMotionTrend.APPROACHING
+                    rssi - prevRssi <= -3 -> RelativeMotionTrend.RECEDING
+                    else -> RelativeMotionTrend.STATIONARY
+                }
+            }
+
+            val saved = savedDeviceRepository.getDevice(address)
+            if (saved != null) {
+                checkAndTriggerSavedAlert(saved, effectiveDistance)
+            }
+
+            val sweepCount = stationaryPinpointMap[address]?.sampleCount ?: 1
+            val targetDetails = if (isStationary && sweepCount > 1) {
+                "Pinpointed across $sweepCount sweeps • ${classification.details}"
+            } else {
+                classification.details
+            }
+
+            val target = DetectedRfTarget(
+                id = address,
+                name = classification.targetName,
+                rawSsidOrBleName = rawName,
+                macAddress = address,
+                vendor = classification.vendor,
+                category = classification.category,
+                rssi = rssi,
+                estimatedDistanceMeters = effectiveDistance,
+                frequencyMhz = 2402,
+                protocol = classification.protocolOverride ?: "BLE 5.2 / Bluetooth Low Energy",
+                threatLevel = if (isStationary && sweepCount >= 3) "PINPOINTED INFRASTRUCTURE" else classification.threatLevel,
+                details = targetDetails,
+                timestamp = now,
+                detectedLat = targetLat,
+                detectedLon = targetLon,
+                relativeBearingDeg = relativeBearing,
+                locationHistory = history.toList(),
+                motionTrend = motionTrend,
+                savedMetadata = saved
+            )
+            targetMap[address] = target
+            syncTargetsToFlow()
         } catch (e: Exception) {
             Timber.w(e, "Error processing BLE scan result")
         }
     }
+
+    private fun processBluetoothDevice(
+        device: BluetoothDevice,
+        rawName: String,
+        rssi: Int,
+        bluetoothClass: BluetoothClass?,
+        isClassic: Boolean = true,
+        isBonded: Boolean = false
+    ) {
+        val address = device.address ?: return
+        val now = System.currentTimeMillis()
+
+        val classification = TacticalRfClassifier.classify(
+            ssidOrBleName = rawName,
+            macAddress = address,
+            bluetoothClass = bluetoothClass
+        )
+
+        val dist = TacticalRfClassifier.estimateDistance(rssi, 2402)
+        val hashAngle = abs(address.hashCode() % 360).toFloat()
+        val relBearing = (hashAngle - lastKnownHeading + 360f) % 360f
+        val bearingRad = Math.toRadians(relBearing.toDouble())
+
+        val deltaLat = (dist * cos(bearingRad)) / 111320.0
+        val deltaLon = (dist * sin(bearingRad)) / (111320.0 * cos(Math.toRadians(lastKnownLat)).coerceAtLeast(0.1))
+        val targetLat = lastKnownLat + deltaLat
+        val targetLon = lastKnownLon + deltaLon
+
+        val history = breadcrumbHistory.getOrPut(address) { mutableListOf() }
+        val prevRssi = history.lastOrNull()?.rssi ?: rssi
+        history.add(
+            DeviceBreadcrumb(
+                timestamp = now,
+                hostLat = lastKnownLat,
+                hostLon = lastKnownLon,
+                relativeBearingDeg = relBearing,
+                distanceMeters = dist,
+                rssi = rssi,
+                targetLat = targetLat,
+                targetLon = targetLon
+            )
+        )
+        if (history.size > 25) history.removeAt(0)
+
+        val motionTrend = when {
+            rssi - prevRssi >= 3 -> RelativeMotionTrend.APPROACHING
+            rssi - prevRssi <= -3 -> RelativeMotionTrend.RECEDING
+            else -> RelativeMotionTrend.STATIONARY
+        }
+
+        val saved = savedDeviceRepository.getDevice(address)
+        if (saved != null) {
+            checkAndTriggerSavedAlert(saved, dist)
+        }
+
+        val protocol = classification.protocolOverride ?: if (isBonded) "Bluetooth Paired Link" else "Bluetooth Classic BR/EDR"
+        val threat = if (isBonded) "PAIRED EQUIPMENT" else classification.threatLevel
+
+        val target = DetectedRfTarget(
+            id = address,
+            name = classification.targetName,
+            rawSsidOrBleName = rawName,
+            macAddress = address,
+            vendor = classification.vendor,
+            category = classification.category,
+            rssi = rssi,
+            estimatedDistanceMeters = dist,
+            frequencyMhz = 2402,
+            protocol = protocol,
+            threatLevel = threat,
+            details = "${classification.details}${if (isBonded) " [Bonded / Paired]" else ""}",
+            timestamp = now,
+            detectedLat = targetLat,
+            detectedLon = targetLon,
+            relativeBearingDeg = relBearing,
+            locationHistory = history.toList(),
+            motionTrend = motionTrend,
+            savedMetadata = saved
+        )
+
+        targetMap[address] = target
+        syncTargetsToFlow()
+    }
+
+    private fun processWifiP2pPeers(peers: WifiP2pDeviceList) {
+        val now = System.currentTimeMillis()
+        for (peer in peers.deviceList) {
+            val address = peer.deviceAddress ?: continue
+            val rawName = peer.deviceName ?: "DIRECT-DEVICE"
+            val classification = TacticalRfClassifier.classify(rawName, address)
+
+            val dist = 12.0 // Typical peer-to-peer Wi-Fi Direct line of sight
+            val hashAngle = abs(address.hashCode() % 360).toFloat()
+            val relBearing = (hashAngle - lastKnownHeading + 360f) % 360f
+            val bearingRad = Math.toRadians(relBearing.toDouble())
+
+            val deltaLat = (dist * cos(bearingRad)) / 111320.0
+            val deltaLon = (dist * sin(bearingRad)) / (111320.0 * cos(Math.toRadians(lastKnownLat)).coerceAtLeast(0.1))
+            val targetLat = lastKnownLat + deltaLat
+            val targetLon = lastKnownLon + deltaLon
+
+            val saved = savedDeviceRepository.getDevice(address)
+            if (saved != null) {
+                checkAndTriggerSavedAlert(saved, dist)
+            }
+
+            val statusStr = when (peer.status) {
+                WifiP2pDevice.CONNECTED -> "CONNECTED"
+                WifiP2pDevice.INVITED -> "INVITED"
+                WifiP2pDevice.FAILED -> "FAILED"
+                WifiP2pDevice.AVAILABLE -> "AVAILABLE"
+                else -> "UNAVAILABLE"
+            }
+
+            val target = DetectedRfTarget(
+                id = address,
+                name = classification.targetName,
+                rawSsidOrBleName = rawName,
+                macAddress = address,
+                vendor = classification.vendor,
+                category = classification.category,
+                rssi = -60,
+                estimatedDistanceMeters = dist,
+                frequencyMhz = 5240,
+                protocol = "Wi-Fi Direct P2P (802.11)",
+                threatLevel = "P2P WIRELESS LINK",
+                details = "Wi-Fi Direct peer device ($statusStr) • Type: ${peer.primaryDeviceType}",
+                timestamp = now,
+                detectedLat = targetLat,
+                detectedLon = targetLon,
+                relativeBearingDeg = relBearing,
+                locationHistory = emptyList(),
+                motionTrend = RelativeMotionTrend.STATIONARY,
+                savedMetadata = saved
+            )
+
+            targetMap[address] = target
+        }
+        syncTargetsToFlow()
+    }
+
+    // =========================================================================
+    // SENSOR EVENT LISTENER (Magnetic Anomaly Detection / MAD for Vehicles)
+    // =========================================================================
+
+    override fun onSensorChanged(event: SensorEvent?) {
+        if (event == null || _isScannerPaused.value) return
+        if (event.sensor.type == Sensor.TYPE_MAGNETIC_FIELD) {
+            val bx = event.values[0]
+            val by = event.values[1]
+            val bz = event.values[2]
+            val magnitude = sqrt(bx * bx + by * by + bz * bz)
+
+            // Dynamic low-pass baseline filter
+            baselineMagneticMagnitude = 0.95f * baselineMagneticMagnitude + 0.05f * magnitude
+            val deltaB = abs(magnitude - baselineMagneticMagnitude)
+
+            val now = System.currentTimeMillis()
+            // Detect significant magnetic distortion caused by adjacent 1.5 - 2.5 ton vehicle steel mass
+            if (deltaB > 22.0f && (now - lastMagneticAnomalyTime > 30000L)) {
+                lastMagneticAnomalyTime = now
+                Timber.i("Magnetic Anomaly Detected: deltaB=%.1f uT (Vehicle Proximity)", deltaB)
+
+                val madId = "MAD_VEHICLE_MASS_PROXIMITY"
+                val dist = (4.5 - (deltaB / 15.0)).coerceIn(1.5, 5.0)
+
+                val target = DetectedRfTarget(
+                    id = madId,
+                    name = "FERROMAGNETIC VEHICLE PROXIMITY [MAD]",
+                    rawSsidOrBleName = "MAGNETIC_ANOMALY",
+                    macAddress = "MAD:00:FE:RR:OM:AG",
+                    vendor = "Geomagnetic Flux Anomaly",
+                    category = RfCategory.VEHICLE,
+                    rssi = (-40 - (dist * 5)).toInt(),
+                    estimatedDistanceMeters = dist,
+                    frequencyMhz = 0,
+                    protocol = "Geomagnetic Distortion (MAD Sensor)",
+                    threatLevel = "CLOSE VEHICULAR PROXIMITY",
+                    details = "Significant ferromagnetic anomaly (ΔB: ${"%.1f".format(deltaB)} μT). Large metallic automobile mass detected adjacent to vehicle.",
+                    timestamp = now,
+                    detectedLat = lastKnownLat,
+                    detectedLon = lastKnownLon,
+                    relativeBearingDeg = 90f,
+                    locationHistory = emptyList(),
+                    motionTrend = RelativeMotionTrend.APPROACHING,
+                    savedMetadata = null
+                )
+
+                targetMap[madId] = target
+                syncTargetsToFlow()
+            }
+        }
+    }
+
+    override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) {}
+
+    // =========================================================================
+    // ALERTING & TARGET SYNC
+    // =========================================================================
 
     private fun checkAndTriggerSavedAlert(saved: SavedRfDevice, distanceMeters: Double) {
         if (!saved.notifyOnDetection) return
@@ -584,6 +1175,17 @@ class TacticalRfScannerManager(
     }
 
     private fun syncTargetsToFlow() {
+        val now = System.currentTimeMillis()
+        // Prune targets that have not been observed in > 180 seconds (unless simulated or saved)
+        if (!_isSimulationEnabled.value) {
+            targetMap.entries.removeIf { entry ->
+                val target = entry.value
+                val isStale = (now - target.timestamp) > 180000L
+                val isSaved = target.savedMetadata != null
+                isStale && !isSaved
+            }
+        }
+
         // Sort with saved items and high-threat items (Vehicles & CCTV) first, followed by signal strength
         val sorted = targetMap.values.toList().sortedWith(
             compareBy<DetectedRfTarget> {
@@ -602,11 +1204,23 @@ class TacticalRfScannerManager(
 
     private fun startPeriodicSweep() {
         scope.launch {
+            var cycle = 0
             while (isActive) {
-                delay(10000L) // Sweep every 10 seconds in background
+                delay(10000L) // Sweep cadence every 10 seconds in background
+                cycle++
                 if (_isScanning.value && !_isScannerPaused.value) {
                     mainHandler.post {
                         triggerHardwareWifiScan()
+                        auditCellularBaseStations()
+
+                        // Interleave Bluetooth Classic and P2P sweeps periodically
+                        if (cycle % 2 == 0) {
+                            triggerBluetoothClassicDiscovery()
+                            auditBondedBluetoothDevices()
+                        }
+                        if (cycle % 3 == 0) {
+                            triggerWifiP2pDiscovery()
+                        }
                     }
                 }
             }
@@ -615,7 +1229,7 @@ class TacticalRfScannerManager(
 
     /**
      * Seeds tactical RF targets (Tesla vehicle, DJI drone, CCTV cameras, Dashcam, Ford)
-     * anchored tightly around user's GPS position (within 8m - 38m) so they appear on the map.
+     * anchored tightly around user's GPS position (within 8m - 38m) ONLY when user manually enables DEMO SIM mode.
      */
     fun populateTacticalSimulationTargets(userLat: Double, userLon: Double) {
         val now = System.currentTimeMillis()
@@ -674,7 +1288,7 @@ class TacticalRfScannerManager(
                 estimatedDistanceMeters = 12.4,
                 frequencyMhz = 5180,
                 protocol = "Wi-Fi 6 (802.11ax) + BLE Key",
-                threatLevel = "MOBILE TELEMETRY",
+                threatLevel = "CONNECTED VEHICLE TELEMETRY",
                 details = "Tesla in-cabin infotainment hotspot & BLE phone-key link in range.",
                 timestamp = now,
                 detectedLat = teslaCoord.first,
@@ -695,7 +1309,7 @@ class TacticalRfScannerManager(
                 estimatedDistanceMeters = 18.2,
                 frequencyMhz = 2412,
                 protocol = "Wi-Fi 802.11n + Bluetooth",
-                threatLevel = "MOBILE TELEMETRY",
+                threatLevel = "CONNECTED VEHICLE TELEMETRY",
                 details = "In-vehicle SYNC cockpit infotainment network.",
                 timestamp = now,
                 detectedLat = fordCoord.first,

@@ -107,4 +107,33 @@ data class DetectedRfTarget(
             rssi >= -84 -> 2
             else -> 1
         }
+
+    /**
+     * Proximity classification for tactical RF distance estimation.
+     */
+    val proximityZone: String
+        get() = when {
+            estimatedDistanceMeters < 5.0 -> "IMMEDIATE (<5m)"
+            estimatedDistanceMeters < 15.0 -> "NEAR (5-15m)"
+            estimatedDistanceMeters < 40.0 -> "MEDIUM (15-40m)"
+            else -> "PERIMETER (>40m)"
+        }
+
+    /**
+     * Determines whether the MAC address is IEEE locally administered / randomized.
+     * (Bit 1 of first byte set indicates private/randomized MAC).
+     */
+    val isRandomizedMac: Boolean
+        get() {
+            val clean = macAddress.replace(":", "").replace("-", "")
+            if (clean.length < 2) return false
+            val firstByte = clean.take(2).toIntOrNull(16) ?: return false
+            return (firstByte and 0x02) != 0
+        }
+
+    /**
+     * Whether this target represents stationary physical infrastructure.
+     */
+    val isStationary: Boolean
+        get() = category == RfCategory.ACCESS_POINT || category == RfCategory.CCTV_SURVEILLANCE
 }
