@@ -206,7 +206,7 @@ class CarSurfaceRenderer(
             )
 
             // Bottom Skin Info & Exploration Status
-            val skinTag = "MAP: [${mapSkin.displayName}] • FOG: [${fogSkin.displayName}] • RANGE: ${configuredRangeMeters}m • OPACITY: ${(configuredOpacity * 100).toInt()}%"
+            val skinTag = "MAP: [${mapSkin.displayName}] • FOG: [${fogSkin.displayName}] • RANGE: ${configuredRangeMeters}m • v${com.recondrive.app.BuildConfig.VERSION_NAME}"
             canvas.drawText(skinTag, 32f, surfaceHeight - 32f, textPaint)
 
             val stats = fogGridManager.stats.value

@@ -1081,7 +1081,7 @@ fun InteractiveMapScreen(
                         fontFamily = FontFamily.Monospace
                     )
                     Text(
-                        text = if (isFogLayerActive) "FOG: ${fogRange}m @ ${(fogOpacity * 100).toInt()}%" else "FOG: SHROUD OFF",
+                        text = if (isFogLayerActive) "FOG: ${fogRange}m @ ${(fogOpacity * 100).toInt()}% • v${com.recondrive.app.BuildConfig.VERSION_NAME}" else "FOG: SHROUD OFF • v${com.recondrive.app.BuildConfig.VERSION_NAME}",
                         color = if (isFogLayerActive) Color(fogSkin.perimeterGlowColor) else TextSecondary,
                         fontSize = 9.sp,
                         fontFamily = FontFamily.Monospace,

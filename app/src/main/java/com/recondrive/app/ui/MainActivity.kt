@@ -156,93 +156,137 @@ class MainActivity : ComponentActivity() {
 
                 Scaffold(
                     bottomBar = {
-                        NavigationBar(
-                            containerColor = TacticalObsidian,
-                            contentColor = ReconCyan
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .background(TacticalObsidian)
                         ) {
-                            NavigationBarItem(
-                                selected = selectedTab == 0,
-                                onClick = { selectedTab = 0 },
-                                icon = {
-                                    Icon(
-                                        imageVector = Icons.Default.Speed,
-                                        contentDescription = "HUD",
-                                        tint = if (selectedTab == 0) ReconCyan else TextSecondary
-                                    )
-                                },
-                                label = {
-                                    Text(
-                                        text = "HUD",
-                                        color = if (selectedTab == 0) ReconCyan else TextSecondary,
-                                        fontFamily = FontFamily.Monospace,
-                                        fontSize = 10.sp,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                }
-                            )
+                            NavigationBar(
+                                containerColor = TacticalObsidian,
+                                contentColor = ReconCyan,
+                                tonalElevation = 0.dp
+                            ) {
+                                NavigationBarItem(
+                                    selected = selectedTab == 0,
+                                    onClick = { selectedTab = 0 },
+                                    icon = {
+                                        Icon(
+                                            imageVector = Icons.Default.Speed,
+                                            contentDescription = "HUD",
+                                            tint = if (selectedTab == 0) ReconCyan else TextSecondary
+                                        )
+                                    },
+                                    label = {
+                                        Text(
+                                            text = "HUD",
+                                            color = if (selectedTab == 0) ReconCyan else TextSecondary,
+                                            fontFamily = FontFamily.Monospace,
+                                            fontSize = 10.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+                                )
 
-                            NavigationBarItem(
-                                selected = selectedTab == 1,
-                                onClick = { selectedTab = 1 },
-                                icon = {
-                                    Icon(
-                                        imageVector = Icons.Default.Map,
-                                        contentDescription = "MAP",
-                                        tint = if (selectedTab == 1) ReconCyan else TextSecondary
-                                    )
-                                },
-                                label = {
-                                    Text(
-                                        text = "MAP",
-                                        color = if (selectedTab == 1) ReconCyan else TextSecondary,
-                                        fontFamily = FontFamily.Monospace,
-                                        fontSize = 10.sp,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                }
-                            )
+                                NavigationBarItem(
+                                    selected = selectedTab == 1,
+                                    onClick = { selectedTab = 1 },
+                                    icon = {
+                                        Icon(
+                                            imageVector = Icons.Default.Map,
+                                            contentDescription = "MAP",
+                                            tint = if (selectedTab == 1) ReconCyan else TextSecondary
+                                        )
+                                    },
+                                    label = {
+                                        Text(
+                                            text = "MAP",
+                                            color = if (selectedTab == 1) ReconCyan else TextSecondary,
+                                            fontFamily = FontFamily.Monospace,
+                                            fontSize = 10.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+                                )
 
-                            NavigationBarItem(
-                                selected = false,
-                                onClick = { showSkinsDialog = true },
-                                icon = {
-                                    Icon(
-                                        imageVector = Icons.Default.Palette,
-                                        contentDescription = "SKINS",
-                                        tint = TextSecondary
-                                    )
-                                },
-                                label = {
-                                    Text(
-                                        text = "SKINS",
-                                        color = TextSecondary,
-                                        fontFamily = FontFamily.Monospace,
-                                        fontSize = 10.sp,
-                                        fontWeight = FontWeight.Bold
-                                    )
-                                }
-                            )
+                                NavigationBarItem(
+                                    selected = false,
+                                    onClick = { showSkinsDialog = true },
+                                    icon = {
+                                        Icon(
+                                            imageVector = Icons.Default.Palette,
+                                            contentDescription = "SKINS",
+                                            tint = TextSecondary
+                                        )
+                                    },
+                                    label = {
+                                        Text(
+                                            text = "SKINS",
+                                            color = TextSecondary,
+                                            fontFamily = FontFamily.Monospace,
+                                            fontSize = 10.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+                                )
 
-                            NavigationBarItem(
-                                selected = false,
-                                onClick = { showOfflineDialog = true },
-                                icon = {
-                                    Icon(
-                                        imageVector = Icons.Default.CloudDownload,
-                                        contentDescription = "OFFLINE",
-                                        tint = TextSecondary
-                                    )
-                                },
-                                label = {
-                                    Text(
-                                        text = "OFFLINE",
-                                        color = TextSecondary,
-                                        fontFamily = FontFamily.Monospace,
-                                        fontSize = 10.sp,
-                                        fontWeight = FontWeight.Bold
-                                    )
+                                NavigationBarItem(
+                                    selected = false,
+                                    onClick = { showOfflineDialog = true },
+                                    icon = {
+                                        Icon(
+                                            imageVector = Icons.Default.CloudDownload,
+                                            contentDescription = "OFFLINE",
+                                            tint = TextSecondary
+                                        )
+                                    },
+                                    label = {
+                                        Text(
+                                            text = "OFFLINE",
+                                            color = TextSecondary,
+                                            fontFamily = FontFamily.Monospace,
+                                            fontSize = 10.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+                                )
+                            }
+
+                            // App Version Badge on Nav Bar
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(bottom = 6.dp, top = 0.dp),
+                                horizontalArrangement = Arrangement.Center,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Surface(
+                                    color = TacticalSurface,
+                                    shape = RoundedCornerShape(10.dp),
+                                    border = androidx.compose.foundation.BorderStroke(1.dp, TacticalBorder),
+                                    modifier = Modifier.clickable {
+                                        ReconApplication.instance.updateManager.checkForUpdates(isManual = true)
+                                    }
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(6.dp)
+                                                .background(ReconGreen, CircleShape)
+                                        )
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text(
+                                            text = "RECONDRIVE v${com.recondrive.app.BuildConfig.VERSION_NAME}",
+                                            color = TextSecondary,
+                                            fontFamily = FontFamily.Monospace,
+                                            fontSize = 9.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
                                 }
-                            )
+                            }
                         }
                     }
                 ) { paddingValues ->

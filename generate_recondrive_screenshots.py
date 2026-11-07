@@ -408,6 +408,12 @@ def generate_screenshot_02():
         if is_active:
             draw.line([(tx_c - 16, nav_y + 36), (tx_c + 16, nav_y + 36)], fill='#00E5FF', width=2)
 
+    # App Version Badge on Nav Bar
+    ver_txt = "● RECONDRIVE v1.0.9"
+    v_w = draw.textlength(ver_txt, font=FONT_MONO_XS)
+    draw.rounded_rectangle([(W / 2 - v_w / 2 - 8, nav_y + 46), (W / 2 + v_w / 2 + 8, nav_y + 64)], radius=4, fill='#121721', outline='#21262D', width=1)
+    draw.text((W / 2 - v_w / 2, nav_y + 50), ver_txt, fill='#8B949E', font=FONT_MONO_XS)
+
     # Android Home Gesture Bar
     draw.rounded_rectangle([(W / 2 - 60, H - 14), (W / 2 + 60, H - 10)], radius=2, fill='#484F58')
 
@@ -986,6 +992,12 @@ def generate_screenshot_06():
         if is_active:
             draw.line([(tx_c - 16, nav_y + 36), (tx_c + 16, nav_y + 36)], fill='#00E5FF', width=2)
 
+    # App Version Badge on Nav Bar
+    ver_txt = "● RECONDRIVE v1.0.9"
+    v_w = draw.textlength(ver_txt, font=FONT_MONO_XS)
+    draw.rounded_rectangle([(W / 2 - v_w / 2 - 8, nav_y + 46), (W / 2 + v_w / 2 + 8, nav_y + 64)], radius=4, fill='#121721', outline='#21262D', width=1)
+    draw.text((W / 2 - v_w / 2, nav_y + 50), ver_txt, fill='#8B949E', font=FONT_MONO_XS)
+
     # Android Home Gesture Bar
     draw.rounded_rectangle([(W / 2 - 60, H - 14), (W / 2 + 60, H - 10)], radius=2, fill='#484F58')
 
@@ -1120,6 +1132,12 @@ def generate_screenshot_07():
         draw.text((tx_c - tw / 2, nav_y + 16), tname, fill=tcol, font=FONT_HEAD)
         if is_active:
             draw.line([(tx_c - 16, nav_y + 36), (tx_c + 16, nav_y + 36)], fill='#00E5FF', width=2)
+
+    # App Version Badge on Nav Bar
+    ver_txt = "● RECONDRIVE v1.0.9"
+    v_w = draw.textlength(ver_txt, font=FONT_MONO_XS)
+    draw.rounded_rectangle([(W / 2 - v_w / 2 - 8, nav_y + 46), (W / 2 + v_w / 2 + 8, nav_y + 64)], radius=4, fill='#121721', outline='#21262D', width=1)
+    draw.text((W / 2 - v_w / 2, nav_y + 50), ver_txt, fill='#8B949E', font=FONT_MONO_XS)
 
     # Android Home Gesture Bar
     draw.rounded_rectangle([(W / 2 - 60, H - 14), (W / 2 + 60, H - 10)], radius=2, fill='#484F58')
