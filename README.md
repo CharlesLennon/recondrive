@@ -122,12 +122,20 @@ Fine-tune the exploration mechanics to match your preferred difficulty and immer
   - Quick Presets: `30% Mist` (Faint translucent fog allowing subtle street contours underneath), `60% Haze`, `85% Dense`, and `100% Void` (Total pitch-black blackout).
 - **In-Car Android Auto Cycling**: Tap the `${range}m` or `${opacity}%` action buttons on your car dashboard to cycle presets on the fly.
 
-### 5. 🗺️ Offline Vector Maps & Routing
+### 5. 🔄 In-App GitHub Releases Auto-Updater
+ReconDrive features a built-in tactical OTA updater that communicates directly with GitHub Releases (`CharlesLennon/recondrive`):
+- **Background Checks**: Automatically queries the GitHub Releases REST API on startup and compares semantic version tags (`v1.0.0` vs remote).
+- **Update Alert Banners**: Displays a glowing amber alert pill and notification banner in the Tactical HUD whenever a newer build is published.
+- **In-App Streaming Downloader**: Streams the latest APK binary with real-time percentage, byte count, and download progress bar.
+- **Direct System Installer Launch**: Utilizes Android `FileProvider` to prompt the native Android package installer without requiring third-party app stores or manual sideloading.
+- **Android Auto Notification**: Informs drivers when an update is available so they can review and install when parked.
+
+### 6. 🗺️ Offline Vector Maps & Routing
 - **Tactical Dark Map Palette**: Matte obsidian background (`#0A0D12`), glowing cyan primary corridors (`#00E5FF`), deep blue water bodies, and phosphor green explored tracks (`#00E676`).
 - **Offline `.mbtiles` Support**: Store entire countries or regional vector tile packs locally in the app storage directory with zero mobile data reliance.
 - **Offline Turn-by-Turn Engine**: Calculates routing geometry, step maneuvers, target coordinates, and trip durations on device.
 
-### 5. 📱 Mobile Handset Tactical HUD (Jetpack Compose)
+### 7. 📱 Mobile Handset Tactical HUD (Jetpack Compose)
 - Full-screen tactical dashboard with real-time velocity (KM/H & MPH), heading bearing tape, decimal coordinates, radar sweep canvas preview, live skin pairing badge, and one-tap destination routing.
 
 ---
@@ -162,12 +170,16 @@ recondrive/
 │       │   │   ├── FogSkin.kt                # Fog shrouds, laser borders & overlays
 │       │   │   ├── MapSkin.kt                # OSM vector cartography themes
 │       │   │   └── SkinManager.kt            # Independent preference & cycle manager
-│       │   └── ui/                           # 📱 Handset Jetpack Compose Interface
-│       │       ├── MainActivity.kt           # GPS telemetry ingestion
-│       │       ├── screens/
-│       │       │   ├── SkinSelectorDialog.kt # Visual dual-tab skin picker dialog
-│       │       │   └── TacticalHudScreen.kt  # Tactical HUD & Radar canvas
-│       │       └── theme/                    # Tactical obsidian & cyan palette
+│       │   ├── ui/                           # 📱 Handset Jetpack Compose Interface
+│       │   │   ├── MainActivity.kt           # GPS telemetry ingestion
+│       │   │   ├── screens/
+│       │   │   │   ├── SkinSelectorDialog.kt # Visual dual-tab skin picker dialog
+│       │   │   │   ├── TacticalHudScreen.kt  # Tactical HUD & Radar canvas
+│       │   │   │   └── UpdateDialog.kt       # In-App GitHub OTA updater dialog
+│       │   │   └── theme/                    # Tactical obsidian & cyan palette
+│       │   └── update/                       # 🔄 GitHub OTA In-App Updater
+│       │       ├── AppUpdateManager.kt       # GitHub Releases API, downloader & installer
+│       │       └── ReleaseInfo.kt            # Release metadata & UpdateState model
 │       └── res/
 │           ├── values/{colors,strings,themes}.xml
 │           └── xml/automotive_app_desc.xml   # Android Auto template declaration

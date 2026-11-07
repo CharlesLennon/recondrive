@@ -61,6 +61,9 @@ class MainActivity : ComponentActivity() {
 
         checkAndRequestPermissions()
 
+        // Background query to GitHub Releases for newest APK updates
+        ReconApplication.instance.updateManager.checkForUpdates(isManual = false)
+
         setContent {
             ReconDriveTheme {
                 val stats by ReconApplication.instance.fogGridManager.stats.collectAsState()
@@ -68,6 +71,7 @@ class MainActivity : ComponentActivity() {
                 TacticalHudScreen(
                     stats = stats,
                     skinManager = ReconApplication.instance.skinManager,
+                    updateManager = ReconApplication.instance.updateManager,
                     currentSpeedKmh = currentSpeedKmh,
                     currentHeading = currentHeading,
                     currentLat = currentLat,

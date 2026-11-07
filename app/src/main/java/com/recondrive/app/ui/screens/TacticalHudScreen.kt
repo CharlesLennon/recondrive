@@ -24,11 +24,14 @@ import androidx.compose.ui.unit.sp
 import com.recondrive.app.fog.ExplorationStats
 import com.recondrive.app.skin.SkinManager
 import com.recondrive.app.ui.theme.*
+import com.recondrive.app.update.AppUpdateManager
+import com.recondrive.app.update.UpdateState
 
 @Composable
 fun TacticalHudScreen(
     stats: ExplorationStats,
     skinManager: SkinManager,
+    updateManager: AppUpdateManager = com.recondrive.app.ReconApplication.instance.updateManager,
     fogPreferences: com.recondrive.app.fog.FogPreferences = com.recondrive.app.ReconApplication.instance.fogPreferences,
     currentSpeedKmh: Float = 48f,
     currentHeading: Float = 45f,
@@ -38,17 +41,26 @@ fun TacticalHudScreen(
     onOfflinePacksClick: () -> Unit = {}
 ) {
     var showSkinDialog by remember { mutableStateOf(false) }
+    var showUpdateDialog by remember { mutableStateOf(false) }
 
     val mapSkin by skinManager.currentMapSkin.collectAsState()
     val fogSkin by skinManager.currentFogSkin.collectAsState()
     val currentRange by fogPreferences.fogRangeMeters.collectAsState()
     val currentOpacity by fogPreferences.fogOpacity.collectAsState()
+    val updateState by updateManager.updateState.collectAsState()
 
     if (showSkinDialog) {
         SkinSelectorDialog(
             skinManager = skinManager,
             fogPreferences = fogPreferences,
             onDismiss = { showSkinDialog = false }
+        )
+    }
+
+    if (showUpdateDialog) {
+        UpdateDialog(
+            updateManager = updateManager,
+            onDismiss = { showUpdateDialog = false }
         )
     }
 
@@ -83,6 +95,41 @@ fun TacticalHudScreen(
             }
 
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                // In-App GitHub Releases Update Button
+                val isUpdateAvailable = updateState is UpdateState.UpdateAvailable
+                val updateBorderColor = if (isUpdateAvailable) ReconAmber else TacticalBorder
+                val updateTextColor = if (isUpdateAvailable) ReconAmber else TextSecondary
+                Surface(
+                    color = TacticalSurface,
+                    shape = RoundedCornerShape(4.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, updateBorderColor),
+                    modifier = Modifier.clickable { showUpdateDialog = true }
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = if (isUpdateAvailable) Icons.Default.SystemUpdate else Icons.Default.CloudDownload,
+                            contentDescription = "Updates",
+                            tint = updateTextColor,
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = when (val s = updateState) {
+                                is UpdateState.UpdateAvailable -> "NEW: ${s.release.tagName}"
+                                is UpdateState.Downloading -> "${s.progressPercent}%"
+                                else -> "UPDATES"
+                            },
+                            color = updateTextColor,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.Monospace
+                        )
+                    }
+                }
+
                 // Skins Selector Button
                 Surface(
                     color = TacticalSurface,
@@ -141,6 +188,70 @@ fun TacticalHudScreen(
         }
 
         Spacer(modifier = Modifier.height(12.dp))
+
+        // Tactical Update Alert Banner (Appears when GitHub has a newer APK build)
+        val currentUpdate = updateState
+        if (currentUpdate is UpdateState.UpdateAvailable) {
+            Surface(
+                color = TacticalSurface,
+                shape = RoundedCornerShape(8.dp),
+                border = androidx.compose.foundation.BorderStroke(1.dp, ReconAmber),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { showUpdateDialog = true }
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        modifier = Modifier.weight(1f),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.SystemUpdate,
+                            contentDescription = null,
+                            tint = ReconAmber,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Column {
+                            Text(
+                                text = "TACTICAL UPDATE AVAILABLE: ${currentUpdate.release.tagName}",
+                                color = ReconAmber,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                fontFamily = FontFamily.Monospace
+                            )
+                            Text(
+                                text = "Build ${currentUpdate.release.releaseTitle} (${currentUpdate.release.formattedSize})",
+                                color = TextSecondary,
+                                fontSize = 10.sp,
+                                maxLines = 1
+                            )
+                        }
+                    }
+
+                    Surface(
+                        color = ReconCyan,
+                        shape = RoundedCornerShape(4.dp)
+                    ) {
+                        Text(
+                            text = "REVIEW",
+                            color = TacticalObsidian,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.Monospace,
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                        )
+                    }
+                }
+            }
+            Spacer(modifier = Modifier.height(12.dp))
+        }
 
         // 2. Primary Telemetry Readout (Speedometer & Compass Heading)
         Row(

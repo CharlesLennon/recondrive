@@ -23,6 +23,9 @@ class ReconApplication : Application() {
     lateinit var skinManager: com.recondrive.app.skin.SkinManager
         private set
 
+    lateinit var updateManager: com.recondrive.app.update.AppUpdateManager
+        private set
+
     override fun onCreate() {
         super.onCreate()
         
@@ -31,6 +34,7 @@ class ReconApplication : Application() {
         Timber.i("ReconDrive Tactical Engine Initialized")
 
         // Initialize Core Subsystems
+        updateManager = com.recondrive.app.update.AppUpdateManager(this)
         fogPreferences = com.recondrive.app.fog.FogPreferences(this)
         skinManager = com.recondrive.app.skin.SkinManager(this)
         offlineTileRepository = OfflineTileRepository(this)
