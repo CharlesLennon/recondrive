@@ -178,77 +178,52 @@ fun TacticalHudScreen(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Column {
+            Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = "J.A.R.V.I.S. // TACTICAL NAVIGATION CORE",
                     color = Color(mapSkin.highwayColor),
                     fontSize = 13.sp,
                     fontWeight = FontWeight.Bold,
-                    fontFamily = FontFamily.Monospace
+                    fontFamily = FontFamily.Monospace,
+                    letterSpacing = 0.5.sp
                 )
                 Text(
-                    text = "GRID: %.4f°N, %.4f°W • SYSTEMS NOMINAL".format(currentLat, kotlin.math.abs(currentLon)),
+                    text = "GRID: %.4f°N, %.4f°W • ALL SYSTEMS NOMINAL".format(currentLat, kotlin.math.abs(currentLon)),
                     color = TextSecondary,
                     fontSize = 10.sp,
                     fontFamily = FontFamily.Monospace
                 )
             }
 
-            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                // Update indicator if new build is available
-                val isUpdateAvailable = updateState is UpdateState.UpdateAvailable
-                if (isUpdateAvailable) {
-                    Surface(
-                        color = TacticalSurface,
-                        shape = RoundedCornerShape(4.dp),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, ReconAmber),
-                        modifier = Modifier.clickable { showSyncDialog = true }
-                    ) {
-                        Text(
-                            text = "UPDATE",
-                            color = ReconAmber,
-                            fontSize = 9.sp,
-                            fontWeight = FontWeight.Bold,
-                            fontFamily = FontFamily.Monospace,
-                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
-                        )
-                    }
-                }
+            Spacer(modifier = Modifier.width(8.dp))
 
-                // Skins Selector Button
-                Surface(
-                    color = TacticalSurface,
-                    shape = RoundedCornerShape(4.dp),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, Color(fogSkin.perimeterGlowColor)),
-                    modifier = Modifier.clickable { showSkinDialog = true }
+            // Sleek, compact radar status pill (never stretches, perfectly bounded)
+            Surface(
+                color = TacticalSurface,
+                shape = RoundedCornerShape(12.dp),
+                border = androidx.compose.foundation.BorderStroke(
+                    1.dp,
+                    if (isServiceRunning) ReconGreen.copy(alpha = 0.6f) else TacticalBorder
+                ),
+                modifier = Modifier.clickable { onToggleBackgroundRadar() }
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(5.dp)
                 ) {
-                    Text(
-                        text = "SKINS",
-                        color = Color(fogSkin.perimeterGlowColor),
-                        fontSize = 9.sp,
-                        fontWeight = FontWeight.Bold,
-                        fontFamily = FontFamily.Monospace,
-                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
+                    Box(
+                        modifier = Modifier
+                            .size(7.dp)
+                            .clip(CircleShape)
+                            .background(if (isServiceRunning) ReconGreen else ReconAmber)
                     )
-                }
-
-                // 24/7 Radar Pill
-                Surface(
-                    color = TacticalSurface,
-                    shape = RoundedCornerShape(4.dp),
-                    border = androidx.compose.foundation.BorderStroke(
-                        1.dp,
-                        if (isServiceRunning) ReconGreen else ReconAmber
-                    ),
-                    modifier = Modifier.clickable { onToggleBackgroundRadar() }
-                ) {
                     Text(
                         text = if (isServiceRunning) "RADAR 24/7" else "PAUSED",
                         color = if (isServiceRunning) ReconGreen else ReconAmber,
                         fontSize = 9.sp,
                         fontWeight = FontWeight.Bold,
-                        fontFamily = FontFamily.Monospace,
-                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
+                        fontFamily = FontFamily.Monospace
                     )
                 }
             }
