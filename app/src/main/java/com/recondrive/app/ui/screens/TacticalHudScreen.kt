@@ -95,38 +95,39 @@ fun TacticalHudScreen(
             }
 
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                // In-App GitHub Releases Update Button
+                // In-App GitHub Releases Update Button (ONLY visible when a new version is available)
                 val isUpdateAvailable = updateState is UpdateState.UpdateAvailable
-                val updateBorderColor = if (isUpdateAvailable) ReconAmber else TacticalBorder
-                val updateTextColor = if (isUpdateAvailable) ReconAmber else TextSecondary
-                Surface(
-                    color = TacticalSurface,
-                    shape = RoundedCornerShape(4.dp),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, updateBorderColor),
-                    modifier = Modifier.clickable { showUpdateDialog = true }
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically
+                val isDownloading = updateState is UpdateState.Downloading
+                if (isUpdateAvailable || isDownloading) {
+                    Surface(
+                        color = TacticalSurface,
+                        shape = RoundedCornerShape(4.dp),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, ReconAmber),
+                        modifier = Modifier.clickable { showUpdateDialog = true }
                     ) {
-                        Icon(
-                            imageVector = if (isUpdateAvailable) Icons.Default.SystemUpdate else Icons.Default.CloudDownload,
-                            contentDescription = "Updates",
-                            tint = updateTextColor,
-                            modifier = Modifier.size(14.dp)
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = when (val s = updateState) {
-                                is UpdateState.UpdateAvailable -> "NEW: ${s.release.tagName}"
-                                is UpdateState.Downloading -> "${s.progressPercent}%"
-                                else -> "UPDATES"
-                            },
-                            color = updateTextColor,
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold,
-                            fontFamily = FontFamily.Monospace
-                        )
+                        Row(
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.SystemUpdate,
+                                contentDescription = "Updates",
+                                tint = ReconAmber,
+                                modifier = Modifier.size(14.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = when (val s = updateState) {
+                                    is UpdateState.UpdateAvailable -> "NEW: ${s.release.tagName}"
+                                    is UpdateState.Downloading -> "DL: ${s.progressPercent}%"
+                                    else -> "UPDATE"
+                                },
+                                color = ReconAmber,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                fontFamily = FontFamily.Monospace
+                            )
+                        }
                     }
                 }
 

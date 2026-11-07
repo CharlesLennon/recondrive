@@ -35,21 +35,29 @@ Mobile portrait dashboard with high-visibility speedometer (KM/H & MPH), heading
 
 ---
 
-### 3. Decoupled Customization & Fog Optics
+### 3. Interactive UK Map Tab (Google Maps-Style Free-Roaming)
+Full-screen interactive OpenStreetMap navigation tab supporting smooth panning, pinch-to-zoom, compass bearing reset, floating GPS re-center FAB, target waypoint dropping with distance & ETA calculation, and quick jump chips across the United Kingdom:
+
+![Interactive Google Maps-style UK Map](screenshots/screenshot_06_interactive_uk_map.png)
+*Fig 3. Interactive free-roaming UK map with complete OpenStreetMap road geometries, London M25 orbital ring, River Thames, target waypoints, and Fog of War overlay.*
+
+---
+
+### 4. Decoupled Customization & Fog Optics
 Map cartography themes and Fog of War aesthetics are **completely decoupled** — pair any map style with any fog shroud style, and fine-tune surveillance beam range and shroud opacity:
 
 | 🗺️ Map Theme Picker (Decoupled Cartography) | 🎛️ Fog Range & Opacity Calibration |
 | :---: | :---: |
 | ![Map Themes](screenshots/screenshot_03_skin_selector_map_themes.png) | ![Fog Optics Calibration](screenshots/screenshot_04_skin_selector_fog_optics.png) |
-| *Fig 3. Selection dialog with color swatch previews for 6 map themes.* | *Fig 4. Live interactive mini-radar with range (50m–500m) and opacity (20%–100%) sliders.* |
+| *Fig 4. Selection dialog with color swatch previews for 6 map themes.* | *Fig 5. Live interactive mini-radar with range (50m–500m) and opacity (20%–100%) sliders.* |
 
 ---
 
-### 4. In-App GitHub Releases Auto-Updater
+### 5. In-App GitHub Releases Auto-Updater
 OTA updater dialog querying `https://api.github.com/repos/CharlesLennon/recondrive/releases/latest`, streaming APK binaries with real-time download percentage, and launching native package installation:
 
 ![In-App GitHub Releases Updater](screenshots/screenshot_05_in_app_github_updater.png)
-*Fig 5. In-app updater displaying remote GitHub release notes, streaming progress, and one-tap package installer.*
+*Fig 6. In-app updater displaying remote GitHub release notes, streaming progress, and one-tap package installer.*
 
 ---
 

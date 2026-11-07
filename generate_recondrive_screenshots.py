@@ -593,10 +593,174 @@ def generate_screenshot_05():
     print(f"Saved: {out_path} ({os.path.getsize(out_path)} bytes)")
 
 
+# ==============================================================================
+# 6. SCREENSHOT 06: INTERACTIVE GOOGLE MAPS-STYLE UK MAP (800 x 1400)
+# ==============================================================================
+
+def generate_screenshot_06():
+    print("Generating Screenshot 06: Interactive Google Maps-style UK Map...")
+    W, H = 800, 1400
+    img = Image.new('RGB', (W, H), '#0A0D12')
+    draw = ImageDraw.Draw(img)
+
+    cx, cy = W / 2.0, H / 2.0
+
+    # 1. Background Vector Water Features (River Thames & Estuary)
+    thames_pts = [
+        (0, cy + 120),
+        (cx - 240, cy + 100),
+        (cx - 100, cy + 80),
+        (cx, cy + 70),
+        (cx + 140, cy + 85),
+        (cx + 280, cy + 130),
+        (W, cy + 160)
+    ]
+    draw.line(thames_pts, fill='#06131D', width=28)
+    draw.line(thames_pts, fill='#0C2236', width=14)
+
+    # 2. Road Networks (UK Motorways M25 Ring, M1, M4, M20)
+    # M25 Orbital Ring around London
+    draw.ellipse([(cx - 280, cy - 220), (cx + 280, cy + 220)], outline='#1C2636', width=8)
+    draw.ellipse([(cx - 280, cy - 220), (cx + 280, cy + 220)], outline='#00E5FF', width=3)
+
+    # M1 Northwards
+    draw.line([(cx - 50, cy - 60), (cx - 120, cy - 220), (cx - 180, 0)], fill='#00E5FF', width=4)
+    # M4 Westwards
+    draw.line([(cx - 60, cy + 20), (cx - 280, cy + 30), (0, cy + 40)], fill='#00E5FF', width=4)
+    # M20 Eastwards to Dover
+    draw.line([(cx + 80, cy + 60), (cx + 280, cy + 180), (W, cy + 260)], fill='#00E5FF', width=4)
+    # A1(M) North
+    draw.line([(cx, cy - 60), (cx + 20, cy - 220), (cx + 40, 0)], fill='#00A8CC', width=3)
+
+    # Local secondary grid around Central London / Boroughs
+    for r in range(-3, 4):
+        draw.line([(cx - 180, cy + r * 45), (cx + 180, cy + r * 45)], fill='#16222F', width=2)
+        draw.line([(cx + r * 50, cy - 140), (cx + r * 50, cy + 140)], fill='#16222F', width=2)
+
+    # 3. Explored Fog of War Trail & Perimeter Shroud
+    explored_trail = [
+        (cx - 180, cy + 140),
+        (cx - 80, cy + 70),
+        (cx, cy),
+        (cx + 80, cy - 60),
+        (cx + 140, cy - 140)
+    ]
+    for gw in (18, 12, 6):
+        draw.line(explored_trail, fill='#00E676' if gw == 6 else '#004D25', width=gw)
+
+    # Cleared surveillance beam
+    beam_r = 170.0
+    for gr in (3, 2, 1):
+        draw.ellipse([(cx - beam_r - gr, cy - beam_r - gr), (cx + beam_r + gr, cy + beam_r + gr)], outline='#00E5FF', width=1)
+    draw.ellipse([(cx - beam_r, cy - beam_r), (cx + beam_r, cy + beam_r)], outline='#00E5FF', width=2)
+
+    # 4. Target Waypoint (Amber destination pin & dashed route line)
+    wp_x, wp_y = cx + 180, cy - 200
+    # Dashed route
+    draw.line([(cx, cy), (wp_x, wp_y)], fill='#FFD600', width=3)
+    # Pin
+    draw.ellipse([(wp_x - 14, wp_y - 14), (wp_x + 14, wp_y + 14)], fill='#FFD600')
+    draw.ellipse([(wp_x - 24, wp_y - 24), (wp_x + 24, wp_y + 24)], outline='#FFD600', width=2)
+
+    # 5. Vehicle Cursor (Cyan arrow at center)
+    draw.ellipse([(cx - 24, cy - 24), (cx + 24, cy + 24)], fill='#00E5FF22')
+    draw.polygon([(cx + 12, cy - 12), (cx - 6, cy - 2), (cx - 2, cy + 2), (cx - 12, cy + 12)], fill='#00E5FF')
+
+    # 6. Highway Shields / Labels
+    draw.rounded_rectangle([(cx - 290, cy - 10), (cx - 250, cy + 12)], radius=3, fill='#003366', outline='#00E5FF', width=1)
+    draw.text((cx - 284, cy - 8), "M25", fill='#FFFFFF', font=FONT_MONO_XS)
+
+    draw.rounded_rectangle([(cx - 150, cy - 150), (cx - 118, cy - 128)], radius=3, fill='#003366', outline='#00E5FF', width=1)
+    draw.text((cx - 142, cy - 148), "M1", fill='#FFFFFF', font=FONT_MONO_XS)
+
+    # 7. Top Floating Search Bar & City Jump Chips
+    draw.rounded_rectangle([(24, 50), (W - 24, 102)], radius=8, fill='#121721', outline='#21262D', width=1)
+    draw.text((44, 68), "🔍", fill='#00E5FF', font=FONT_SUB)
+    draw.text((74, 68), "United Kingdom OSM • Tap map to explore & route", fill='#8B949E', font=FONT_TEXT)
+    
+    draw.rounded_rectangle([(W - 130, 60), (W - 36, 92)], radius=4, fill='#070A0F', outline='#00E676', width=1)
+    draw.text((W - 118, 68), "UK OSM", fill='#00E676', font=FONT_MONO_XS)
+
+    # Quick Jump Chips
+    chips = ["🏛️ London", "🐝 Manchester", "🏭 Birmingham", "🏰 Edinburgh", "🐉 Cardiff", "⚓ Belfast"]
+    ch_x = 24
+    for chip in chips:
+        ch_w = draw.textlength(chip, font=FONT_TEXT) + 24
+        draw.rounded_rectangle([(ch_x, 116), (ch_x + ch_w, 150)], radius=16, fill='#121721', outline='#21262D', width=1)
+        draw.text((ch_x + 12, 126), chip, fill='#F0F6FC' if "London" in chip else '#8B949E', font=FONT_TEXT)
+        ch_x += ch_w + 8
+
+    # 8. Right Floating Tactical Controls (Google Maps-style)
+    fab_x = W - 74
+    # Compass
+    draw.ellipse([(fab_x, 180), (fab_x + 48, 228)], fill='#121721', outline='#21262D', width=1)
+    draw.text((fab_x + 16, 194), "🧭", fill='#00E5FF', font=FONT_HEAD)
+
+    # Fog Toggle
+    draw.ellipse([(fab_x, 240), (fab_x + 48, 288)], fill='#00E5FF', outline='#00E5FF', width=1)
+    draw.text((fab_x + 16, 254), "👁️", fill='#0A0D12', font=FONT_HEAD)
+
+    # Skins
+    draw.ellipse([(fab_x, 300), (fab_x + 48, 348)], fill='#121721', outline='#21262D', width=1)
+    draw.text((fab_x + 16, 314), "🎨", fill='#00E5FF', font=FONT_HEAD)
+
+    # Zoom (+)
+    draw.rounded_rectangle([(fab_x + 4, 360), (fab_x + 44, 400)], radius=6, fill='#121721', outline='#21262D', width=1)
+    draw.text((fab_x + 18, 370), "+", fill='#F0F6FC', font=FONT_TITLE)
+
+    # Zoom (−)
+    draw.rounded_rectangle([(fab_x + 4, 408), (fab_x + 44, 448)], radius=6, fill='#121721', outline='#21262D', width=1)
+    draw.text((fab_x + 20, 416), "−", fill='#F0F6FC', font=FONT_TITLE)
+
+    # Re-Center GPS Target FAB
+    draw.ellipse([(fab_x - 6, 470), (fab_x + 54, 530)], fill='#00E5FF', outline='#00E5FF', width=2)
+    draw.text((fab_x + 12, 488), "🎯", fill='#0A0D12', font=FONT_TITLE)
+
+    # 9. Bottom Destination Card (Waypointed to M1/North)
+    card_y = H - 250
+    draw.rounded_rectangle([(24, card_y), (W - 24, card_y + 130)], radius=12, fill='#121721', outline='#00E5FF', width=1)
+    draw.text((44, card_y + 16), "TACTICAL WAYPOINT // M1 CORRIDOR", fill='#FFD600', font=FONT_HEAD)
+    draw.text((44, card_y + 40), "Distance: 14.2 km  •  ETA: ~18 min  •  Heading: 352° N", fill='#F0F6FC', font=FONT_MONO_SM)
+
+    # Action Buttons inside card
+    draw.rounded_rectangle([(44, card_y + 68), (W / 2 + 100, card_y + 112)], radius=6, fill='#00E5FF')
+    draw.text((80, card_y + 80), "NAVIGATE TO TARGET", fill='#0A0D12', font=FONT_HEAD)
+
+    draw.rounded_rectangle([(W / 2 + 116, card_y + 68), (W - 44, card_y + 112)], radius=6, fill='#161B22', outline='#21262D', width=1)
+    draw.text((W / 2 + 150, card_y + 80), "CLEAR", fill='#8B949E', font=FONT_HEAD)
+
+    # 10. Bottom Navigation Bar with MAP selected
+    nav_y = H - 90
+    draw.rectangle([(0, nav_y), (W, H)], fill='#0D1117')
+    draw.line([(0, nav_y), (W, nav_y)], fill='#21262D', width=1)
+    
+    tabs = [
+        ("HUD", "#8B949E", False),
+        ("MAP", "#00E5FF", True),
+        ("SKINS", "#8B949E", False),
+        ("OFFLINE", "#8B949E", False),
+    ]
+    tab_step = W / len(tabs)
+    for i, (tname, tcol, is_active) in enumerate(tabs):
+        tx_c = i * tab_step + tab_step / 2
+        tw = draw.textlength(tname, font=FONT_HEAD)
+        draw.text((tx_c - tw / 2, nav_y + 16), tname, fill=tcol, font=FONT_HEAD)
+        if is_active:
+            draw.line([(tx_c - 16, nav_y + 36), (tx_c + 16, nav_y + 36)], fill='#00E5FF', width=2)
+
+    # Android Home Gesture Bar
+    draw.rounded_rectangle([(W / 2 - 60, H - 14), (W / 2 + 60, H - 10)], radius=2, fill='#484F58')
+
+    out_path = os.path.join(OUTPUT_DIR, "screenshot_06_interactive_uk_map.png")
+    img.save(out_path)
+    print(f"Saved: {out_path} ({os.path.getsize(out_path)} bytes)")
+
+
 if __name__ == '__main__':
     generate_screenshot_01()
     generate_screenshot_02()
     generate_screenshot_03()
     generate_screenshot_04()
     generate_screenshot_05()
-    print("All 5 screenshots generated successfully!")
+    generate_screenshot_06()
+    print("All 6 screenshots generated successfully!")

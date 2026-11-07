@@ -33,6 +33,14 @@ class ReconApplication : Application() {
         Timber.plant(Timber.DebugTree())
         Timber.i("ReconDrive Tactical Engine Initialized")
 
+        // Initialize MapLibre Native SDK
+        try {
+            org.maplibre.android.MapLibre.getInstance(this)
+            Timber.i("MapLibre Native SDK initialized successfully")
+        } catch (e: Throwable) {
+            Timber.w(e, "MapLibre native init note (headless or non-standard surface)")
+        }
+
         // Initialize Core Subsystems
         updateManager = com.recondrive.app.update.AppUpdateManager(this)
         fogPreferences = com.recondrive.app.fog.FogPreferences(this)
