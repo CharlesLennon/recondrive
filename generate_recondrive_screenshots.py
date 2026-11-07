@@ -505,9 +505,98 @@ def generate_screenshot_04():
     print(f"Saved: {out_path} ({os.path.getsize(out_path)} bytes)")
 
 
+# ==============================================================================
+# 5. SCREENSHOT 05: IN-APP GITHUB RELEASES UPDATER (800 x 1100)
+# ==============================================================================
+
+def generate_screenshot_05():
+    print("Generating Screenshot 05: In-App GitHub Releases Updater...")
+    W, H = 800, 1100
+    img = Image.new('RGB', (W, H), '#0A0D12')
+    draw = ImageDraw.Draw(img)
+
+    # Modal Box
+    mx, my, mw, mh = 40, 70, 720, 960
+    draw.rounded_rectangle([(mx, my), (mx + mw, my + mh)], radius=12, fill='#0D1117', outline='#21262D', width=2)
+
+    # Modal Header
+    draw.text((mx + 28, my + 28), "SYSTEM UPDATER", fill='#00E5FF', font=FONT_HEAD)
+    draw.text((mx + 28, my + 52), "Direct OTA channel connected to GitHub Releases API", fill='#8B949E', font=FONT_TEXT)
+    draw.text((mx + mw - 40, my + 28), "✕", fill='#8B949E', font=FONT_HEAD)
+
+    # 1. Current Build Status Card
+    c1_y = my + 86
+    draw.rounded_rectangle([(mx + 24, c1_y), (mx + mw - 24, c1_y + 72)], radius=8, fill='#121721', outline='#21262D', width=1)
+    draw.text((mx + 40, c1_y + 16), "INSTALLED BUILD", fill='#8B949E', font=FONT_MONO_XS)
+    draw.text((mx + 40, c1_y + 36), "1.0.0-tactical (Build 1)", fill='#F0F6FC', font=FONT_HEAD)
+
+    draw.rounded_rectangle([(mx + mw - 190, c1_y + 20), (mx + mw - 40, c1_y + 52)], radius=4, fill='#0D1117', outline='#00E5FF', width=1)
+    draw.text((mx + mw - 176, c1_y + 28), "GITHUB RELEASES", fill='#00E5FF', font=FONT_MONO_XS)
+
+    # 2. Update Available Banner Card (Amber Border)
+    c2_y = c1_y + 90
+    draw.rounded_rectangle([(mx + 24, c2_y), (mx + mw - 24, c2_y + 110)], radius=8, fill='#121721', outline='#FFD600', width=1)
+    draw.text((mx + 40, c2_y + 16), "NEW TACTICAL RELEASE AVAILABLE", fill='#FFD600', font=FONT_HEAD)
+    draw.text((mx + mw - 140, c2_y + 16), "v1.0.1 ➔", fill='#00E5FF', font=FONT_HEAD)
+
+    draw.text((mx + 40, c2_y + 42), "ReconDrive v1.0.1 — Tactical In-Vehicle Navigation", fill='#F0F6FC', font=FONT_HEAD)
+    draw.text((mx + 40, c2_y + 68), "Asset: ReconDrive-v1.0.1-tactical.apk  •  Size: 46.5 MB  •  Published: Today", fill='#8B949E', font=FONT_TEXT)
+
+    # 3. Live Streaming Download Progress Card
+    c3_y = c2_y + 128
+    draw.rounded_rectangle([(mx + 24, c3_y), (mx + mw - 24, c3_y + 110)], radius=8, fill='#161B22', outline='#00E5FF', width=1)
+    draw.text((mx + 40, c3_y + 16), "DOWNLOADING APK PACKAGE...", fill='#00E5FF', font=FONT_HEAD)
+    draw.text((mx + mw - 100, c3_y + 16), "68%", fill='#00E5FF', font=FONT_HEAD)
+
+    # Progress bar
+    pb_y = c3_y + 44
+    draw.rectangle([(mx + 40, pb_y), (mx + mw - 40, pb_y + 10)], fill='#21262D')
+    pb_active = (mw - 80) * 0.68
+    draw.rectangle([(mx + 40, pb_y), (mx + 40 + pb_active, pb_y + 10)], fill='#00E5FF')
+
+    draw.text((mx + 40, c3_y + 68), "31.6 MB / 46.5 MB  •  ReconDrive-v1.0.1-tactical.apk", fill='#8B949E', font=FONT_MONO_SM)
+
+    # 4. Release Notes / Changelog Box
+    c4_y = c3_y + 128
+    draw.text((mx + 28, c4_y), "RELEASE INTEL & CHANGELOG", fill='#8B949E', font=FONT_MONO_XS)
+    
+    box_y = c4_y + 20
+    draw.rounded_rectangle([(mx + 24, box_y), (mx + mw - 24, box_y + 240)], radius=8, fill='#121721', outline='#21262D', width=1)
+    
+    notes = [
+        "• Added In-App GitHub Releases OTA Updater with real-time download streaming.",
+        "• Direct integration with Android Package Installer via Secure FileProvider.",
+        "• Enhanced Android Auto NavigationTemplate maneuver card padding and alignments.",
+        "• Real-world Fog of War spatial persistence optimization with Room DB.",
+        "• Decoupled 6 Map Themes and 6 Fog Skins with real-time in-car action cycling.",
+        "• Added dynamic speed limits (50 km/h roundel) and lane guidance indicators."
+    ]
+    ny = box_y + 18
+    for line in notes:
+        draw.text((mx + 40, ny), line, fill='#F0F6FC' if line.startswith("• Added") else '#8B949E', font=FONT_TEXT)
+        ny += 34
+
+    # 5. Bottom Action Buttons
+    act_y = box_y + 260
+    draw.rounded_rectangle([(mx + 24, act_y), (mx + mw - 24, act_y + 54)], radius=8, fill='#00E5FF')
+    txt_inst = "DOWNLOAD & INSTALL UPDATE"
+    ti_w = draw.textlength(txt_inst, font=FONT_HEAD)
+    draw.text((mx + 24 + (mw - 48 - ti_w) / 2, act_y + 18), txt_inst, fill='#0A0D12', font=FONT_HEAD)
+
+    draw.rounded_rectangle([(mx + 24, act_y + 66), (mx + mw - 24, act_y + 110)], radius=8, fill='#121721', outline='#21262D', width=1)
+    txt_gh = "VIEW RELEASE ON GITHUB"
+    tg_w = draw.textlength(txt_gh, font=FONT_TEXT)
+    draw.text((mx + 24 + (mw - 48 - tg_w) / 2, act_y + 80), txt_gh, fill='#8B949E', font=FONT_TEXT)
+
+    out_path = os.path.join(OUTPUT_DIR, "screenshot_05_in_app_github_updater.png")
+    img.save(out_path)
+    print(f"Saved: {out_path} ({os.path.getsize(out_path)} bytes)")
+
+
 if __name__ == '__main__':
     generate_screenshot_01()
     generate_screenshot_02()
     generate_screenshot_03()
     generate_screenshot_04()
-    print("All 4 screenshots generated successfully!")
+    generate_screenshot_05()
+    print("All 5 screenshots generated successfully!")

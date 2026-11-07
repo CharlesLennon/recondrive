@@ -45,6 +45,14 @@ Map cartography themes and Fog of War aesthetics are **completely decoupled** â€
 
 ---
 
+### 4. In-App GitHub Releases Auto-Updater
+OTA updater dialog querying `https://api.github.com/repos/CharlesLennon/recondrive/releases/latest`, streaming APK binaries with real-time download percentage, and launching native package installation:
+
+![In-App GitHub Releases Updater](screenshots/screenshot_05_in_app_github_updater.png)
+*Fig 5. In-app updater displaying remote GitHub release notes, streaming progress, and one-tap package installer.*
+
+---
+
 ## ðŸ“¸ Architecture & Design Overview
 
 ```
