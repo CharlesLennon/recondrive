@@ -265,15 +265,16 @@ fun TacticalHudScreen(
                 )
             }
 
-            Divider(
+            Box(
                 modifier = Modifier
                     .height(34.dp)
-                    .width(1.dp),
-                color = TacticalBorder
+                    .width(1.dp)
+                    .background(TacticalBorder)
             )
 
             // Heading Column
-            val headingName = when ((currentHeading / 45f).toInt() % 8) {
+            val normHeading = ((currentHeading % 360f) + 360f) % 360f
+            val headingName = when ((normHeading / 45f).toInt() % 8) {
                 0 -> "N"
                 1 -> "NE"
                 2 -> "E"
@@ -285,7 +286,7 @@ fun TacticalHudScreen(
             }
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
                 Text(
-                    text = "%.0f°".format(currentHeading),
+                    text = "%.0f°".format(normHeading),
                     color = Color(mapSkin.routeColor),
                     fontSize = 28.sp,
                     fontWeight = FontWeight.Bold,
@@ -299,11 +300,11 @@ fun TacticalHudScreen(
                 )
             }
 
-            Divider(
+            Box(
                 modifier = Modifier
                     .height(34.dp)
-                    .width(1.dp),
-                color = TacticalBorder
+                    .width(1.dp)
+                    .background(TacticalBorder)
             )
 
             // Fog Optics Column
@@ -405,11 +406,11 @@ fun TacticalHudScreen(
                 )
             }
 
-            Divider(
+            Box(
                 modifier = Modifier
                     .height(24.dp)
-                    .width(1.dp),
-                color = TacticalBorder
+                    .width(1.dp)
+                    .background(TacticalBorder)
             )
 
             // Barometric Floor & Elevation Column

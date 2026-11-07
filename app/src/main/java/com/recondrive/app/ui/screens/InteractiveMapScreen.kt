@@ -499,6 +499,7 @@ fun InteractiveMapScreen(
             val pixelsPerMeter = kotlin.math.abs(p1m.x - vehicleScreenPos.x).toFloat().coerceAtLeast(0.001f)
 
             if (isFogLayerActive) {
+                try {
                 val nativeCanvas = drawContext.canvas.nativeCanvas
 
                 // Surveillance Radar Beam Radius: Anchored 1:1 to real-world meters at the current Web Mercator zoom
@@ -508,12 +509,7 @@ fun InteractiveMapScreen(
                 // Floor at 12f so when zoomed all the way out to UK view, the cursor reticle stays clearly visible
                 val screenBeamRadius = geoBeamRadius.coerceAtLeast(12f)
 
-                // 1. Offscreen Composite Layer using saveLayer + PorterDuff.Mode.CLEAR
-                // This ensures all historically visited locations (timeline breadcrumbs & explored cells)
-                // permanently punch transparent holes through the fog shroud with ZERO inversion glitches.
-                val layerId = nativeCanvas.saveLayer(0f, 0f, width, height, null)
-
-                // 2. Base Fog Shroud Fill (Density dynamically driven by fogOpacity 15% to 100%)
+                // 1. Base Fog Shroud Fill (Density dynamically driven by fogOpacity 15% to 100%)
                 val effectiveOpacity = (fogSkin.shroudOpacity * (0.35f + fogOpacity * 0.65f)).coerceIn(0.25f, 0.98f)
                 val shroudPaint = android.graphics.Paint().apply {
                     color = fogSkin.shroudColor
@@ -521,26 +517,24 @@ fun InteractiveMapScreen(
                     style = android.graphics.Paint.Style.FILL
                     isAntiAlias = true
                 }
-                nativeCanvas.drawRect(0f, 0f, width, height, shroudPaint)
 
-                // 3. Clear Paint for Unmasking Visited Paths and Explored Cells
-                val clearHolePaint = android.graphics.Paint().apply {
-                    xfermode = android.graphics.PorterDuffXfermode(android.graphics.PorterDuff.Mode.CLEAR)
-                    isAntiAlias = true
-                }
+                // 2. Build Holes Path for Unmasking Visited Paths and Explored Cells
+                // Path.Op.DIFFERENCE is 100% crash-safe and avoids Compose nativeCanvas saveLayer underflow
+                val holesPath = android.graphics.Path()
 
-                // 4. Unmask Continuous Traveled Road Corridors (Timeline Trajectory)
+                // Unmask Current Vehicle Radar Sector
+                holesPath.addCircle(vehicleScreenPos.x, vehicleScreenPos.y, screenBeamRadius, android.graphics.Path.Direction.CW)
+
+                // Unmask Continuous Traveled Road Corridors (Timeline Trajectory)
                 if (timelineEntries.size >= 2) {
                     val corridorWidth = (screenBeamRadius * 1.8f).coerceAtLeast(20f)
-                    val clearCorridorPaint = android.graphics.Paint().apply {
-                        xfermode = android.graphics.PorterDuffXfermode(android.graphics.PorterDuff.Mode.CLEAR)
+                    val corridorStrokePaint = android.graphics.Paint().apply {
                         style = android.graphics.Paint.Style.STROKE
                         strokeWidth = corridorWidth
                         strokeCap = android.graphics.Paint.Cap.ROUND
                         strokeJoin = android.graphics.Paint.Join.ROUND
-                        isAntiAlias = true
                     }
-                    val corridorPath = android.graphics.Path().apply {
+                    val rawCorridor = android.graphics.Path().apply {
                         val first = timelineEntries.first()
                         val p0 = project(first.latitude, first.longitude)
                         moveTo(p0.x, p0.y)
@@ -550,31 +544,49 @@ fun InteractiveMapScreen(
                         }
                         lineTo(vehicleScreenPos.x, vehicleScreenPos.y)
                     }
-                    nativeCanvas.drawPath(corridorPath, clearCorridorPaint)
+                    val filledCorridor = android.graphics.Path()
+                    corridorStrokePaint.getFillPath(rawCorridor, filledCorridor)
+                    holesPath.addPath(filledCorridor)
                 }
 
-                // 5. Unmask All Timeline Fix Points
+                // Unmask All Timeline Fix Points
                 for (entry in timelineEntries) {
                     val pt = project(entry.latitude, entry.longitude)
                     if (pt.x in -screenBeamRadius..(width + screenBeamRadius) && pt.y in -screenBeamRadius..(height + screenBeamRadius)) {
-                        nativeCanvas.drawCircle(pt.x, pt.y, screenBeamRadius, clearHolePaint)
+                        holesPath.addCircle(pt.x, pt.y, screenBeamRadius, android.graphics.Path.Direction.CW)
                     }
                 }
 
-                // 6. Unmask All Explored Spatial Cells from Persistent Database
+                // Unmask All Explored Spatial Cells from Persistent Database
                 val cellScreenRadius = (pixelsPerMeter * 35f).coerceIn(10f, 150f)
                 for (cell in allExploredCells) {
                     val cp = project(cell.centerLat, cell.centerLon)
                     if (cp.x in -cellScreenRadius..(width + cellScreenRadius) && cp.y in -cellScreenRadius..(height + cellScreenRadius)) {
-                        nativeCanvas.drawCircle(cp.x, cp.y, cellScreenRadius, clearHolePaint)
+                        holesPath.addCircle(cp.x, cp.y, cellScreenRadius, android.graphics.Path.Direction.CW)
                     }
                 }
 
-                // 7. Unmask Current Vehicle Radar Sector
-                nativeCanvas.drawCircle(vehicleScreenPos.x, vehicleScreenPos.y, screenBeamRadius, clearHolePaint)
+                // 3. Shroud Cutout (Shroud minus holes)
+                val shroudPath = android.graphics.Path().apply {
+                    addRect(0f, 0f, width, height, android.graphics.Path.Direction.CW)
+                }
+                val finalFogPath = android.graphics.Path()
+                val opSuccess = try {
+                    finalFogPath.op(shroudPath, holesPath, android.graphics.Path.Op.DIFFERENCE)
+                } catch (t: Throwable) {
+                    false
+                }
 
-                // Restore Layer back to screen
-                nativeCanvas.restoreToCount(layerId)
+                if (opSuccess) {
+                    nativeCanvas.drawPath(finalFogPath, shroudPaint)
+                } else {
+                    val fallbackPath = android.graphics.Path().apply {
+                        fillType = android.graphics.Path.FillType.EVEN_ODD
+                        addRect(0f, 0f, width, height, android.graphics.Path.Direction.CW)
+                        addPath(holesPath)
+                    }
+                    nativeCanvas.drawPath(fallbackPath, shroudPaint)
+                }
 
                 // 3. Vignette Transition Shadow (Atmospheric boundary separating cleared sector from dense shroud)
                 if (screenBeamRadius > 20f) {
@@ -759,6 +771,9 @@ fun InteractiveMapScreen(
                     val tStr = "RADAR: %.1f km".format(distKm)
                     val tw = trackerText.measureText(tStr)
                     nativeCanvas.drawText(tStr, (clampedX - tw / 2f).coerceIn(10f, width - tw - 10f), (clampedY - 22f).coerceAtLeast(30f), trackerText)
+                }
+                } catch (t: Throwable) {
+                    timber.log.Timber.e(t, "InteractiveMapScreen: Error rendering fog of war layer")
                 }
             }
 

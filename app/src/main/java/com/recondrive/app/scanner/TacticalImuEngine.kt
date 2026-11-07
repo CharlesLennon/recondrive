@@ -76,18 +76,26 @@ class TacticalImuEngine(context: Context) : SensorEventListener {
     private var lastHeadingTimeMs = 0L
 
     fun start() {
-        if (isListening || accelerometer == null) return
-        sensorManager?.registerListener(this, accelerometer, SensorManager.SENSOR_DELAY_GAME)
-        gyroscope?.let { sensorManager?.registerListener(this, it, SensorManager.SENSOR_DELAY_GAME) }
-        isListening = true
-        Timber.i("TacticalImuEngine: High-rate 6-axis IMU tracking active")
+        try {
+            if (isListening || accelerometer == null) return
+            sensorManager?.registerListener(this, accelerometer, SensorManager.SENSOR_DELAY_GAME)
+            gyroscope?.let { sensorManager?.registerListener(this, it, SensorManager.SENSOR_DELAY_GAME) }
+            isListening = true
+            Timber.i("TacticalImuEngine: High-rate 6-axis IMU tracking active")
+        } catch (t: Throwable) {
+            Timber.w(t, "TacticalImuEngine: Failed to register IMU sensors")
+        }
     }
 
     fun stop() {
-        if (!isListening) return
-        sensorManager?.unregisterListener(this)
-        isListening = false
-        Timber.i("TacticalImuEngine: IMU tracking stopped")
+        try {
+            if (!isListening) return
+            sensorManager?.unregisterListener(this)
+            isListening = false
+            Timber.i("TacticalImuEngine: IMU tracking stopped")
+        } catch (t: Throwable) {
+            Timber.w(t, "TacticalImuEngine: Failed to unregister IMU sensors")
+        }
     }
 
     fun resetLaunchTimer() {
@@ -182,61 +190,65 @@ class TacticalImuEngine(context: Context) : SensorEventListener {
     override fun onSensorChanged(event: SensorEvent?) {
         if (event == null) return
 
-        when (event.sensor.type) {
-            Sensor.TYPE_ACCELEROMETER -> {
-                val rawX = event.values[0]
-                val rawY = event.values[1]
-                val rawZ = event.values[2]
+        try {
+            when (event.sensor.type) {
+                Sensor.TYPE_ACCELEROMETER -> {
+                    val rawX = event.values[0]
+                    val rawY = event.values[1]
+                    val rawZ = event.values[2]
 
-                // Low-pass filter
-                filteredAx = alpha * rawX + (1 - alpha) * filteredAx
-                filteredAy = alpha * rawY + (1 - alpha) * filteredAy
-                filteredAz = alpha * rawZ + (1 - alpha) * filteredAz
+                    // Low-pass filter
+                    filteredAx = alpha * rawX + (1 - alpha) * filteredAx
+                    filteredAy = alpha * rawY + (1 - alpha) * filteredAy
+                    filteredAz = alpha * rawZ + (1 - alpha) * filteredAz
 
-                // In phone portrait orientation mounted in vehicle:
-                // X = Lateral force (left/right turn G)
-                // Y = Longitudinal force (throttle accel / braking deceleration G)
-                // Z = Vertical force (gravity + road shocks)
-                val latG = (filteredAx / gConstant)
-                val longG = (filteredAy / gConstant)
-                val vertG = (filteredAz / gConstant)
+                    // In phone portrait orientation mounted in vehicle:
+                    // X = Lateral force (left/right turn G)
+                    // Y = Longitudinal force (throttle accel / braking deceleration G)
+                    // Z = Vertical force (gravity + road shocks)
+                    val latG = (filteredAx / gConstant)
+                    val longG = (filteredAy / gConstant)
+                    val vertG = (filteredAz / gConstant)
 
-                val currentTotalG = kotlin.math.sqrt(latG * latG + longG * longG)
-                sessionPeakG = max(sessionPeakG, currentTotalG)
+                    val currentTotalG = kotlin.math.sqrt(latG * latG + longG * longG)
+                    sessionPeakG = max(sessionPeakG, currentTotalG)
 
-                // High-pass dynamic transient for Pothole / Road Impact Detection
-                val zDelta = abs(rawZ - filteredAz) / gConstant
-                val now = System.currentTimeMillis()
-                var potholeG = _telemetry.value.lastPotholeG
-                var potholeDesc = _telemetry.value.lastPotholeDesc
-                var potholeTime = _telemetry.value.lastPotholeTimeMs
+                    // High-pass dynamic transient for Pothole / Road Impact Detection
+                    val zDelta = abs(rawZ - filteredAz) / gConstant
+                    val now = System.currentTimeMillis()
+                    var potholeG = _telemetry.value.lastPotholeG
+                    var potholeDesc = _telemetry.value.lastPotholeDesc
+                    var potholeTime = _telemetry.value.lastPotholeTimeMs
 
-                if (zDelta > 1.65f) { // Vertical shock threshold
-                    potholeG = zDelta
-                    potholeTime = now
-                    potholeDesc = "POTHOLE IMPACT: %.1fG VERTICAL SHOCK".format(zDelta)
-                    Timber.w("TacticalImuEngine: $potholeDesc")
-                } else if (now - potholeTime > 3500L) {
-                    potholeDesc = "ROAD SURFACE NOMINAL"
+                    if (zDelta > 1.65f) { // Vertical shock threshold
+                        potholeG = zDelta
+                        potholeTime = now
+                        potholeDesc = "POTHOLE IMPACT: %.1fG VERTICAL SHOCK".format(zDelta)
+                        Timber.w("TacticalImuEngine: $potholeDesc")
+                    } else if (now - potholeTime > 3500L) {
+                        potholeDesc = "ROAD SURFACE NOMINAL"
+                    }
+
+                    _telemetry.update {
+                        it.copy(
+                            isAvailable = true,
+                            lateralG = latG,
+                            longitudinalG = longG,
+                            verticalG = vertG,
+                            peakG = sessionPeakG,
+                            lastPotholeG = potholeG,
+                            lastPotholeDesc = potholeDesc,
+                            lastPotholeTimeMs = potholeTime
+                        )
+                    }
                 }
 
-                _telemetry.update {
-                    it.copy(
-                        isAvailable = true,
-                        lateralG = latG,
-                        longitudinalG = longG,
-                        verticalG = vertG,
-                        peakG = sessionPeakG,
-                        lastPotholeG = potholeG,
-                        lastPotholeDesc = potholeDesc,
-                        lastPotholeTimeMs = potholeTime
-                    )
+                Sensor.TYPE_GYROSCOPE -> {
+                    lastGyroYawRate = event.values[2] // Z axis rotational velocity (rad/s)
                 }
             }
-
-            Sensor.TYPE_GYROSCOPE -> {
-                lastGyroYawRate = event.values[2] // Z axis rotational velocity (rad/s)
-            }
+        } catch (t: Throwable) {
+            Timber.w(t, "TacticalImuEngine: Error processing IMU sensor event")
         }
     }
 

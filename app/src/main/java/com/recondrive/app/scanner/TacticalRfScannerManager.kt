@@ -24,6 +24,7 @@ import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.telephony.*
+import androidx.core.content.ContextCompat
 import com.recondrive.app.audio.TacticalSoundManager
 import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -339,12 +340,12 @@ class TacticalRfScannerManager(
         registerWifiP2pReceiver()
         registerMagnetometer()
 
-        barometerEngine.start()
-        sirenEngine.start()
-        imuEngine.start()
-        gnssEngine.start()
-        wifiRttEngine.start()
-        nfcManager.checkStatus()
+        try { barometerEngine.start() } catch (t: Throwable) { Timber.w(t, "Barometer failed to start") }
+        try { sirenEngine.start() } catch (t: Throwable) { Timber.w(t, "Siren engine failed to start") }
+        try { imuEngine.start() } catch (t: Throwable) { Timber.w(t, "IMU engine failed to start") }
+        try { gnssEngine.start() } catch (t: Throwable) { Timber.w(t, "GNSS engine failed to start") }
+        try { wifiRttEngine.start() } catch (t: Throwable) { Timber.w(t, "WiFi RTT engine failed to start") }
+        try { nfcManager.checkStatus() } catch (t: Throwable) { Timber.w(t, "NFC manager failed to check status") }
 
         triggerHardwareWifiScan()
         startBleScan()
@@ -422,9 +423,14 @@ class TacticalRfScannerManager(
         if (!wifiReceiverRegistered) {
             try {
                 val intentFilter = IntentFilter(WifiManager.SCAN_RESULTS_AVAILABLE_ACTION)
-                context.registerReceiver(wifiScanReceiver, intentFilter)
+                ContextCompat.registerReceiver(
+                    context,
+                    wifiScanReceiver,
+                    intentFilter,
+                    ContextCompat.RECEIVER_EXPORTED
+                )
                 wifiReceiverRegistered = true
-            } catch (e: Exception) {
+            } catch (e: Throwable) {
                 Timber.w(e, "Unable to register Wi-Fi scan receiver")
             }
         }
@@ -435,7 +441,7 @@ class TacticalRfScannerManager(
             try {
                 context.unregisterReceiver(wifiScanReceiver)
                 wifiReceiverRegistered = false
-            } catch (e: Exception) {
+            } catch (e: Throwable) {
                 Timber.w(e, "Error unregistering Wi-Fi scan receiver")
             }
         }
@@ -448,9 +454,14 @@ class TacticalRfScannerManager(
                     addAction(BluetoothDevice.ACTION_FOUND)
                     addAction(BluetoothAdapter.ACTION_DISCOVERY_FINISHED)
                 }
-                context.registerReceiver(btClassicReceiver, filter)
+                ContextCompat.registerReceiver(
+                    context,
+                    btClassicReceiver,
+                    filter,
+                    ContextCompat.RECEIVER_EXPORTED
+                )
                 btClassicReceiverRegistered = true
-            } catch (e: Exception) {
+            } catch (e: Throwable) {
                 Timber.w(e, "Unable to register Bluetooth Classic receiver")
             }
         }
@@ -461,7 +472,7 @@ class TacticalRfScannerManager(
             try {
                 context.unregisterReceiver(btClassicReceiver)
                 btClassicReceiverRegistered = false
-            } catch (e: Exception) {
+            } catch (e: Throwable) {
                 Timber.w(e, "Error unregistering BT Classic receiver")
             }
         }
@@ -471,9 +482,14 @@ class TacticalRfScannerManager(
         if (!wifiP2pReceiverRegistered) {
             try {
                 val filter = IntentFilter(WifiP2pManager.WIFI_P2P_PEERS_CHANGED_ACTION)
-                context.registerReceiver(wifiP2pReceiver, filter)
+                ContextCompat.registerReceiver(
+                    context,
+                    wifiP2pReceiver,
+                    filter,
+                    ContextCompat.RECEIVER_EXPORTED
+                )
                 wifiP2pReceiverRegistered = true
-            } catch (e: Exception) {
+            } catch (e: Throwable) {
                 Timber.w(e, "Unable to register Wi-Fi P2P receiver")
             }
         }

@@ -98,15 +98,20 @@ fun TacticalScannerScreen(
     var dynamicZoom by remember { mutableFloatStateOf(14.8f) }
 
     val onZoomChange: (Float) -> Unit = { zoomFactor ->
-        val newZoom = (dynamicZoom + log2(zoomFactor.toDouble()).toFloat()).coerceIn(12.0f, 21.0f)
-        dynamicZoom = newZoom
-        selectedRangeMeters = when {
-            newZoom >= 19.0f -> 25f
-            newZoom >= 17.8f -> 50f
-            newZoom >= 16.8f -> 100f
-            newZoom >= 15.5f -> 250f
-            newZoom >= 14.2f -> 500f
-            else -> 1000f
+        if (zoomFactor > 0f && !zoomFactor.isNaN() && !zoomFactor.isInfinite()) {
+            val delta = log2(zoomFactor.toDouble()).toFloat()
+            if (!delta.isNaN() && !delta.isInfinite()) {
+                val newZoom = (dynamicZoom + delta).coerceIn(12.0f, 21.0f)
+                dynamicZoom = newZoom
+                selectedRangeMeters = when {
+                    newZoom >= 19.0f -> 25f
+                    newZoom >= 17.8f -> 50f
+                    newZoom >= 16.8f -> 100f
+                    newZoom >= 15.5f -> 250f
+                    newZoom >= 14.2f -> 500f
+                    else -> 1000f
+                }
+            }
         }
     }
 
@@ -1195,11 +1200,12 @@ private fun LiveScannerRoadMapCanvas(
             .fillMaxSize()
             .pointerInput(zoom, deviceHeading) {
                 detectTransformGestures { _, pan, zoomChange, _ ->
-                    if (zoomChange != 1.0f) {
+                    if (zoomChange > 0f && zoomChange != 1.0f && !zoomChange.isNaN() && !zoomChange.isInfinite()) {
                         onZoomChange(zoomChange)
                     }
-                    if (pan.x != 0f || pan.y != 0f) {
-                        val scale = 256.0 * 2.0.pow(zoom.toDouble())
+                    if ((pan.x != 0f || pan.y != 0f) && !pan.x.isNaN() && !pan.y.isNaN()) {
+                        val safeZoom = zoom.coerceIn(12f, 21f)
+                        val scale = 256.0 * 2.0.pow(safeZoom.toDouble())
                         val rotRad = Math.toRadians(deviceHeading.toDouble())
                         // Rotate drag vector according to device heading
                         val unrotX = pan.x * cos(rotRad) - pan.y * sin(rotRad)
@@ -1207,7 +1213,9 @@ private fun LiveScannerRoadMapCanvas(
 
                         val deltaLon = -(unrotX / scale) * 360.0
                         val deltaLat = (unrotY / scale) * 180.0
-                        onPanCamera(deltaLat, deltaLon)
+                        if (!deltaLat.isNaN() && !deltaLon.isNaN()) {
+                            onPanCamera(deltaLat, deltaLon)
+                        }
                     }
                 }
             }

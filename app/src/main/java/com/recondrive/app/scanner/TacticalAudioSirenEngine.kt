@@ -68,11 +68,19 @@ class TacticalAudioSirenEngine(private val context: Context) {
 
         try {
             initAudioRecord()
-            isRunning = true
-            _telemetry.update { it.copy(isListening = true, alertMessage = "MONITORING SIREN SPECTRUM (600-1600 Hz)") }
-            startProcessingLoop()
-            Timber.i("TacticalAudioSirenEngine: Acoustic siren listener active (22,050 Hz)")
-        } catch (e: Exception) {
+            if (audioRecord?.state == AudioRecord.STATE_INITIALIZED) {
+                isRunning = true
+                _telemetry.update { it.copy(isListening = true, alertMessage = "MONITORING SIREN SPECTRUM (600-1600 Hz)") }
+                startProcessingLoop()
+                Timber.i("TacticalAudioSirenEngine: Acoustic siren listener active (22,050 Hz)")
+            } else {
+                isRunning = false
+                _telemetry.update { it.copy(isListening = false, alertMessage = "AUDIO SENSOR NOT READY") }
+                Timber.w("TacticalAudioSirenEngine: AudioRecord failed to initialize")
+            }
+        } catch (e: Throwable) {
+            isRunning = false
+            _telemetry.update { it.copy(isListening = false, alertMessage = "AUDIO SENSOR ERROR") }
             Timber.e(e, "TacticalAudioSirenEngine: Failed to initialize audio recording")
         }
     }
@@ -94,21 +102,31 @@ class TacticalAudioSirenEngine(private val context: Context) {
 
     @SuppressLint("MissingPermission")
     private fun initAudioRecord() {
-        val minBuf = AudioRecord.getMinBufferSize(
-            sampleRate,
-            AudioFormat.CHANNEL_IN_MONO,
-            AudioFormat.ENCODING_PCM_16BIT
-        )
-        val finalBuf = max(minBuf, bufferSize * 2)
+        try {
+            val minBuf = AudioRecord.getMinBufferSize(
+                sampleRate,
+                AudioFormat.CHANNEL_IN_MONO,
+                AudioFormat.ENCODING_PCM_16BIT
+            )
+            val finalBuf = max(minBuf, bufferSize * 2)
 
-        audioRecord = AudioRecord(
-            MediaRecorder.AudioSource.MIC,
-            sampleRate,
-            AudioFormat.CHANNEL_IN_MONO,
-            AudioFormat.ENCODING_PCM_16BIT,
-            finalBuf
-        )
-        audioRecord?.startRecording()
+            audioRecord = AudioRecord(
+                MediaRecorder.AudioSource.MIC,
+                sampleRate,
+                AudioFormat.CHANNEL_IN_MONO,
+                AudioFormat.ENCODING_PCM_16BIT,
+                finalBuf
+            )
+            if (audioRecord?.state == AudioRecord.STATE_INITIALIZED) {
+                audioRecord?.startRecording()
+            }
+        } catch (t: Throwable) {
+            Timber.e(t, "TacticalAudioSirenEngine: Error in initAudioRecord")
+            try {
+                audioRecord?.release()
+            } catch (_: Throwable) {}
+            audioRecord = null
+        }
     }
 
     private fun startProcessingLoop() {
@@ -116,142 +134,158 @@ class TacticalAudioSirenEngine(private val context: Context) {
             val audioBuffer = ShortArray(bufferSize)
 
             while (isActive && isRunning) {
-                val record = audioRecord ?: break
-                val readCount = record.read(audioBuffer, 0, bufferSize)
+                try {
+                    val record = audioRecord ?: break
+                    if (record.state != AudioRecord.STATE_INITIALIZED) break
+                    val readCount = record.read(audioBuffer, 0, bufferSize)
 
-                if (readCount > 0) {
-                    processAudioPcm(audioBuffer, readCount)
-                } else {
-                    delay(50)
+                    if (readCount > 0) {
+                        processAudioPcm(audioBuffer, readCount)
+                    } else {
+                        delay(50)
+                    }
+                } catch (t: Throwable) {
+                    Timber.w(t, "TacticalAudioSirenEngine: Audio loop reading exception")
+                    delay(100)
                 }
             }
         }
     }
 
     private fun processAudioPcm(samples: ShortArray, count: Int) {
-        val now = System.currentTimeMillis()
+        try {
+            val now = System.currentTimeMillis()
 
-        // 1. Calculate RMS Energy to discard near-silence
-        var sumSquares = 0.0
-        for (i in 0 until count) {
-            val s = samples[i].toDouble()
-            sumSquares += s * s
-        }
-        val rms = sqrt(sumSquares / count)
-        if (rms < 120.0) { // low background threshold
-            // Spectrum quiet
-            if (now - _telemetry.value.lastDetectedTimeMs > 3000L && _telemetry.value.isSirenDetected) {
-                _telemetry.update {
-                    it.copy(
-                        isSirenDetected = false,
-                        sirenType = "NONE",
-                        confidencePercent = 0,
-                        alertMessage = "ACOUSTIC SPECTRUM QUIET"
-                    )
-                }
+            // 1. Calculate RMS Energy to discard near-silence
+            var sumSquares = 0.0
+            for (i in 0 until count) {
+                val s = samples[i].toDouble()
+                sumSquares += s * s
             }
-            return
-        }
-
-        // 2. Multi-bin Goertzel DFT frequency estimation focused on siren band: 600 Hz to 1600 Hz
-        // Steps of 25 Hz for 41 discrete spectrum bins
-        val binStepHz = 25.0
-        var maxEnergy = 0.0
-        var peakHz = 0.0
-        var totalSirenBandEnergy = 0.0
-
-        var testHz = 600.0
-        while (testHz <= 1600.0) {
-            val energy = computeGoertzelEnergy(samples, count, testHz, sampleRate.toDouble())
-            totalSirenBandEnergy += energy
-            if (energy > maxEnergy) {
-                maxEnergy = energy
-                peakHz = testHz
-            }
-            testHz += binStepHz
-        }
-
-        // Check road noise band (100 Hz to 350 Hz): vehicles and wind rumble reside here
-        val roadNoiseEnergy = computeGoertzelEnergy(samples, count, 180.0, sampleRate.toDouble()) +
-                computeGoertzelEnergy(samples, count, 260.0, sampleRate.toDouble())
-
-        val snr = (maxEnergy / (roadNoiseEnergy + 1.0)).toFloat()
-
-        // 3. Peak Tracking & Modulation Analysis
-        if (maxEnergy > 1e7 && peakHz in 650.0..1550.0) {
-            pitchHistory.addLast(PitchSample(now, peakHz.toFloat(), snr))
-        }
-
-        // Prune history older than 5.0 seconds
-        while (pitchHistory.isNotEmpty() && (now - pitchHistory.first.timestampMs) > 5000L) {
-            pitchHistory.pollFirst()
-        }
-
-        // 4. Pattern Recognition (Yelp, Wail, Hi-Lo, Piercer)
-        if (pitchHistory.size >= 8) {
-            val recentList = pitchHistory.toList()
-            val minPitch = recentList.minOf { it.peakHz }
-            val maxPitch = recentList.maxOf { it.peakHz }
-            val pitchDelta = maxPitch - minPitch
-
-            // Siren criteria: periodic modulation with span >= 250 Hz across siren band
-            if (pitchDelta >= 280f && minPitch >= 620f && maxPitch <= 1650f) {
-                // Count frequency directional inflection reversals to determine modulation rate
-                var directionChanges = 0
-                var lastSlope = 0
-                for (i in 1 until recentList.size) {
-                    val diff = recentList[i].peakHz - recentList[i - 1].peakHz
-                    val slope = when {
-                        diff > 35f -> 1
-                        diff < -35f -> -1
-                        else -> 0
+            val rms = sqrt(sumSquares / count)
+            if (rms < 120.0) { // low background threshold
+                // Spectrum quiet
+                if (now - _telemetry.value.lastDetectedTimeMs > 3000L && _telemetry.value.isSirenDetected) {
+                    _telemetry.update {
+                        it.copy(
+                            isSirenDetected = false,
+                            sirenType = "NONE",
+                            confidencePercent = 0,
+                            alertMessage = "ACOUSTIC SPECTRUM QUIET"
+                        )
                     }
-                    if (slope != 0 && lastSlope != 0 && slope != lastSlope) {
-                        directionChanges++
-                    }
-                    if (slope != 0) lastSlope = slope
                 }
+                return
+            }
 
-                // Time span of recent samples
-                val timeSpanSec = (recentList.last().timestampMs - recentList.first().timestampMs) / 1000f
+            // 2. Multi-bin Goertzel DFT frequency estimation focused on siren band: 600 Hz to 1600 Hz
+            // Steps of 25 Hz for 41 discrete spectrum bins
+            val binStepHz = 25.0
+            var maxEnergy = 0.0
+            var peakHz = 0.0
+            var totalSirenBandEnergy = 0.0
 
-                val cyclesPerMinute = if (timeSpanSec > 0.5f) {
-                    (directionChanges / 2.0f / timeSpanSec) * 60f
-                } else 0f
-
-                val sirenType = when {
-                    cyclesPerMinute >= 160f -> "POLICE YELP"
-                    cyclesPerMinute in 12f..55f -> "POLICE/FIRE WAIL"
-                    pitchDelta in 150f..280f && abs(recentList.last().peakHz - 800f) < 150f -> "EURO HI-LO (TWO-TONE)"
-                    cyclesPerMinute > 55f -> "PRIORITY / PIERCER"
-                    else -> "EMERGENCY SIREN"
+            var testHz = 600.0
+            while (testHz <= 1600.0) {
+                val energy = computeGoertzelEnergy(samples, count, testHz, sampleRate.toDouble())
+                totalSirenBandEnergy += energy
+                if (energy > maxEnergy) {
+                    maxEnergy = energy
+                    peakHz = testHz
                 }
+                testHz += binStepHz
+            }
 
-                // 5. Doppler Direction Finding (carrier slope analysis over modulation midpoint)
-                // First half vs second half average pitch
-                val half = recentList.size / 2
-                val firstHalfAvg = recentList.take(half).map { it.peakHz }.average()
-                val secondHalfAvg = recentList.drop(half).map { it.peakHz }.average()
-                val dopplerSlope = secondHalfAvg - firstHalfAvg
+            // Check road noise band (100 Hz to 350 Hz): vehicles and wind rumble reside here
+            val roadNoiseEnergy = computeGoertzelEnergy(samples, count, 180.0, sampleRate.toDouble()) +
+                    computeGoertzelEnergy(samples, count, 260.0, sampleRate.toDouble())
 
-                val isApproaching = dopplerSlope > 18.0 // Positive shift indicates incoming Doppler compression
-                val confidence = min(98, (65 + snr * 3.5f).toInt())
+            val snr = (maxEnergy / (roadNoiseEnergy + 1.0)).toFloat()
 
-                val directionText = if (isApproaching) "APPROACHING (INCOMING)" else "RECEDING (DEPARTING)"
-                val msg = "🚨 $sirenType • $directionText (%.0f Hz)".format(peakHz)
+            // 3. Peak Tracking & Modulation Analysis
+            if (maxEnergy > 1e7 && peakHz in 650.0..1550.0) {
+                pitchHistory.addLast(PitchSample(now, peakHz.toFloat(), snr))
+            }
 
-                _telemetry.update {
-                    it.copy(
-                        isSirenDetected = true,
-                        sirenType = sirenType,
-                        isApproaching = isApproaching,
-                        confidencePercent = confidence,
-                        peakFrequencyHz = peakHz.toFloat(),
-                        alertMessage = msg,
-                        lastDetectedTimeMs = now
-                    )
+            // Prune history older than 5.0 seconds safely without NoSuchElementException
+            while (pitchHistory.isNotEmpty()) {
+                val oldest = pitchHistory.peekFirst() ?: break
+                if (now - oldest.timestampMs > 5000L) {
+                    pitchHistory.pollFirst()
+                } else {
+                    break
                 }
             }
+
+            // 4. Pattern Recognition (Yelp, Wail, Hi-Lo, Piercer)
+            if (pitchHistory.size >= 8) {
+                val recentList = pitchHistory.toList()
+                if (recentList.isEmpty()) return
+                val minPitch = recentList.minOf { it.peakHz }
+                val maxPitch = recentList.maxOf { it.peakHz }
+                val pitchDelta = maxPitch - minPitch
+
+                // Siren criteria: periodic modulation with span >= 250 Hz across siren band
+                if (pitchDelta >= 280f && minPitch >= 620f && maxPitch <= 1650f) {
+                    // Count frequency directional inflection reversals to determine modulation rate
+                    var directionChanges = 0
+                    var lastSlope = 0
+                    for (i in 1 until recentList.size) {
+                        val diff = recentList[i].peakHz - recentList[i - 1].peakHz
+                        val slope = when {
+                            diff > 35f -> 1
+                            diff < -35f -> -1
+                            else -> 0
+                        }
+                        if (slope != 0 && lastSlope != 0 && slope != lastSlope) {
+                            directionChanges++
+                        }
+                        if (slope != 0) lastSlope = slope
+                    }
+
+                    // Time span of recent samples
+                    val timeSpanSec = (recentList.last().timestampMs - recentList.first().timestampMs) / 1000f
+
+                    val cyclesPerMinute = if (timeSpanSec > 0.5f) {
+                        (directionChanges / 2.0f / timeSpanSec) * 60f
+                    } else 0f
+
+                    val sirenType = when {
+                        cyclesPerMinute >= 160f -> "POLICE YELP"
+                        cyclesPerMinute in 12f..55f -> "POLICE/FIRE WAIL"
+                        pitchDelta in 150f..280f && abs(recentList.last().peakHz - 800f) < 150f -> "EURO HI-LO (TWO-TONE)"
+                        cyclesPerMinute > 55f -> "PRIORITY / PIERCER"
+                        else -> "EMERGENCY SIREN"
+                    }
+
+                    // 5. Doppler Direction Finding (carrier slope analysis over modulation midpoint)
+                    // First half vs second half average pitch
+                    val half = recentList.size / 2
+                    val firstHalfAvg = recentList.take(half).map { it.peakHz }.average()
+                    val secondHalfAvg = recentList.drop(half).map { it.peakHz }.average()
+                    val dopplerSlope = secondHalfAvg - firstHalfAvg
+
+                    val isApproaching = dopplerSlope > 18.0 // Positive shift indicates incoming Doppler compression
+                    val confidence = min(98, (65 + snr * 3.5f).toInt())
+
+                    val directionText = if (isApproaching) "APPROACHING (INCOMING)" else "RECEDING (DEPARTING)"
+                    val msg = "🚨 $sirenType • $directionText (%.0f Hz)".format(peakHz)
+
+                    _telemetry.update {
+                        it.copy(
+                            isSirenDetected = true,
+                            sirenType = sirenType,
+                            isApproaching = isApproaching,
+                            confidencePercent = confidence,
+                            peakFrequencyHz = peakHz.toFloat(),
+                            alertMessage = msg,
+                            lastDetectedTimeMs = now
+                        )
+                    }
+                }
+            }
+        } catch (t: Throwable) {
+            Timber.w(t, "TacticalAudioSirenEngine: Error processing audio PCM")
         }
     }
 
