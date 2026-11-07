@@ -1,5 +1,14 @@
 <?xml version="1.0" encoding="utf-8"?>
 <paths>
+    <!-- Broad root paths covering any update or cache storage directory -->
+    <external-files-path name="external_files" path="." />
+    <external-cache-path name="external_cache" path="." />
+    <cache-path name="cache" path="." />
+    <files-path name="internal_files" path="." />
+    <external-path name="external" path="." />
+
+    <!-- Specific fallback subdirectories for legacy compatibility -->
+    <external-files-path name="external_files_download_updates" path="Download/updates" />
     <external-files-path name="external_files_updates" path="updates" />
     <external-cache-path name="external_cache_updates" path="updates" />
     <cache-path name="cache_updates" path="updates" />
