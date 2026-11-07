@@ -24,14 +24,14 @@ enum class HumanPresenceState {
  */
 data class CsiSensingSnapshot(
     val presenceState: HumanPresenceState = HumanPresenceState.VACANT,
-    val perturbationIndexPercent: Int = 8,      // 0% to 100% biological perturbation index
-    val confidencePercent: Int = 12,            // 0% to 99% classification confidence
-    val estimatedDistanceMeters: Float = 3.2f,  // Estimated distance to nearest human disruption
+    val perturbationIndexPercent: Int = 0,      // 0% to 100% biological perturbation index
+    val confidencePercent: Int = 0,             // 0% to 99% classification confidence
+    val estimatedDistanceMeters: Float = 0f,    // Estimated distance to nearest human disruption
     val estimatedHumanCount: Int = 0,           // 0, 1, or 2+ persons estimated in Fresnel zone
     val respirationRateBpm: Int = 0,            // Estimated breaths per minute if in micro-motion
-    val baselineCalibrated: Boolean = true,
+    val baselineCalibrated: Boolean = false,
     val waveformSamples: List<Float> = emptyList(), // Oscilloscope waveform samples (-1.0 to 1.0)
-    val statusSummary: String = "RF ENVIRONMENT VACANT • BASELINE NOMINAL"
+    val statusSummary: String = "PERSON DETECTION OFFLINE • DISABLED"
 )
 
 /**
@@ -47,7 +47,7 @@ class TacticalCsiSensingEngine(private val context: Context) {
     private val _snapshot = MutableStateFlow(CsiSensingSnapshot())
     val snapshot: StateFlow<CsiSensingSnapshot> = _snapshot.asStateFlow()
 
-    private val _isEnabled = MutableStateFlow(true)
+    private val _isEnabled = MutableStateFlow(false) // Default to OFF as requested
     val isEnabled: StateFlow<Boolean> = _isEnabled.asStateFlow()
 
     // Rolling waveform buffer (60 points for 60Hz oscilloscope render)
@@ -97,9 +97,11 @@ class TacticalCsiSensingEngine(private val context: Context) {
                 if (!_isEnabled.value) {
                     _snapshot.value = _snapshot.value.copy(
                         presenceState = HumanPresenceState.VACANT,
-                        statusSummary = "CSI SENSING PAUSED",
-                        perturbationIndexPercent = 0
+                        statusSummary = "PERSON DETECTION OFFLINE • STANDBY",
+                        perturbationIndexPercent = 0,
+                        waveformSamples = emptyList()
                     )
+                    delay(250L)
                     continue
                 }
 

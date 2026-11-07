@@ -68,6 +68,7 @@ fun TacticalScannerScreen(
     val isScannerPaused by scannerManager.isScannerPaused.collectAsState()
     val isSimulation by scannerManager.isSimulationEnabled.collectAsState()
     val csiSnapshot by csiSensingEngine.snapshot.collectAsState()
+    val isPersonDetectionEnabled by csiSensingEngine.isEnabled.collectAsState()
     val tileRevision by osmTileManager.revision.collectAsState()
 
     var selectedFilterCategory by remember { mutableStateOf<RfCategory?>(null) } // null = ALL
@@ -80,17 +81,19 @@ fun TacticalScannerScreen(
     var cameraLon by remember { mutableDoubleStateOf(currentLon) }
     var isFollowingVehicle by remember { mutableStateOf(true) }
 
-    // Range selection: Ultra close-up zoom (10m, 20m, 35m, 50m max)
-    var selectedRangeMeters by remember { mutableFloatStateOf(20f) }
+    // Range selection: Expansive Tactical Scanning (25m, 50m, 100m, 250m, 500m, 1000m / 1km max)
+    var selectedRangeMeters by remember { mutableFloatStateOf(500f) }
 
-    // Derive zoom level from range in meters (Ultra close-up zooms for driveway/curbside inspection)
+    // Derive zoom level from range in meters (Expansive radar scope as much as possible)
     val zoom = remember(selectedRangeMeters) {
         when (selectedRangeMeters) {
-            10f -> 20.0f
-            20f -> 19.2f
-            35f -> 18.5f
-            50f -> 17.8f
-            else -> 19.2f
+            25f -> 19.5f
+            50f -> 18.2f
+            100f -> 17.2f
+            250f -> 16.0f
+            500f -> 14.8f
+            1000f -> 13.5f
+            else -> 14.8f
         }
     }
 
@@ -331,118 +334,190 @@ fun TacticalScannerScreen(
         // =====================================================================
         // 2B. CSI & BEAMFORMING BIOMETRIC SENSING (HUMAN PRESENCE DETECTION)
         // =====================================================================
-        val bioColor = when (csiSnapshot.presenceState) {
-            HumanPresenceState.ACTIVE_HUMAN_TRANSIT -> ReconAmber
-            HumanPresenceState.RESPIRATION_MICRO_MOTION -> ReconGreen
-            HumanPresenceState.VACANT -> Color(0xFF1E3A4C)
-        }
-
-        Surface(
-            color = TacticalSurface,
-            shape = RoundedCornerShape(8.dp),
-            border = androidx.compose.foundation.BorderStroke(1.dp, bioColor.copy(alpha = 0.7f)),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            Column(modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)) {
+        if (!isPersonDetectionEnabled) {
+            Surface(
+                color = TacticalSurface,
+                shape = RoundedCornerShape(8.dp),
+                border = androidx.compose.foundation.BorderStroke(1.dp, TacticalBorder),
+                modifier = Modifier.fillMaxWidth()
+            ) {
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 10.dp, vertical = 6.dp),
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(5.dp),
-                        modifier = Modifier.weight(1f)
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        Box(
-                            modifier = Modifier
-                                .size(18.dp)
-                                .clip(CircleShape)
-                                .background(bioColor.copy(alpha = 0.18f))
-                                .border(1.dp, bioColor.copy(alpha = 0.7f), CircleShape),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = when (csiSnapshot.presenceState) {
-                                    HumanPresenceState.ACTIVE_HUMAN_TRANSIT -> Icons.Default.DirectionsWalk
-                                    HumanPresenceState.RESPIRATION_MICRO_MOTION -> Icons.Default.Air
-                                    HumanPresenceState.VACANT -> Icons.Default.PersonOutline
-                                },
-                                contentDescription = null,
-                                tint = if (csiSnapshot.presenceState == HumanPresenceState.VACANT) TextSecondary else bioColor,
-                                modifier = Modifier.size(11.dp)
-                            )
-                        }
-
-                        Column {
-                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                                Text(
-                                    text = "CSI & BFI BIOMETRIC SENSING",
-                                    color = ReconCyan,
-                                    fontSize = 8.5.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    fontFamily = FontFamily.Monospace
-                                )
-                                Text(
-                                    text = "• ${csiSnapshot.perturbationIndexPercent}% PERTURBATION",
-                                    color = bioColor,
-                                    fontSize = 8.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    fontFamily = FontFamily.Monospace
-                                )
-                            }
-                            Text(
-                                text = csiSnapshot.statusSummary,
-                                color = if (csiSnapshot.presenceState == HumanPresenceState.VACANT) TextSecondary else bioColor,
-                                fontSize = 8.sp,
-                                fontFamily = FontFamily.Monospace
-                            )
-                        }
+                        Icon(
+                            imageVector = Icons.Default.PersonOutline,
+                            contentDescription = null,
+                            tint = TextSecondary,
+                            modifier = Modifier.size(13.dp)
+                        )
+                        Text(
+                            text = "BIOMETRIC PERSON DETECTION: OFF",
+                            color = TextSecondary,
+                            fontSize = 8.5.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.Monospace
+                        )
                     }
 
-                    // Calibrate noise floor button
                     Surface(
-                        color = TacticalObsidian,
+                        color = ReconCyan.copy(alpha = 0.20f),
                         shape = RoundedCornerShape(4.dp),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, TacticalBorder),
-                        modifier = Modifier.clickable { csiSensingEngine.calibrateNoiseFloor() }
+                        border = androidx.compose.foundation.BorderStroke(1.dp, ReconCyan),
+                        modifier = Modifier.clickable { csiSensingEngine.toggleSensing() }
                     ) {
                         Text(
-                            text = "CALIBRATE",
-                            color = TextSecondary,
-                            fontSize = 7.5.sp,
+                            text = "TURN ON",
+                            color = ReconCyan,
+                            fontSize = 8.sp,
                             fontWeight = FontWeight.Bold,
                             fontFamily = FontFamily.Monospace,
-                            modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
+                            modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp)
                         )
                     }
                 }
+            }
+        } else {
+            val bioColor = when (csiSnapshot.presenceState) {
+                HumanPresenceState.ACTIVE_HUMAN_TRANSIT -> ReconAmber
+                HumanPresenceState.RESPIRATION_MICRO_MOTION -> ReconGreen
+                HumanPresenceState.VACANT -> Color(0xFF1E3A4C)
+            }
 
-                // Live Multi-Path Perturbation Waveform Canvas (Subcarrier ripple)
-                Spacer(modifier = Modifier.height(3.dp))
-                Canvas(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(16.dp)
-                        .clip(RoundedCornerShape(3.dp))
-                        .background(TacticalObsidian)
-                ) {
-                    val samples = csiSnapshot.waveformSamples
-                    if (samples.size >= 2) {
-                        val stepX = size.width / (samples.size - 1)
-                        val midY = size.height / 2f
-                        val path = Path()
+            Surface(
+                color = TacticalSurface,
+                shape = RoundedCornerShape(8.dp),
+                border = androidx.compose.foundation.BorderStroke(1.dp, bioColor.copy(alpha = 0.7f)),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(5.dp),
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .size(18.dp)
+                                    .clip(CircleShape)
+                                    .background(bioColor.copy(alpha = 0.18f))
+                                    .border(1.dp, bioColor.copy(alpha = 0.7f), CircleShape),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = when (csiSnapshot.presenceState) {
+                                        HumanPresenceState.ACTIVE_HUMAN_TRANSIT -> Icons.Default.DirectionsWalk
+                                        HumanPresenceState.RESPIRATION_MICRO_MOTION -> Icons.Default.Air
+                                        HumanPresenceState.VACANT -> Icons.Default.PersonOutline
+                                    },
+                                    contentDescription = null,
+                                    tint = if (csiSnapshot.presenceState == HumanPresenceState.VACANT) TextSecondary else bioColor,
+                                    modifier = Modifier.size(11.dp)
+                                )
+                            }
 
-                        for ((idx, sample) in samples.withIndex()) {
-                            val x = idx * stepX
-                            val y = midY - (sample * (midY * 0.85f))
-                            if (idx == 0) path.moveTo(x, y) else path.lineTo(x, y)
+                            Column {
+                                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    Text(
+                                        text = "CSI & BFI BIOMETRIC SENSING",
+                                        color = ReconCyan,
+                                        fontSize = 8.5.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        fontFamily = FontFamily.Monospace
+                                    )
+                                    Text(
+                                        text = "• ${csiSnapshot.perturbationIndexPercent}% PERTURBATION",
+                                        color = bioColor,
+                                        fontSize = 8.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        fontFamily = FontFamily.Monospace
+                                    )
+                                }
+                                Text(
+                                    text = csiSnapshot.statusSummary,
+                                    color = if (csiSnapshot.presenceState == HumanPresenceState.VACANT) TextSecondary else bioColor,
+                                    fontSize = 8.sp,
+                                    fontFamily = FontFamily.Monospace
+                                )
+                            }
                         }
 
-                        drawPath(path = path, color = bioColor, style = Stroke(width = 1.4f))
+                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp), verticalAlignment = Alignment.CenterVertically) {
+                            // Calibrate noise floor button
+                            Surface(
+                                color = TacticalObsidian,
+                                shape = RoundedCornerShape(4.dp),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, TacticalBorder),
+                                modifier = Modifier.clickable { csiSensingEngine.calibrateNoiseFloor() }
+                            ) {
+                                Text(
+                                    text = "CALIBRATE",
+                                    color = TextSecondary,
+                                    fontSize = 7.5.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    fontFamily = FontFamily.Monospace,
+                                    modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
+                                )
+                            }
+
+                            // Turn Off button
+                            Surface(
+                                color = TacticalObsidian,
+                                shape = RoundedCornerShape(4.dp),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, TacticalBorder),
+                                modifier = Modifier.clickable { csiSensingEngine.toggleSensing() }
+                            ) {
+                                Text(
+                                    text = "TURN OFF",
+                                    color = Color(0xFFFF5252),
+                                    fontSize = 7.5.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    fontFamily = FontFamily.Monospace,
+                                    modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
+                                )
+                            }
+                        }
+                    }
+
+                    // Live Multi-Path Perturbation Waveform Canvas (Subcarrier ripple)
+                    Spacer(modifier = Modifier.height(3.dp))
+                    Canvas(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(16.dp)
+                            .clip(RoundedCornerShape(3.dp))
+                            .background(TacticalObsidian)
+                    ) {
+                        val samples = csiSnapshot.waveformSamples
+                        if (samples.size >= 2) {
+                            val stepX = size.width / (samples.size - 1)
+                            val midY = size.height / 2f
+                            val path = Path()
+
+                            for ((idx, sample) in samples.withIndex()) {
+                                val x = idx * stepX
+                                val y = midY - (sample * (midY * 0.85f))
+                                if (idx == 0) path.moveTo(x, y) else path.lineTo(x, y)
+                            }
+
+                            drawPath(path = path, color = bioColor, style = Stroke(width = 1.4f))
+                        }
                     }
                 }
             }
+        }
         }
 
         Spacer(modifier = Modifier.height(4.dp))
@@ -470,6 +545,7 @@ fun TacticalScannerScreen(
                 rangeMeters = selectedRangeMeters,
                 targets = filteredTargets,
                 csiSnapshot = csiSnapshot,
+                isPersonDetectionEnabled = isPersonDetectionEnabled,
                 osmTileManager = osmTileManager,
                 tileRevision = tileRevision,
                 selectedTargetId = selectedTargetId,
@@ -504,7 +580,7 @@ fun TacticalScannerScreen(
                                 .background(if (isScannerPaused) ReconAmber else ReconGreen)
                         )
                         Text(
-                            text = "RNG: ${selectedRangeMeters.toInt()}m • Z${"%.1f".format(zoom)}",
+                            text = "RNG: ${if (selectedRangeMeters >= 1000f) "1km" else "${selectedRangeMeters.toInt()}m"} • Z${"%.1f".format(zoom)}",
                             color = ReconCyan,
                             fontSize = 9.sp,
                             fontWeight = FontWeight.Bold,
@@ -520,7 +596,7 @@ fun TacticalScannerScreen(
                 }
             }
 
-            // Top-Right Quick Range Selector (10m, 20m, 35m, 50m max)
+            // Top-Right Quick Range Selector (Expansive: 25m, 50m, 100m, 250m, 500m, 1km)
             Row(
                 modifier = Modifier
                     .align(Alignment.TopEnd)
@@ -528,7 +604,7 @@ fun TacticalScannerScreen(
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                listOf(10f, 20f, 35f, 50f).forEach { r ->
+                listOf(25f, 50f, 100f, 250f, 500f, 1000f).forEach { r ->
                     val isSelected = selectedRangeMeters == r
                     Surface(
                         color = if (isSelected) ReconCyan.copy(alpha = 0.25f) else TacticalObsidian.copy(alpha = 0.85f),
@@ -537,7 +613,7 @@ fun TacticalScannerScreen(
                         modifier = Modifier.clickable { selectedRangeMeters = r }
                     ) {
                         Text(
-                            text = "${r.toInt()}m",
+                            text = if (r >= 1000f) "1km" else "${r.toInt()}m",
                             color = if (isSelected) ReconCyan else TextSecondary,
                             fontSize = 8.sp,
                             fontWeight = FontWeight.Bold,
@@ -762,6 +838,7 @@ private fun LiveScannerRoadMapCanvas(
     rangeMeters: Float,
     targets: List<DetectedRfTarget>,
     csiSnapshot: CsiSensingSnapshot,
+    isPersonDetectionEnabled: Boolean = false,
     osmTileManager: OsmTileManager,
     tileRevision: Int,
     selectedTargetId: String?,
@@ -1005,7 +1082,7 @@ private fun LiveScannerRoadMapCanvas(
             // -----------------------------------------------------------------
             // 3. CSI BIOMETRIC FRESNEL WAVE RIPPLES (HUMAN PRESENCE FIELD)
             // -----------------------------------------------------------------
-            if (csiSnapshot.presenceState != HumanPresenceState.VACANT) {
+            if (isPersonDetectionEnabled && csiSnapshot.presenceState != HumanPresenceState.VACANT) {
                 val fresnelColor = if (csiSnapshot.presenceState == HumanPresenceState.ACTIVE_HUMAN_TRANSIT) ReconAmber else ReconGreen
                 val bioRadius = maxScopeRadius * 0.28f * pulseScale
                 drawCircle(
