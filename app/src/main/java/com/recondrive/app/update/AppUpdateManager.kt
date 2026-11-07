@@ -29,10 +29,34 @@ import java.net.URL
  */
 class AppUpdateManager(private val context: Context) {
 
+    private val prefs = context.getSharedPreferences("recondrive_app_update_prefs", Context.MODE_PRIVATE)
     private val scope = CoroutineScope(Dispatchers.Main)
 
     private val _updateState = MutableStateFlow<UpdateState>(UpdateState.Idle)
     val updateState: StateFlow<UpdateState> = _updateState.asStateFlow()
+
+    val skippedVersion: String?
+        get() = prefs.getString(KEY_SKIPPED_APP_VERSION, null)
+
+    /**
+     * Checks whether device currently has active internet connectivity.
+     */
+    fun isNetworkConnected(): Boolean {
+        val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as? android.net.ConnectivityManager
+            ?: return false
+        val activeNetwork = connectivityManager.activeNetwork ?: return false
+        val capabilities = connectivityManager.getNetworkCapabilities(activeNetwork) ?: return false
+        return capabilities.hasCapability(android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET)
+    }
+
+    /**
+     * Records that the user has chosen to skip this release.
+     */
+    fun skipUpdate(release: ReleaseInfo) {
+        Timber.i("User skipped app update: ${release.tagName}")
+        prefs.edit().putString(KEY_SKIPPED_APP_VERSION, release.tagName).apply()
+        _updateState.value = UpdateState.Idle
+    }
 
     val currentVersionName: String
         get() = try {
@@ -52,6 +76,12 @@ class AppUpdateManager(private val context: Context) {
      * Query GitHub Releases API for the latest published release.
      */
     fun checkForUpdates(isManual: Boolean = false) {
+        if (!isNetworkConnected()) {
+            Timber.i("App Updater: No network detected. Skipping automated update check.")
+            _updateState.value = UpdateState.Idle
+            return
+        }
+
         if (_updateState.value is UpdateState.Checking || _updateState.value is UpdateState.Downloading) {
             return
         }
@@ -69,12 +99,16 @@ class AppUpdateManager(private val context: Context) {
                     return@launch
                 }
 
-                if (releaseInfo.isNewerThanCurrent) {
+                val isSkipped = !isManual && releaseInfo.tagName == skippedVersion
+                if (releaseInfo.isNewerThanCurrent && !isSkipped) {
                     Timber.i("Update Available: Remote ${releaseInfo.tagName} > Local $currentVersionName")
                     _updateState.value = UpdateState.UpdateAvailable(
                         release = releaseInfo,
                         currentVersion = currentVersionName
                     )
+                } else if (releaseInfo.isNewerThanCurrent && isSkipped) {
+                    Timber.i("Update ${releaseInfo.tagName} available but previously skipped by user.")
+                    _updateState.value = UpdateState.Idle
                 } else {
                     Timber.i("ReconDrive is up to date ($currentVersionName)")
                     _updateState.value = UpdateState.UpToDate(
@@ -341,6 +375,7 @@ class AppUpdateManager(private val context: Context) {
 
     companion object {
         const val GITHUB_REPO = "CharlesLennon/recondrive"
+        private const val KEY_SKIPPED_APP_VERSION = "pref_skipped_app_version"
 
         /**
          * Cleans version strings like "v1.0.0-tactical" -> "1.0.0"

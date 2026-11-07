@@ -32,6 +32,7 @@ fun TacticalHudScreen(
     stats: ExplorationStats,
     skinManager: SkinManager,
     updateManager: AppUpdateManager = com.recondrive.app.ReconApplication.instance.updateManager,
+    osmMapUpdateManager: com.recondrive.app.map.OsmMapUpdateManager = com.recondrive.app.ReconApplication.instance.osmMapUpdateManager,
     fogPreferences: com.recondrive.app.fog.FogPreferences = com.recondrive.app.ReconApplication.instance.fogPreferences,
     currentSpeedKmh: Float = 48f,
     currentHeading: Float = 45f,
@@ -43,13 +44,23 @@ fun TacticalHudScreen(
 ) {
     var showSkinDialog by remember { mutableStateOf(false) }
     var showUpdateDialog by remember { mutableStateOf(false) }
+    var showSyncDialog by remember { mutableStateOf(false) }
 
     val mapSkin by skinManager.currentMapSkin.collectAsState()
     val fogSkin by skinManager.currentFogSkin.collectAsState()
     val currentRange by fogPreferences.fogRangeMeters.collectAsState()
     val currentOpacity by fogPreferences.fogOpacity.collectAsState()
     val updateState by updateManager.updateState.collectAsState()
+    val mapUpdateState by osmMapUpdateManager.mapUpdateState.collectAsState()
     val isServiceRunning by com.recondrive.app.service.ExplorationTrackingService.isRunning.collectAsState()
+
+    if (showSyncDialog) {
+        TacticalStartupUpdateDialog(
+            appUpdateManager = updateManager,
+            osmMapUpdateManager = osmMapUpdateManager,
+            onDismiss = { showSyncDialog = false }
+        )
+    }
 
     if (showSkinDialog) {
         SkinSelectorDialog(
@@ -105,7 +116,7 @@ fun TacticalHudScreen(
                         color = TacticalSurface,
                         shape = RoundedCornerShape(4.dp),
                         border = androidx.compose.foundation.BorderStroke(1.dp, ReconAmber),
-                        modifier = Modifier.clickable { showUpdateDialog = true }
+                        modifier = Modifier.clickable { showSyncDialog = true }
                     ) {
                         Row(
                             modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
@@ -125,6 +136,42 @@ fun TacticalHudScreen(
                                     else -> "UPDATE"
                                 },
                                 color = ReconAmber,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                fontFamily = FontFamily.Monospace
+                            )
+                        }
+                    }
+                }
+
+                // UK OpenStreetMap Data Update Button (ONLY visible when new OSM data is available)
+                val isMapUpdateAvailable = mapUpdateState is com.recondrive.app.map.MapUpdateState.UpdateAvailable
+                val isMapDownloading = mapUpdateState is com.recondrive.app.map.MapUpdateState.Downloading
+                if (isMapUpdateAvailable || isMapDownloading) {
+                    Surface(
+                        color = TacticalSurface,
+                        shape = RoundedCornerShape(4.dp),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, ReconGreen),
+                        modifier = Modifier.clickable { showSyncDialog = true }
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Map,
+                                contentDescription = "Map Updates",
+                                tint = ReconGreen,
+                                modifier = Modifier.size(14.dp)
+                            )
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(
+                                text = when (val s = mapUpdateState) {
+                                    is com.recondrive.app.map.MapUpdateState.UpdateAvailable -> "MAP UPDATE"
+                                    is com.recondrive.app.map.MapUpdateState.Downloading -> "MAP: ${s.progressPercent}%"
+                                    else -> "OSM DATA"
+                                },
+                                color = ReconGreen,
                                 fontSize = 10.sp,
                                 fontWeight = FontWeight.Bold,
                                 fontFamily = FontFamily.Monospace

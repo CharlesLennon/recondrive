@@ -69,6 +69,14 @@ ReconDrive tracks and burns away Fog of War **around the clock**, even when the 
 
 ---
 
+### 7. Startup Network Sync & Update Prompt (UK OSM Data & App Builds)
+On each app launch, ReconDrive checks for network connectivity. When connected, it audits both the latest OpenStreetMap UK vector cartography and remote application releases. Users can update map data or skip, update the application build or skip, or proceed directly to navigation:
+
+![Startup Update & Sync Dialog](screenshots/screenshot_08_startup_update_sync_dialog.png)
+*Fig 8. Coordinated startup sync modal presenting independent Update & Skip controls for UK OpenStreetMap extracts and official GitHub application releases.*
+
+---
+
 ## 📸 Architecture & Design Overview
 
 ```

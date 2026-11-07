@@ -31,6 +31,7 @@ import com.recondrive.app.ui.screens.InteractiveMapScreen
 import com.recondrive.app.ui.screens.OfflineRegionsDialog
 import com.recondrive.app.ui.screens.SkinSelectorDialog
 import com.recondrive.app.ui.screens.TacticalHudScreen
+import com.recondrive.app.ui.screens.TacticalStartupUpdateDialog
 import com.recondrive.app.ui.theme.ReconCyan
 import com.recondrive.app.ui.theme.ReconDriveTheme
 import com.recondrive.app.ui.theme.TacticalObsidian
@@ -102,15 +103,39 @@ class MainActivity : ComponentActivity() {
 
         checkAndRequestPermissions()
 
-        // Background query to GitHub Releases for newest APK updates
-        ReconApplication.instance.updateManager.checkForUpdates(isManual = false)
+        // Coordinated Startup Network & Updates Check (App Releases & UK OSM Data)
+        if (ReconApplication.instance.osmMapUpdateManager.isNetworkConnected()) {
+            Timber.i("Startup network online: Auditing App and UK OSM Map updates")
+            ReconApplication.instance.updateManager.checkForUpdates(isManual = false)
+            ReconApplication.instance.osmMapUpdateManager.checkForMapUpdates(isManual = false)
+        } else {
+            Timber.i("Startup: No network connection detected. Operating in full tactical offline mode.")
+        }
 
         setContent {
             ReconDriveTheme {
                 val stats by ReconApplication.instance.fogGridManager.stats.collectAsState()
+                val appUpdateState by ReconApplication.instance.updateManager.updateState.collectAsState()
+                val mapUpdateState by ReconApplication.instance.osmMapUpdateManager.mapUpdateState.collectAsState()
+
                 var selectedTab by remember { mutableIntStateOf(0) } // 0 = HUD, 1 = MAP
                 var showSkinsDialog by remember { mutableStateOf(false) }
                 var showOfflineDialog by remember { mutableStateOf(false) }
+                var hasDismissedStartupSync by remember { mutableStateOf(false) }
+
+                // Check if either an app update or map update is available and not yet dismissed
+                val isStartupSyncAvailable = !hasDismissedStartupSync && (
+                    appUpdateState is com.recondrive.app.update.UpdateState.UpdateAvailable ||
+                    mapUpdateState is com.recondrive.app.map.MapUpdateState.UpdateAvailable
+                )
+
+                if (isStartupSyncAvailable) {
+                    TacticalStartupUpdateDialog(
+                        appUpdateManager = ReconApplication.instance.updateManager,
+                        osmMapUpdateManager = ReconApplication.instance.osmMapUpdateManager,
+                        onDismiss = { hasDismissedStartupSync = true }
+                    )
+                }
 
                 if (showSkinsDialog) {
                     SkinSelectorDialog(

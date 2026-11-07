@@ -26,6 +26,9 @@ class ReconApplication : Application() {
     lateinit var updateManager: com.recondrive.app.update.AppUpdateManager
         private set
 
+    lateinit var osmMapUpdateManager: com.recondrive.app.map.OsmMapUpdateManager
+        private set
+
     override fun onCreate() {
         super.onCreate()
         
@@ -46,6 +49,7 @@ class ReconApplication : Application() {
         fogPreferences = com.recondrive.app.fog.FogPreferences(this)
         skinManager = com.recondrive.app.skin.SkinManager(this)
         offlineTileRepository = OfflineTileRepository(this)
+        osmMapUpdateManager = com.recondrive.app.map.OsmMapUpdateManager(this, offlineTileRepository)
         fogGridManager = FogGridManager(this, fogPreferences)
     }
 

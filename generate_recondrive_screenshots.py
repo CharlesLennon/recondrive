@@ -891,6 +891,116 @@ def generate_screenshot_07():
     print(f"Saved: {out_path} ({os.path.getsize(out_path)} bytes)")
 
 
+# ==============================================================================
+# 8. SCREENSHOT 08: STARTUP NETWORK & UPDATE SYNC DIALOG (800 x 1200)
+# ==============================================================================
+
+def generate_screenshot_08():
+    print("Generating Screenshot 08: Startup Update & Sync Dialog...")
+    W, H = 800, 1200
+    img = Image.new('RGB', (W, H), '#080B10')
+    draw = ImageDraw.Draw(img)
+
+    # 1. Dimmed Background Tactical Map & HUD
+    draw.rectangle([(0, 0), (W, 40)], fill='#05070A')
+    draw.text((24, 12), "10:45", fill='#484F58', font=FONT_HEAD)
+    draw.text((W - 140, 12), "5G  94% 🔋", fill='#30363D', font=FONT_SUB)
+
+    # Background roads (dimmed)
+    draw.line([(0, 200), (W, 500)], fill='#121721', width=4)
+    draw.line([(100, 0), (700, H)], fill='#121721', width=3)
+    draw.line([(0, 700), (W, 300)], fill='#161B22', width=6)
+
+    # 2. Centered Modal Dialog
+    dw, dh = 720, 920
+    dx, dy = (W - dw) // 2, (H - dh) // 2
+
+    # Modal shadow / glow
+    draw.rounded_rectangle([(dx - 4, dy - 4), (dx + dw + 4, dy + dh + 4)], radius=18, fill='#00E5FF11')
+    draw.rounded_rectangle([(dx, dy), (dx + dw, dy + dh)], radius=16, fill='#0D1117', outline='#00E5FF', width=2)
+
+    # Dialog Header
+    draw.text((dx + 28, dy + 28), "TACTICAL SYSTEM SYNC", fill='#00E5FF', font=FONT_TITLE)
+    draw.text((dx + 28, dy + 58), "Network Online • Auto-Audited Releases & Vector Datasets", fill='#8B949E', font=FONT_MONO_SM)
+
+    # Close Icon
+    draw.text((dx + dw - 48, dy + 28), "✕", fill='#8B949E', font=FONT_TITLE)
+
+    # -------------------------------------------------------------------------
+    # CARD 1: UK OPENSTREETMAP DATA UPDATE
+    # -------------------------------------------------------------------------
+    c1_y = dy + 100
+    c1_h = 330
+    draw.rounded_rectangle([(dx + 24, c1_y), (dx + dw - 24, c1_y + c1_h)], radius=12, fill='#121721', outline='#00E676', width=1)
+
+    # Card 1 Badge
+    draw.text((dx + 44, c1_y + 18), "🗺️ UK OPENSTREETMAP DATA", fill='#00E676', font=FONT_HEAD)
+    draw.rounded_rectangle([(dx + dw - 170, c1_y + 16), (dx + dw - 44, c1_y + 40)], radius=4, fill='#00E67622', outline='#00E676', width=1)
+    draw.text((dx + dw - 160, c1_y + 22), "2026.11.07-UK", fill='#00E676', font=FONT_MONO_XS)
+
+    # Card 1 Title & Description
+    draw.text((dx + 44, c1_y + 54), "United Kingdom Complete Vector Extract", fill='#F0F6FC', font=FONT_HEAD)
+    draw.text((dx + 44, c1_y + 78), "Comprehensive road network geometries, motorways (M1, M25, M6, M4),", fill='#8B949E', font=FONT_TEXT)
+    draw.text((dx + 44, c1_y + 98), "A-road bypasses, roundabout updates, and speed limits across UK bounds.", fill='#8B949E', font=FONT_TEXT)
+
+    # Specs
+    draw.text((dx + 44, c1_y + 130), "Installed: 2026.10.15-uk-base  •  Available: 2026.11.07-uk-osm", fill='#F0F6FC', font=FONT_MONO_SM)
+    draw.text((dx + 44, c1_y + 154), "Download Size: 1,650.0 MB (Full UK Regional Pack)", fill='#00E5FF', font=FONT_MONO_SM)
+
+    # Progress bar preview
+    draw.rounded_rectangle([(dx + 44, c1_y + 190), (dx + dw - 44, c1_y + 200)], radius=5, fill='#21262D')
+    draw.rounded_rectangle([(dx + 44, c1_y + 190), (dx + 44 + int((dw - 88) * 0.42), c1_y + 200)], radius=5, fill='#00E676')
+    draw.text((dx + 44, c1_y + 210), "Unpacking vector tiles: 42% (693.0 MB / 1,650.0 MB)", fill='#00E676', font=FONT_MONO_XS)
+
+    # Action Buttons
+    btn1_y = c1_y + 250
+    draw.rounded_rectangle([(dx + 44, btn1_y), (dx + dw - 160, btn1_y + 54)], radius=8, fill='#00E676')
+    draw.text((dx + 120, btn1_y + 16), "UPDATE MAP DATA (1.65 GB)", fill='#0A0D12', font=FONT_HEAD)
+
+    draw.rounded_rectangle([(dx + dw - 144, btn1_y), (dx + dw - 44, btn1_y + 54)], radius=8, fill='#161B22', outline='#30363D', width=1)
+    draw.text((dx + dw - 110, btn1_y + 18), "SKIP", fill='#8B949E', font=FONT_HEAD)
+
+    # -------------------------------------------------------------------------
+    # CARD 2: APPLICATION BUILD UPDATE
+    # -------------------------------------------------------------------------
+    c2_y = c1_y + c1_h + 20
+    c2_h = 310
+    draw.rounded_rectangle([(dx + 24, c2_y), (dx + dw - 24, c2_y + c2_h)], radius=12, fill='#121721', outline='#FFD600', width=1)
+
+    # Card 2 Badge
+    draw.text((dx + 44, c2_y + 18), "⚡ APPLICATION UPDATE", fill='#FFD600', font=FONT_HEAD)
+    draw.rounded_rectangle([(dx + dw - 150, c2_y + 16), (dx + dw - 44, c2_y + 40)], radius=4, fill='#FFD60022', outline='#FFD600', width=1)
+    draw.text((dx + dw - 138, c2_y + 22), "BUILD v1.0.2", fill='#FFD600', font=FONT_MONO_XS)
+
+    # Card 2 Title & Description
+    draw.text((dx + 44, c2_y + 54), "ReconDrive v1.0.2 — 24/7 Background Radar Service", fill='#F0F6FC', font=FONT_HEAD)
+    draw.text((dx + 44, c2_y + 78), "Adds persistent foreground location service, live territory notification,", fill='#8B949E', font=FONT_TEXT)
+    draw.text((dx + 44, c2_y + 98), "Android 14 compatibility, and device boot auto-restart exploration.", fill='#8B949E', font=FONT_TEXT)
+
+    # Specs
+    draw.text((dx + 44, c2_y + 130), "Installed: v1.0.1  •  Available: v1.0.2  (Size: 46.7 MB)", fill='#F0F6FC', font=FONT_MONO_SM)
+    draw.text((dx + 44, c2_y + 154), "Source: GitHub Official Releases (CharlesLennon/recondrive)", fill='#00E5FF', font=FONT_MONO_SM)
+
+    # Action Buttons
+    btn2_y = c2_y + 200
+    draw.rounded_rectangle([(dx + 44, btn2_y), (dx + dw - 160, btn2_y + 54)], radius=8, fill='#FFD600')
+    draw.text((dx + 130, btn2_y + 16), "UPDATE APPLICATION (46.7 MB)", fill='#0A0D12', font=FONT_HEAD)
+
+    draw.rounded_rectangle([(dx + dw - 144, btn2_y), (dx + dw - 44, btn2_y + 54)], radius=8, fill='#161B22', outline='#30363D', width=1)
+    draw.text((dx + dw - 110, btn2_y + 18), "SKIP", fill='#8B949E', font=FONT_HEAD)
+
+    # -------------------------------------------------------------------------
+    # BOTTOM ACTION: PROCEED / SKIP ALL
+    # -------------------------------------------------------------------------
+    bot_y = c2_y + c2_h + 20
+    draw.rounded_rectangle([(dx + 24, bot_y), (dx + dw - 24, bot_y + 50)], radius=8, fill='#161B22', outline='#30363D', width=1)
+    draw.text((dx + 160, bot_y + 16), "PROCEED TO RADAR (SKIP ALL FOR NOW)", fill='#8B949E', font=FONT_HEAD)
+
+    out_path = os.path.join(OUTPUT_DIR, "screenshot_08_startup_update_sync_dialog.png")
+    img.save(out_path)
+    print(f"Saved: {out_path} ({os.path.getsize(out_path)} bytes)")
+
+
 if __name__ == '__main__':
     generate_screenshot_01()
     generate_screenshot_02()
@@ -899,4 +1009,5 @@ if __name__ == '__main__':
     generate_screenshot_05()
     generate_screenshot_06()
     generate_screenshot_07()
-    print("All 7 screenshots generated successfully!")
+    generate_screenshot_08()
+    print("All 8 screenshots generated successfully!")
