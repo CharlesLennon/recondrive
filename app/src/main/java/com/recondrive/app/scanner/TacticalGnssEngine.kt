@@ -200,7 +200,6 @@ class TacticalGnssEngine(private val context: Context) {
             Timber.i("TacticalGnssEngine: GNSS raw constellation listener registered")
         }
     }
-    }
 
     fun stop() {
         if (!isListening || locationManager == null) return
