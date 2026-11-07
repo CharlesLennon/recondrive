@@ -27,6 +27,7 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -390,6 +391,11 @@ class MainActivity : ComponentActivity() {
                                     shape = RoundedCornerShape(10.dp),
                                     border = androidx.compose.foundation.BorderStroke(1.dp, TacticalBorder),
                                     modifier = Modifier.clickable {
+                                        Toast.makeText(
+                                            this@MainActivity,
+                                            "Auditing GitHub Releases for Tactical Updates...",
+                                            Toast.LENGTH_SHORT
+                                        ).show()
                                         ReconApplication.instance.updateManager.checkForUpdates(isManual = true)
                                     }
                                 ) {
@@ -405,7 +411,7 @@ class MainActivity : ComponentActivity() {
                                         Spacer(modifier = Modifier.width(6.dp))
                                         Text(
                                             text = "RECONDRIVE v${com.recondrive.app.BuildConfig.VERSION_NAME}",
-                                            color = TextSecondary,
+                                            color = ReconCyan,
                                             fontFamily = FontFamily.Monospace,
                                             fontSize = 9.sp,
                                             fontWeight = FontWeight.Bold
@@ -708,10 +714,9 @@ class MainActivity : ComponentActivity() {
         )
     }
 
-    override fun onNewIntent(intent: Intent?) {
+    override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
-        val nfcIntent = intent ?: return
-        val scanned = ReconApplication.instance.rfScannerManager.nfcManager.processIntent(nfcIntent)
+        val scanned = ReconApplication.instance.rfScannerManager.nfcManager.processIntent(intent)
         if (scanned?.isVehicleKey == true) {
             Toast.makeText(this, "🔑 VEHICLE NFC KEY DETECTED: ${scanned.tagType}", Toast.LENGTH_SHORT).show()
         }

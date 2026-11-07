@@ -8,6 +8,11 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.detectTransformGestures
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
+import coil.compose.AsyncImage
+import coil.request.ImageRequest
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
@@ -81,6 +86,7 @@ fun TacticalScannerScreen(
     var filterSavedOnly by remember { mutableStateOf(false) }
     var selectedTargetId by remember { mutableStateOf<String?>(null) }
     var editingTarget by remember { mutableStateOf<DetectedRfTarget?>(null) }
+    var viewingCctvCamera by remember { mutableStateOf<PublicCctvCamera?>(null) }
 
     // Map viewport state
     var cameraLat by remember { mutableDoubleStateOf(currentLat) }
@@ -89,10 +95,24 @@ fun TacticalScannerScreen(
 
     // Range selection: Expansive Tactical Scanning (25m, 50m, 100m, 250m, 500m, 1000m / 1km max)
     var selectedRangeMeters by remember { mutableFloatStateOf(500f) }
+    var dynamicZoom by remember { mutableFloatStateOf(14.8f) }
 
-    // Derive zoom level from range in meters (Expansive radar scope as much as possible)
-    val zoom = remember(selectedRangeMeters) {
-        when (selectedRangeMeters) {
+    val onZoomChange: (Float) -> Unit = { zoomFactor ->
+        val newZoom = (dynamicZoom + log2(zoomFactor.toDouble()).toFloat()).coerceIn(12.0f, 21.0f)
+        dynamicZoom = newZoom
+        selectedRangeMeters = when {
+            newZoom >= 19.0f -> 25f
+            newZoom >= 17.8f -> 50f
+            newZoom >= 16.8f -> 100f
+            newZoom >= 15.5f -> 250f
+            newZoom >= 14.2f -> 500f
+            else -> 1000f
+        }
+    }
+
+    val onSelectRangePreset: (Float) -> Unit = { rangeM ->
+        selectedRangeMeters = rangeM
+        dynamicZoom = when (rangeM) {
             25f -> 19.5f
             50f -> 18.2f
             100f -> 17.2f
@@ -146,6 +166,18 @@ fun TacticalScannerScreen(
             repository = scannerManager.savedDeviceRepository,
             soundManager = scannerManager.soundManager,
             onDismiss = { editingTarget = null }
+        )
+    }
+
+    // Public CCTV Live Stream Viewer Dialog
+    viewingCctvCamera?.let { cam ->
+        PublicCctvLiveViewerDialog(
+            camera = cam,
+            onDismiss = { viewingCctvCamera = null },
+            onNavigate = {
+                onNavigateToLocation(cam.name, cam.latitude, cam.longitude)
+                viewingCctvCamera = null
+            }
         )
     }
 
@@ -732,7 +764,7 @@ fun TacticalScannerScreen(
             LiveScannerRoadMapCanvas(
                 cameraLat = cameraLat,
                 cameraLon = cameraLon,
-                zoom = zoom,
+                zoom = dynamicZoom,
                 currentLat = currentLat,
                 currentLon = currentLon,
                 currentHeading = currentHeading,
@@ -750,12 +782,25 @@ fun TacticalScannerScreen(
                     cameraLat = target.detectedLat ?: currentLat
                     cameraLon = target.detectedLon ?: currentLon
                     isFollowingVehicle = false
+                    if (target.category == RfCategory.CCTV_SURVEILLANCE) {
+                        viewingCctvCamera = scannerManager.publicCctvRepo.getCameraById(target.id)
+                            ?: PublicCctvCamera(
+                                id = target.id,
+                                name = target.displayName,
+                                locationDesc = target.details,
+                                latitude = target.detectedLat ?: currentLat,
+                                longitude = target.detectedLon ?: currentLon,
+                                operator = target.vendor,
+                                liveImageUrl = target.details.substringAfter("URL: ", "https://s3-eu-west-1.amazonaws.com/jamcams.tfl.gov.uk/00001.07355.jpg")
+                            )
+                    }
                 },
                 onPanCamera = { deltaLat, deltaLon ->
                     cameraLat += deltaLat
                     cameraLon += deltaLon
                     isFollowingVehicle = false
-                }
+                },
+                onZoomChange = onZoomChange
             )
 
             // Top-Left Floating HUD Status Box
@@ -776,7 +821,7 @@ fun TacticalScannerScreen(
                                 .background(if (isScannerPaused) ReconAmber else ReconGreen)
                         )
                         Text(
-                            text = "RNG: ${if (selectedRangeMeters >= 1000f) "1km" else "${selectedRangeMeters.toInt()}m"} • Z${"%.1f".format(zoom)}",
+                            text = "RNG: ${if (selectedRangeMeters >= 1000f) "1km" else "${selectedRangeMeters.toInt()}m"} • Z${"%.1f".format(dynamicZoom)}",
                             color = ReconCyan,
                             fontSize = 9.sp,
                             fontWeight = FontWeight.Bold,
@@ -806,7 +851,7 @@ fun TacticalScannerScreen(
                         color = if (isSelected) ReconCyan.copy(alpha = 0.25f) else TacticalObsidian.copy(alpha = 0.85f),
                         shape = RoundedCornerShape(4.dp),
                         border = androidx.compose.foundation.BorderStroke(1.dp, if (isSelected) ReconCyan else TacticalBorder),
-                        modifier = Modifier.clickable { selectedRangeMeters = r }
+                        modifier = Modifier.clickable { onSelectRangePreset(r) }
                     ) {
                         Text(
                             text = if (r >= 1000f) "1km" else "${r.toInt()}m",
@@ -815,6 +860,52 @@ fun TacticalScannerScreen(
                             fontWeight = FontWeight.Bold,
                             fontFamily = FontFamily.Monospace,
                             modifier = Modifier.padding(horizontal = 5.dp, vertical = 3.dp)
+                        )
+                    }
+                }
+            }
+
+            // Center-Right Floating Tactile Zoom Control Bar (+ and - Buttons)
+            Column(
+                modifier = Modifier
+                    .align(Alignment.CenterEnd)
+                    .padding(end = 8.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                // Zoom In Button (+)
+                Surface(
+                    color = TacticalObsidian.copy(alpha = 0.88f),
+                    shape = CircleShape,
+                    border = androidx.compose.foundation.BorderStroke(1.dp, ReconCyan.copy(alpha = 0.8f)),
+                    modifier = Modifier
+                        .size(32.dp)
+                        .clickable { onZoomChange(1.35f) }
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = Icons.Default.Add,
+                            contentDescription = "Zoom In",
+                            tint = ReconCyan,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                }
+
+                // Zoom Out Button (-)
+                Surface(
+                    color = TacticalObsidian.copy(alpha = 0.88f),
+                    shape = CircleShape,
+                    border = androidx.compose.foundation.BorderStroke(1.dp, ReconCyan.copy(alpha = 0.8f)),
+                    modifier = Modifier
+                        .size(32.dp)
+                        .clickable { onZoomChange(0.74f) }
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = Icons.Default.Remove,
+                            contentDescription = "Zoom Out",
+                            tint = ReconCyan,
+                            modifier = Modifier.size(18.dp)
                         )
                     }
                 }
@@ -974,6 +1065,19 @@ fun TacticalScannerScreen(
                                 currentLon + (target.estimatedDistanceMeters * sin(bRad)) / (111320.0 * cos(Math.toRadians(currentLat)).coerceAtLeast(0.1))
                             }
                             onNavigateToLocation(target.displayName, pinLat, pinLon)
+                        },
+                        onViewCctv = {
+                            val cam = scannerManager.publicCctvRepo.getCameraById(target.id)
+                                ?: PublicCctvCamera(
+                                    id = target.id,
+                                    name = target.displayName,
+                                    locationDesc = target.details,
+                                    latitude = target.detectedLat ?: currentLat,
+                                    longitude = target.detectedLon ?: currentLon,
+                                    operator = target.vendor,
+                                    liveImageUrl = target.details.substringAfter("URL: ", "https://s3-eu-west-1.amazonaws.com/jamcams.tfl.gov.uk/00001.07355.jpg")
+                                )
+                            viewingCctvCamera = cam
                         }
                     )
                 }
@@ -1048,7 +1152,8 @@ private fun LiveScannerRoadMapCanvas(
     tileRevision: Int,
     selectedTargetId: String?,
     onSelectTarget: (DetectedRfTarget) -> Unit,
-    onPanCamera: (deltaLat: Double, deltaLon: Double) -> Unit
+    onPanCamera: (deltaLat: Double, deltaLon: Double) -> Unit,
+    onZoomChange: (zoomFactor: Float) -> Unit = {}
 ) {
     val infiniteTransition = rememberInfiniteTransition(label = "scanner_radar")
     val sweepAngle by infiniteTransition.animateFloat(
@@ -1088,17 +1193,22 @@ private fun LiveScannerRoadMapCanvas(
     Canvas(
         modifier = Modifier
             .fillMaxSize()
-            .pointerInput(Unit) {
-                detectDragGestures { _, dragAmount ->
-                    val scale = 256.0 * 2.0.pow(zoom.toDouble())
-                    val rotRad = Math.toRadians(deviceHeading.toDouble())
-                    // Rotate drag vector according to device heading
-                    val unrotX = dragAmount.x * cos(rotRad) - dragAmount.y * sin(rotRad)
-                    val unrotY = dragAmount.x * sin(rotRad) + dragAmount.y * cos(rotRad)
+            .pointerInput(zoom, deviceHeading) {
+                detectTransformGestures { _, pan, zoomChange, _ ->
+                    if (zoomChange != 1.0f) {
+                        onZoomChange(zoomChange)
+                    }
+                    if (pan.x != 0f || pan.y != 0f) {
+                        val scale = 256.0 * 2.0.pow(zoom.toDouble())
+                        val rotRad = Math.toRadians(deviceHeading.toDouble())
+                        // Rotate drag vector according to device heading
+                        val unrotX = pan.x * cos(rotRad) - pan.y * sin(rotRad)
+                        val unrotY = pan.x * sin(rotRad) + pan.y * cos(rotRad)
 
-                    val deltaLon = -(unrotX / scale) * 360.0
-                    val deltaLat = (unrotY / scale) * 180.0
-                    onPanCamera(deltaLat, deltaLon)
+                        val deltaLon = -(unrotX / scale) * 360.0
+                        val deltaLat = (unrotY / scale) * 180.0
+                        onPanCamera(deltaLat, deltaLon)
+                    }
                 }
             }
             .pointerInput(targets, cameraLat, cameraLon, zoom, deviceHeading) {
@@ -1643,7 +1753,8 @@ private fun RfTargetHorizontalCard(
     isSelected: Boolean,
     onSelect: () -> Unit,
     onEditIntel: () -> Unit,
-    onPinToMap: () -> Unit
+    onPinToMap: () -> Unit,
+    onViewCctv: () -> Unit = {}
 ) {
     val isSaved = target.savedMetadata != null
     val categoryColor = when {
@@ -1819,6 +1930,25 @@ private fun RfTargetHorizontalCard(
                 }
 
                 Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    // Live CCTV Stream Viewer Button
+                    if (target.category == RfCategory.CCTV_SURVEILLANCE) {
+                        Surface(
+                            color = Color(0xFFFF5252).copy(alpha = 0.2f),
+                            shape = RoundedCornerShape(4.dp),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFFF5252)),
+                            modifier = Modifier.clickable { onViewCctv() }
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(2.dp)
+                            ) {
+                                Icon(imageVector = Icons.Default.Videocam, contentDescription = "Feed", tint = Color(0xFFFF5252), modifier = Modifier.size(10.dp))
+                                Text(text = "FEED", color = Color(0xFFFF5252), fontSize = 8.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
+                            }
+                        }
+                    }
+
                     // Edit Intel Button (Number plate, Door #, Group, Custom Sound)
                     Surface(
                         color = ReconCyan.copy(alpha = 0.15f),
@@ -1879,4 +2009,251 @@ private fun SignalStrengthBars(bars: Int, color: Color) {
             )
         }
     }
+}
+
+/**
+ * High-Tech Tactical Dialog displaying Public CCTV live stream snapshot / camera feed.
+ */
+@Composable
+private fun PublicCctvLiveViewerDialog(
+    camera: PublicCctvCamera,
+    onDismiss: () -> Unit,
+    onNavigate: () -> Unit
+) {
+    var refreshNonce by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    var isImageLoading by remember { mutableStateOf(true) }
+
+    val infiniteTransition = rememberInfiniteTransition(label = "cctv_live_pulse")
+    val liveAlpha by infiniteTransition.animateFloat(
+        initialValue = 0.4f,
+        targetValue = 1.0f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(800, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "cctv_live_alpha"
+    )
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = TacticalObsidian,
+        titleContentColor = TextPrimary,
+        textContentColor = TextSecondary,
+        shape = RoundedCornerShape(12.dp),
+        title = {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(10.dp)
+                            .clip(CircleShape)
+                            .background(Color.Red.copy(alpha = liveAlpha))
+                    )
+                    Text(
+                        text = "PUBLIC CCTV // LIVE STREAM",
+                        color = Color(0xFFFF5252),
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace,
+                        letterSpacing = 0.5.sp
+                    )
+                }
+
+                Surface(
+                    color = Color.Red.copy(alpha = 0.15f),
+                    shape = RoundedCornerShape(4.dp),
+                    border = androidx.compose.foundation.BorderStroke(0.8.dp, Color.Red)
+                ) {
+                    Text(
+                        text = "PUBLIC ACCESS",
+                        color = Color(0xFFFF5252),
+                        fontSize = 7.5.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace,
+                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+                    )
+                }
+            }
+        },
+        text = {
+            Column(
+                modifier = Modifier.fillMaxWidth(),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                // Camera Header & Operator
+                Column {
+                    Text(
+                        text = camera.name,
+                        color = TextPrimary,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace
+                    )
+                    Text(
+                        text = "${camera.operator} • ${camera.locationDesc}",
+                        color = ReconCyan,
+                        fontSize = 9.sp,
+                        fontFamily = FontFamily.Monospace
+                    )
+                }
+
+                // Live Camera Image Viewport
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(200.dp)
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(Color.Black)
+                        .border(1.dp, TacticalBorder, RoundedCornerShape(8.dp)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    if (camera.liveImageUrl != null) {
+                        val imageUrl = if (camera.liveImageUrl.contains("?")) {
+                            "${camera.liveImageUrl}&_t=$refreshNonce"
+                        } else {
+                            "${camera.liveImageUrl}?_t=$refreshNonce"
+                        }
+
+                        AsyncImage(
+                            model = ImageRequest.Builder(LocalContext.current)
+                                .data(imageUrl)
+                                .crossfade(true)
+                                .listener(
+                                    onStart = { isImageLoading = true },
+                                    onSuccess = { _, _ -> isImageLoading = false },
+                                    onError = { _, _ -> isImageLoading = false }
+                                )
+                                .build(),
+                            contentDescription = camera.name,
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
+
+                    if (isImageLoading) {
+                        CircularProgressIndicator(
+                            color = Color(0xFFFF5252),
+                            strokeWidth = 2.dp,
+                            modifier = Modifier.size(28.dp)
+                        )
+                    }
+
+                    // Tactical Crosshairs / Overlay
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(6.dp),
+                        verticalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                text = "CAM: ${camera.id}",
+                                color = Color.White.copy(alpha = 0.8f),
+                                fontSize = 8.sp,
+                                fontFamily = FontFamily.Monospace
+                            )
+                            Text(
+                                text = "LIVE SNAPSHOT",
+                                color = Color.Red,
+                                fontSize = 8.sp,
+                                fontWeight = FontWeight.Bold,
+                                fontFamily = FontFamily.Monospace
+                            )
+                        }
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                text = "COORDS: ${"%.4f".format(camera.latitude)}, ${"%.4f".format(camera.longitude)}",
+                                color = Color.White.copy(alpha = 0.8f),
+                                fontSize = 7.5.sp,
+                                fontFamily = FontFamily.Monospace
+                            )
+                            camera.viewDirectionDeg?.let { dir ->
+                                Text(
+                                    text = "DIR: ${dir.toInt()}°",
+                                    color = ReconCyan,
+                                    fontSize = 7.5.sp,
+                                    fontFamily = FontFamily.Monospace
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // Spatial / Geo Coordinates & Status
+                Surface(
+                    color = TacticalSurface,
+                    shape = RoundedCornerShape(6.dp),
+                    border = androidx.compose.foundation.BorderStroke(0.8.dp, TacticalBorder),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(6.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                        Text(
+                            text = "LOCATION: ${camera.locationDesc}",
+                            color = TextSecondary,
+                            fontSize = 8.sp,
+                            fontFamily = FontFamily.Monospace
+                        )
+                        Text(
+                            text = "SECURITY STATUS: UNRESTRICTED PUBLIC SURVEILLANCE FEED",
+                            color = ReconGreen,
+                            fontSize = 7.5.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.Monospace
+                        )
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                // Refresh Stream Button
+                Button(
+                    onClick = {
+                        refreshNonce = System.currentTimeMillis()
+                        isImageLoading = true
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = TacticalSurface),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, ReconCyan),
+                    shape = RoundedCornerShape(6.dp),
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+                ) {
+                    Icon(imageVector = Icons.Default.Refresh, contentDescription = "Refresh", tint = ReconCyan, modifier = Modifier.size(12.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(text = "REFRESH", color = ReconCyan, fontSize = 9.sp, fontFamily = FontFamily.Monospace)
+                }
+
+                // Navigate / Pin Button
+                Button(
+                    onClick = onNavigate,
+                    colors = ButtonDefaults.buttonColors(containerColor = ReconCyan.copy(alpha = 0.2f)),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, ReconCyan),
+                    shape = RoundedCornerShape(6.dp),
+                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+                ) {
+                    Icon(imageVector = Icons.Default.Navigation, contentDescription = "Navigate", tint = ReconCyan, modifier = Modifier.size(12.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(text = "NAVIGATE", color = ReconCyan, fontSize = 9.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
+                }
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text(text = "CLOSE", color = TextSecondary, fontSize = 9.sp, fontFamily = FontFamily.Monospace)
+            }
+        }
+    )
 }

@@ -1300,7 +1300,10 @@ fun InteractiveMapScreen(
                         color = if (isFogLayerActive) Color(fogSkin.perimeterGlowColor) else TextSecondary,
                         fontSize = 9.sp,
                         fontFamily = FontFamily.Monospace,
-                        fontWeight = FontWeight.Bold
+                        fontWeight = FontWeight.Bold,
+                        modifier = Modifier.clickable {
+                            com.recondrive.app.ReconApplication.instance.updateManager.checkForUpdates(isManual = true)
+                        }
                     )
                 }
             }

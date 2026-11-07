@@ -110,6 +110,7 @@ class TacticalRfScannerManager(
     val nfcManager: TacticalNfcManager = TacticalNfcManager(context)
     val gnssEngine: TacticalGnssEngine = TacticalGnssEngine(context)
     val wifiRttEngine: TacticalWifiRttEngine = TacticalWifiRttEngine(context)
+    val publicCctvRepo: TacticalPublicCctvRepository = TacticalPublicCctvRepository(context)
 
     init {
         nfcManager.onVehicleKeyDetected = { scanned ->
@@ -284,10 +285,46 @@ class TacticalRfScannerManager(
         val distMoved = hypot(lat - prevLat, lon - prevLon) * 111320.0
         if (!hasReceivedRealLocation || distMoved > 40.0) {
             hasReceivedRealLocation = true
+            ingestPublicCctvCameras(lat, lon, heading)
             if (_isSimulationEnabled.value) {
                 populateTacticalSimulationTargets(lat, lon)
             }
         }
+    }
+
+    private fun ingestPublicCctvCameras(lat: Double, lon: Double, heading: Float) {
+        val nearCams = publicCctvRepo.getCamerasNearLocation(lat, lon, 35000.0)
+        for ((cam, dist) in nearCams) {
+            val dLatM = (cam.latitude - lat) * 111320.0
+            val dLonM = (cam.longitude - lon) * 111320.0 * cos(Math.toRadians(lat))
+            var worldAngle = Math.toDegrees(atan2(dLonM, dLatM)).toFloat()
+            if (worldAngle < 0f) worldAngle += 360f
+            val relBearing = (worldAngle - heading + 360f) % 360f
+
+            val target = DetectedRfTarget(
+                id = cam.id,
+                name = "📷 ${cam.name}",
+                rawSsidOrBleName = "PUBLIC_CCTV_CAM",
+                macAddress = cam.id,
+                vendor = cam.operator,
+                category = RfCategory.CCTV_SURVEILLANCE,
+                rssi = (-45 - (dist / 100.0).toInt()).coerceIn(-95, -30),
+                estimatedDistanceMeters = dist,
+                frequencyMhz = 2412,
+                protocol = "PUBLIC ACCESS CCTV (LIVE STREAM)",
+                threatLevel = "OPEN PUBLIC TRAFFIC & SECURITY CAMERA",
+                details = "${cam.locationDesc} • Operator: ${cam.operator} • URL: ${cam.liveImageUrl ?: "Active Feed"}",
+                timestamp = System.currentTimeMillis(),
+                detectedLat = cam.latitude,
+                detectedLon = cam.longitude,
+                relativeBearingDeg = relBearing,
+                locationHistory = emptyList(),
+                motionTrend = RelativeMotionTrend.APPROACHING,
+                savedMetadata = savedDeviceRepository.getDevice(cam.id)
+            )
+            targetMap[cam.id] = target
+        }
+        syncTargetsToFlow()
     }
 
     /**
