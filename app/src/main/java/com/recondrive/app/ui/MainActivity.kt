@@ -133,6 +133,12 @@ class MainActivity : ComponentActivity() {
                 var targetWaypoint by remember { mutableStateOf<Pair<Double, Double>?>(null) }
                 var targetWaypointName by remember { mutableStateOf<String?>(null) }
 
+                LaunchedEffect(Unit) {
+                    ReconApplication.instance.rfScannerManager.nfcManager.onAutoDockTriggered = {
+                        selectedTab = 0 // Auto-dock directly to Cockpit HUD
+                    }
+                }
+
                 // Full-Screen Tactical Update Overlay when downloading, ready to install, or installing
                 val isFullScreenUpdateActive = appUpdateState is com.recondrive.app.update.UpdateState.Downloading ||
                     appUpdateState is com.recondrive.app.update.UpdateState.ReadyToInstall ||
@@ -440,7 +446,8 @@ class MainActivity : ComponentActivity() {
     private fun checkAndRequestPermissions() {
         val permissionsToRequest = mutableListOf(
             Manifest.permission.ACCESS_FINE_LOCATION,
-            Manifest.permission.ACCESS_COARSE_LOCATION
+            Manifest.permission.ACCESS_COARSE_LOCATION,
+            Manifest.permission.RECORD_AUDIO
         )
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             permissionsToRequest.add(Manifest.permission.POST_NOTIFICATIONS)
@@ -538,6 +545,22 @@ class MainActivity : ComponentActivity() {
         // Feed fog grid directly if background service is not currently active
         if (!ExplorationTrackingService.isRunning.value) {
             ReconApplication.instance.fogGridManager.processLocation(location)
+        }
+
+        // Feed IMU engine for G-force drag launch timer and drift angle
+        ReconApplication.instance.rfScannerManager.imuEngine.updateVehicleSpeed(
+            speedKmh = currentSpeedKmh,
+            headingDeg = currentHeading
+        )
+    }
+
+    override fun onNewIntent(intent: Intent?) {
+        super.onNewIntent(intent)
+        intent?.let {
+            val scanned = ReconApplication.instance.rfScannerManager.nfcManager.processIntent(it)
+            if (scanned?.isVehicleKey == true) {
+                Toast.makeText(this, "🔑 VEHICLE NFC KEY DETECTED: ${scanned.tagType}", Toast.LENGTH_SHORT).show()
+            }
         }
     }
 

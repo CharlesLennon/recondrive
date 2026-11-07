@@ -32,6 +32,8 @@
     <uses-permission android:name="android.permission.READ_PHONE_STATE" tools:targetApi="34" />
     <uses-permission android:name="android.permission.UWB_RANGING" tools:targetApi="31" />
     <uses-permission android:name="android.permission.CAMERA" />
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <uses-permission android:name="android.permission.NFC" />
 
     <uses-feature
         android:name="android.hardware.location.gps"
@@ -50,6 +52,24 @@
         android:required="false" />
     <uses-feature
         android:name="android.hardware.camera.autofocus"
+        android:required="false" />
+    <uses-feature
+        android:name="android.hardware.microphone"
+        android:required="false" />
+    <uses-feature
+        android:name="android.hardware.nfc"
+        android:required="false" />
+    <uses-feature
+        android:name="android.hardware.sensor.barometer"
+        android:required="false" />
+    <uses-feature
+        android:name="android.hardware.sensor.accelerometer"
+        android:required="false" />
+    <uses-feature
+        android:name="android.hardware.sensor.gyroscope"
+        android:required="false" />
+    <uses-feature
+        android:name="android.hardware.wifi.rtt"
         android:required="false" />
 
     <!-- Package Installer Queries for Target SDK 34 / Android 11+ In-App APK Updater -->

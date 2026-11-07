@@ -101,9 +101,21 @@ class TacticalRfScannerManager(
     private val sensorManager = context.applicationContext.getSystemService(Context.SENSOR_SERVICE) as? SensorManager
     private val magnetometer = sensorManager?.getDefaultSensor(Sensor.TYPE_MAGNETIC_FIELD)
 
-    // UWB & Near-Infrared Optical Detection Engines
+    // Multi-Spectrum Tactical Sensor Engines
     val uwbEngine: TacticalUwbEngine = TacticalUwbEngine(context)
     val irEngine: TacticalInfraredDetectionEngine = TacticalInfraredDetectionEngine(context)
+    val barometerEngine: TacticalBarometerEngine = TacticalBarometerEngine(context)
+    val sirenEngine: TacticalAudioSirenEngine = TacticalAudioSirenEngine(context)
+    val imuEngine: TacticalImuEngine = TacticalImuEngine(context)
+    val nfcManager: TacticalNfcManager = TacticalNfcManager(context)
+    val gnssEngine: TacticalGnssEngine = TacticalGnssEngine(context)
+    val wifiRttEngine: TacticalWifiRttEngine = TacticalWifiRttEngine(context)
+
+    init {
+        nfcManager.onVehicleKeyDetected = { scanned ->
+            processNfcVehicleKey(scanned)
+        }
+    }
 
     private var wifiP2pChannel: WifiP2pManager.Channel? = null
 
@@ -290,6 +302,13 @@ class TacticalRfScannerManager(
         registerWifiP2pReceiver()
         registerMagnetometer()
 
+        barometerEngine.start()
+        sirenEngine.start()
+        imuEngine.start()
+        gnssEngine.start()
+        wifiRttEngine.start()
+        nfcManager.checkStatus()
+
         triggerHardwareWifiScan()
         startBleScan()
         triggerBluetoothClassicDiscovery()
@@ -308,6 +327,12 @@ class TacticalRfScannerManager(
         unregisterWifiP2pReceiver()
         unregisterMagnetometer()
         stopBleScan()
+
+        barometerEngine.stop()
+        sirenEngine.stop()
+        imuEngine.stop()
+        gnssEngine.stop()
+        wifiRttEngine.stop()
     }
 
     /**
@@ -687,6 +712,7 @@ class TacticalRfScannerManager(
     private fun processWifiScanResults() {
         try {
             val results = wifiManager?.scanResults ?: return
+            wifiRttEngine.evaluateScanResults(results)
             val now = System.currentTimeMillis()
 
             for (scan in results) {
@@ -1259,6 +1285,35 @@ class TacticalRfScannerManager(
         )
         targetMap[irId] = target
         syncTargetsToFlow()
+    }
+
+    fun processNfcVehicleKey(scanned: NfcScannedTag) {
+        val targetId = "NFC_${scanned.uidHex}"
+        val target = DetectedRfTarget(
+            id = targetId,
+            name = scanned.tagType,
+            rawSsidOrBleName = "NFC_CAR_KEY",
+            macAddress = scanned.uidHex,
+            vendor = "NXP / ISO-14443 Smartcard",
+            category = RfCategory.CAR_KEY,
+            rssi = -25,
+            estimatedDistanceMeters = 0.1,
+            frequencyMhz = 13,
+            protocol = "NFC 13.56 MHz Type-A",
+            threatLevel = "CONTACTLESS DIGITAL CAR KEY",
+            details = "Scanned via Host NFC Controller • UID: ${scanned.uidHex} • ${scanned.payload ?: "Passive Smartcard"}",
+            timestamp = scanned.timestampMs,
+            detectedLat = lastKnownLat,
+            detectedLon = lastKnownLon,
+            relativeBearingDeg = 0f,
+            locationHistory = emptyList(),
+            motionTrend = RelativeMotionTrend.APPROACHING,
+            savedMetadata = savedDeviceRepository.getDevice(targetId)
+        )
+
+        targetMap[targetId] = target
+        syncTargetsToFlow()
+        soundManager.playBeep()
     }
 
     private fun syncTargetsToFlow() {

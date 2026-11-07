@@ -28,6 +28,9 @@ class FogGridManager(
     private val _stats = MutableStateFlow(ExplorationStats())
     val stats: StateFlow<ExplorationStats> = _stats.asStateFlow()
 
+    val allExploredCells: StateFlow<List<ExploredCell>> = dao.getAllExploredCells()
+        .stateIn(scope, SharingStarted.Eagerly, emptyList())
+
     private val _recentlyUncovered = MutableSharedFlow<List<ExploredCell>>(extraBufferCapacity = 64)
     val recentlyUncovered: SharedFlow<List<ExploredCell>> = _recentlyUncovered.asSharedFlow()
 

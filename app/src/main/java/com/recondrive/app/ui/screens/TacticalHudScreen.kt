@@ -91,6 +91,9 @@ fun TacticalHudScreen(
     val mapUpdateState by osmMapUpdateManager.mapUpdateState.collectAsState()
     val isServiceRunning by com.recondrive.app.service.ExplorationTrackingService.isRunning.collectAsState()
     val destinations by savedDestinationRepository.destinations.collectAsState()
+    val baroTelemetry by com.recondrive.app.ReconApplication.instance.rfScannerManager.barometerEngine.telemetry.collectAsState()
+    val sirenTelemetry by com.recondrive.app.ReconApplication.instance.rfScannerManager.sirenEngine.telemetry.collectAsState()
+    val imuTelemetry by com.recondrive.app.ReconApplication.instance.rfScannerManager.imuEngine.telemetry.collectAsState()
 
     // -------------------------------------------------------------------------
     // GPT-Style Typewriter Text Streaming Animation on Load
@@ -316,6 +319,120 @@ fun TacticalHudScreen(
                     text = "FOG @ ${(currentOpacity * 100).toInt()}%",
                     color = TextSecondary,
                     fontSize = 9.sp,
+                    fontFamily = FontFamily.Monospace
+                )
+            }
+        }
+
+        // Emergency Siren Early Warning Alert Banner
+        if (sirenTelemetry.isSirenDetected) {
+            Spacer(modifier = Modifier.height(4.dp))
+            Surface(
+                color = Color(0xFFD50000).copy(alpha = 0.28f),
+                shape = RoundedCornerShape(8.dp),
+                border = androidx.compose.foundation.BorderStroke(1.5.dp, Color(0xFFFF1744)),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 2.dp)
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Warning,
+                        contentDescription = null,
+                        tint = Color(0xFFFF1744),
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Column {
+                        Text(
+                            text = sirenTelemetry.alertMessage,
+                            color = Color(0xFFFF5252),
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.Monospace
+                        )
+                        Text(
+                            text = "DOPPLER: ${sirenTelemetry.confidencePercent}% • ${if (sirenTelemetry.isApproaching) "APPROACHING (INCOMING) • YIELD" else "RECEDING (DEPARTING)"} • %.0f Hz".format(sirenTelemetry.peakFrequencyHz),
+                            color = Color.White,
+                            fontSize = 8.sp,
+                            fontFamily = FontFamily.Monospace
+                        )
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(4.dp))
+
+        // Secondary G-Force Skidpad & Barometer Cockpit Telemetry
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(8.dp))
+                .background(TacticalSurface)
+                .border(1.dp, TacticalBorder, RoundedCornerShape(8.dp))
+                .padding(vertical = 5.dp, horizontal = 10.dp),
+            horizontalArrangement = Arrangement.SpaceAround,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // G-Force Skidpad Column
+            val gLat = imuTelemetry.lateralG
+            val gLong = imuTelemetry.longitudinalG
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(
+                        text = "${if (gLat >= 0) "+" else ""}${"%.2f".format(gLat)}G LAT",
+                        color = if (imuTelemetry.isDrifting) Color(0xFFFFD600) else Color(mapSkin.highwayColor),
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace
+                    )
+                    Text(
+                        text = "• ${if (gLong >= 0) "+" else ""}${"%.2f".format(gLong)}G LONG",
+                        color = TextSecondary,
+                        fontSize = 9.5.sp,
+                        fontFamily = FontFamily.Monospace
+                    )
+                }
+                Text(
+                    text = if (imuTelemetry.isDrifting) "DRIFT SLIP ${"%.0f".format(imuTelemetry.driftAngleDeg)}°" else "LAUNCH: ${imuTelemetry.launchTimerState}",
+                    color = if (imuTelemetry.isDrifting) Color(0xFFFFD600) else ReconGreen,
+                    fontSize = 8.sp,
+                    fontFamily = FontFamily.Monospace
+                )
+            }
+
+            Divider(
+                modifier = Modifier
+                    .height(24.dp)
+                    .width(1.dp),
+                color = TacticalBorder
+            )
+
+            // Barometric Floor & Elevation Column
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Text(
+                        text = if (baroTelemetry.isCabinPressureSpike) "CABIN SHOCK" else "FLOOR ${baroTelemetry.parkingFloor}",
+                        color = if (baroTelemetry.isCabinPressureSpike) Color(0xFFFF5252) else Color(fogSkin.perimeterGlowColor),
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace
+                    )
+                    Text(
+                        text = "• ${"%.0f".format(baroTelemetry.relativeAltitudeM)}m ALT",
+                        color = TextSecondary,
+                        fontSize = 9.5.sp,
+                        fontFamily = FontFamily.Monospace
+                    )
+                }
+                Text(
+                    text = "${"%.1f".format(baroTelemetry.currentHpa)} hPa • ${baroTelemetry.baroTrend}",
+                    color = TextSecondary,
+                    fontSize = 8.sp,
                     fontFamily = FontFamily.Monospace
                 )
             }

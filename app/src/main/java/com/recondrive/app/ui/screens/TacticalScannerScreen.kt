@@ -70,6 +70,12 @@ fun TacticalScannerScreen(
     val csiSnapshot by csiSensingEngine.snapshot.collectAsState()
     val isPersonDetectionEnabled by csiSensingEngine.isEnabled.collectAsState()
     val tileRevision by osmTileManager.revision.collectAsState()
+    val baroTelemetry by scannerManager.barometerEngine.telemetry.collectAsState()
+    val sirenTelemetry by scannerManager.sirenEngine.telemetry.collectAsState()
+    val imuTelemetry by scannerManager.imuEngine.telemetry.collectAsState()
+    val nfcTelemetry by scannerManager.nfcManager.telemetry.collectAsState()
+    val gnssTelemetry by scannerManager.gnssEngine.telemetry.collectAsState()
+    val wifiRttTelemetry by scannerManager.wifiRttEngine.telemetry.collectAsState()
 
     var selectedFilterCategory by remember { mutableStateOf<RfCategory?>(null) } // null = ALL
     var filterSavedOnly by remember { mutableStateOf(false) }
@@ -584,6 +590,125 @@ fun TacticalScannerScreen(
                         text = "NIR 850/940nm OPTICS: SENSING",
                         color = Color(0xFFFF5252),
                         fontSize = 8.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace
+                    )
+                }
+            }
+        }
+
+        // =====================================================================
+        // EMERGENCY SIREN DOPPLER DIRECTION FINDER (POLICE / EMS EARLY WARNING)
+        // =====================================================================
+        if (sirenTelemetry.isSirenDetected) {
+            Surface(
+                color = Color(0xFFD50000).copy(alpha = 0.28f),
+                shape = RoundedCornerShape(8.dp),
+                border = androidx.compose.foundation.BorderStroke(1.5.dp, Color(0xFFFF1744)),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 2.dp)
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Warning,
+                        contentDescription = null,
+                        tint = Color(0xFFFF1744),
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Column {
+                        Text(
+                            text = sirenTelemetry.alertMessage,
+                            color = Color(0xFFFF5252),
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.Monospace
+                        )
+                        Text(
+                            text = "DOPPLER CONFIDENCE: ${sirenTelemetry.confidencePercent}% • ${if (sirenTelemetry.isApproaching) "APPROACHING (INCOMING) • YIELD RIGHT OF WAY" else "RECEDING (DEPARTING)"} • %.0f Hz".format(sirenTelemetry.peakFrequencyHz),
+                            color = Color.White,
+                            fontSize = 8.sp,
+                            fontFamily = FontFamily.Monospace
+                        )
+                    }
+                }
+            }
+        }
+
+        // =====================================================================
+        // TACTICAL MULTI-SENSOR SUITE (BARO, IMU, GNSS, NFC, RTT)
+        // =====================================================================
+        Surface(
+            color = TacticalSurface,
+            shape = RoundedCornerShape(8.dp),
+            border = androidx.compose.foundation.BorderStroke(1.dp, TacticalBorder),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 2.dp)
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 6.dp, vertical = 4.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Barometer (Floor & Cabin)
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+                    Text(
+                        text = if (baroTelemetry.isCabinPressureSpike) "⚠️ CABIN SHOCK" else "FLOOR ${baroTelemetry.parkingFloor} (${"%.0f".format(baroTelemetry.currentHpa)}hPa)",
+                        color = if (baroTelemetry.isCabinPressureSpike) Color(0xFFFF5252) else ReconCyan,
+                        fontSize = 7.5.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace
+                    )
+                }
+
+                // IMU G-Force & Launch
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+                    val gText = if (imuTelemetry.isDrifting) "DRIFT ${"%.0f".format(imuTelemetry.driftAngleDeg)}°" else "${"%.2f".format(imuTelemetry.lateralG)}G"
+                    Text(
+                        text = "$gText • ${imuTelemetry.launchTimerState.take(8)}",
+                        color = if (imuTelemetry.isDrifting) Color(0xFFFFD600) else ReconGreen,
+                        fontSize = 7.5.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace
+                    )
+                }
+
+                // GNSS Satellites & Anti-Spoof
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+                    val satText = if (gnssTelemetry.isSpoofingSuspected) "⚠️ SPOOF" else if (gnssTelemetry.isJammingSuspected) "🚨 JAM" else "${gnssTelemetry.satellitesUsedInFix}/${gnssTelemetry.totalSatellitesInView} SATS"
+                    Text(
+                        text = satText,
+                        color = if (gnssTelemetry.isSpoofingSuspected || gnssTelemetry.isJammingSuspected) Color(0xFFFF5252) else ReconCyan,
+                        fontSize = 7.5.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace
+                    )
+                }
+
+                // NFC 13.56 MHz
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+                    Text(
+                        text = "NFC 13.56M",
+                        color = if (nfcTelemetry.isNfcEnabled) Color(0xFFFFD600) else TextSecondary,
+                        fontSize = 7.5.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace
+                    )
+                }
+
+                // Wi-Fi RTT 802.11mc
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+                    Text(
+                        text = if (wifiRttTelemetry.closestDistanceMeters != null) "RTT: ${"%.1f".format(wifiRttTelemetry.closestDistanceMeters)}m" else "RTT: 802.11mc",
+                        color = ReconCyan,
+                        fontSize = 7.5.sp,
                         fontWeight = FontWeight.Bold,
                         fontFamily = FontFamily.Monospace
                     )
