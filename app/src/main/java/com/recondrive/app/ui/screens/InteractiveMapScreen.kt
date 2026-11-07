@@ -189,7 +189,7 @@ fun InteractiveMapScreen(
             // Fill UK landmass with subtle contrast
             drawPath(
                 path = gbPath,
-                color = Color(mapSkin.surfaceColor).copy(alpha = 0.5f)
+                color = Color(mapSkin.landColor).copy(alpha = 0.5f)
             )
             // Stroke coastline outline
             drawPath(
@@ -212,7 +212,7 @@ fun InteractiveMapScreen(
             niPath.close()
             drawPath(
                 path = niPath,
-                color = Color(mapSkin.surfaceColor).copy(alpha = 0.5f)
+                color = Color(mapSkin.landColor).copy(alpha = 0.5f)
             )
             drawPath(
                 path = niPath,
