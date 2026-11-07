@@ -27,11 +27,11 @@ Full hardware-accelerated map surface projection on the car dashboard showing ex
 
 ---
 
-### 2. Handset Tactical HUD & J.A.R.V.I.S. AI Cockpit (Jetpack Compose)
-Mobile portrait dashboard featuring an AI assistant cockpit asking *"Where to, sir?"*, holographic arc reactor diagnostics, saved location cards (Home, Work) with photo thumbnails, stacked contact cards for sub-destinations (e.g., Annabell), high-visibility speedometer (KM/H & MPH), heading bearing tape, radar canvas preview, and one-tap destination engagement routing.
+### 2. Handset Tactical HUD & AI Navigation Cockpit (Jetpack Compose)
+Mobile portrait dashboard featuring a centered animated cosmic galaxy core canvas, intelligent prompt asking *"Where to? All tactical navigation subsystems online."*, saved location cards (Home, Work) with photo thumbnails, stacked contact cards for sub-destinations (e.g., Annabell), high-visibility speedometer (MPH default), heading bearing tape, radar canvas preview, and one-tap destination engagement routing.
 
 ![Handset Tactical HUD](screenshots/screenshot_02_handset_tactical_hud.png)
-*Fig 2. Mobile tactical HUD featuring J.A.R.V.I.S. AI cockpit prompt, saved destination cards with photo previews, stacked contact cards, and real-time telemetry.*
+*Fig 2. Mobile tactical HUD featuring centered animated galaxy AI cockpit prompt, saved destination cards with photo previews, stacked contact cards, and real-time telemetry.*
 
 ---
 

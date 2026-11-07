@@ -78,7 +78,7 @@ fun AddDestinationDialog(
                 ) {
                     Column {
                         Text(
-                            text = "J.A.R.V.I.S. // TARGET REGISTRATION",
+                            text = "TACTICAL // TARGET REGISTRATION",
                             color = ReconCyan,
                             fontSize = 13.sp,
                             fontWeight = FontWeight.Bold,

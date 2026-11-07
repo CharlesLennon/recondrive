@@ -20,6 +20,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
@@ -124,6 +125,7 @@ class MainActivity : ComponentActivity() {
                 val deviceHeading by ReconApplication.instance.deviceOrientationManager.deviceHeading.collectAsState()
 
                 var selectedTab by remember { mutableIntStateOf(0) } // 0 = HUD, 1 = MAP
+                var persistentMapZoom by rememberSaveable { mutableFloatStateOf(13.5f) }
                 var showSkinsDialog by remember { mutableStateOf(false) }
                 var showOfflineDialog by remember { mutableStateOf(false) }
                 var showTimelineSheet by remember { mutableStateOf(false) }
@@ -371,6 +373,8 @@ class MainActivity : ComponentActivity() {
                                     fogPreferences = ReconApplication.instance.fogPreferences,
                                     initialWaypoint = targetWaypoint,
                                     initialWaypointName = targetWaypointName,
+                                    savedZoom = persistentMapZoom,
+                                    onZoomChanged = { persistentMapZoom = it },
                                     onNavigateToWaypoint = { wpLat, wpLon ->
                                         Toast.makeText(
                                             this@MainActivity,

@@ -157,16 +157,16 @@ def generate_screenshot_01():
 
 
 # ==============================================================================
-# 2. SCREENSHOT 02: HANDSET TACTICAL HUD & J.A.R.V.I.S. AI COCKPIT (800 x 1600)
+# 2. SCREENSHOT 02: HANDSET TACTICAL HUD & AI GALAXY COCKPIT (800 x 1600)
 # ==============================================================================
 
 def generate_screenshot_02():
-    print("Generating Screenshot 02: Handset Tactical HUD & J.A.R.V.I.S. AI Cockpit...")
+    print("Generating Screenshot 02: Handset Tactical HUD & AI Galaxy Cockpit...")
     W, H = 800, 1600
     img = Image.new('RGB', (W, H), '#070A0F')
     draw = ImageDraw.Draw(img)
 
-    font_jarvis_title = ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf', 24)
+    font_ai_title = ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf', 20)
     font_contact_name = ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf', 16)
     font_place_name = ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf', 14)
 
@@ -175,68 +175,69 @@ def generate_screenshot_02():
     draw.text((W - 140, 16), "5G  ●●● 100%", fill='#8B949E', font=FONT_MONO_SM)
 
     # 2. Header Row
-    draw.text((24, 52), "RECON // J.A.R.V.I.S. HUD", fill='#00E5FF', font=FONT_HEAD)
-    draw.text((24, 74), "GRID: 50.8555°N, 0.2449°W  •  SUSSEX, UK", fill='#8B949E', font=FONT_MONO_SM)
+    draw.text((24, 52), "TACTICAL NAVIGATION CORE", fill='#00E5FF', font=FONT_HEAD)
+    draw.text((24, 74), "GRID: 50.8555°N, 0.2449°W  •  ALL SYSTEMS NOMINAL", fill='#8B949E', font=FONT_MONO_SM)
 
-    # Status Badges
-    draw.rounded_rectangle([(W - 250, 50), (W - 150, 82)], radius=4, fill='#0D1B1E', outline='#00E5FF', width=1)
-    draw.text((W - 240, 60), "● AI ONLINE", fill='#00E5FF', font=FONT_MONO_XS)
-
-    draw.rounded_rectangle([(W - 140, 50), (W - 84, 82)], radius=4, fill='#121721', outline='#21262D', width=1)
-    draw.text((W - 130, 60), "SKINS", fill='#8B949E', font=FONT_MONO_XS)
-
-    draw.rounded_rectangle([(W - 74, 50), (W - 24, 82)], radius=4, fill='#121721', outline='#00E676', width=1)
-    draw.text((W - 68, 60), "v1.0.8", fill='#00E676', font=FONT_MONO_XS)
+    # Compact Radar Status Pill
+    draw.rounded_rectangle([(W - 130, 50), (W - 24, 78)], radius=14, fill='#121721', outline='#00E676', width=1)
+    draw.ellipse([(W - 120, 60), (W - 112, 68)], fill='#00E676')
+    draw.text((W - 104, 58), "RADAR 24/7", fill='#00E676', font=FONT_MONO_XS)
 
     # =========================================================================
-    # 3. J.A.R.V.I.S. HERO AI ASSISTANT CARD ("Where to, sir?")
+    # 3. AI HERO COCKPIT CARD & CENTERED GALAXY
     # =========================================================================
-    jarvis_y = 98
-    jarvis_h = 195
-    draw.rounded_rectangle([(24, jarvis_y), (W - 24, jarvis_y + jarvis_h)], radius=12, fill='#0B111B', outline='#00E5FF', width=2)
+    cockpit_y = 96
+    cockpit_h = 240
+    draw.rounded_rectangle([(24, cockpit_y), (W - 24, cockpit_y + cockpit_h)], radius=12, fill='#0B111B', outline='#00E5FF', width=2)
 
-    # Holographic Arc Reactor (Concentric glowing rings)
-    arc_cx = 78
-    arc_cy = jarvis_y + 80
-    for r in (42, 34, 26, 18, 10):
-        alpha_col = '#004A59' if r > 30 else ('#009BB5' if r > 18 else '#00E5FF')
-        draw.ellipse([(arc_cx - r, arc_cy - r), (arc_cx + r, arc_cy + r)], outline=alpha_col, width=2)
-    # Arc Reactor Core Center
-    draw.ellipse([(arc_cx - 6, arc_cy - 6), (arc_cx + 6, arc_cy + 6)], fill='#FFFFFF')
-    # Radial energy ticks
-    for angle in range(0, 360, 45):
-        rad = math.radians(angle)
-        x1 = arc_cx + 26 * math.cos(rad)
-        y1 = arc_cy + 26 * math.sin(rad)
-        x2 = arc_cx + 34 * math.cos(rad)
-        y2 = arc_cy + 34 * math.sin(rad)
-        draw.line([(x1, y1), (x2, y2)], fill='#00E5FF', width=2)
+    # AI Status Tag
+    draw.ellipse([(W // 2 - 76, cockpit_y + 14), (W // 2 - 70, cockpit_y + 20)], fill='#00E676')
+    draw.text((W // 2 - 62, cockpit_y + 11), "AI NAVIGATION CORE // ONLINE", fill='#00E676', font=FONT_MONO_XS)
 
-    # Arc Reactor Status Tag
-    draw.text((arc_cx - 24, jarvis_y + 140), "ARC MK-85", fill='#00E5FF', font=FONT_MONO_XS)
+    # Centered Galaxy Animation (Logarithmic spiral arms & stars)
+    gal_cx = W // 2
+    gal_cy = cockpit_y + 80
+    gal_r = 46
+    draw.ellipse([(gal_cx - gal_r, gal_cy - gal_r), (gal_cx + gal_r, gal_cy + gal_r)], fill='#070A0F', outline='#004A59', width=1)
+    # Radial glow
+    for gr in (36, 26, 16, 8):
+        alpha_col = '#002B36' if gr > 28 else ('#006070' if gr > 18 else '#00E5FF')
+        draw.ellipse([(gal_cx - gr, gal_cy - gr), (gal_cx + gr, gal_cy + gr)], outline=alpha_col, width=1)
+    # Spiral arms
+    for arm in (0, 120, 240):
+        for step in range(2, 24):
+            t = step / 24.0
+            r = t * (gal_r - 4)
+            ang = math.radians(arm + 160.0 * (t ** 0.75))
+            sx = gal_cx + r * math.cos(ang)
+            sy = gal_cy + r * math.sin(ang)
+            draw.ellipse([(sx - 1.5, sy - 1.5), (sx + 1.5, sy + 1.5)], fill='#00E5FF' if step % 2 == 0 else '#FFFFFF')
+    # Galaxy Core Center
+    draw.ellipse([(gal_cx - 4, gal_cy - 4), (gal_cx + 4, gal_cy + 4)], fill='#FFFFFF')
 
-    # Assistant Prompt Text
-    draw.text((140, jarvis_y + 24), "J.A.R.V.I.S. INTELLIGENCE CORE // ACTIVE", fill='#00E5FF', font=FONT_MONO_SM)
-    draw.text((140, jarvis_y + 48), "Where to, sir?", fill='#FFFFFF', font=font_jarvis_title)
-    draw.text((140, jarvis_y + 84), "Select a waypoint below or initiate voice command protocol", fill='#8B949E', font=FONT_TEXT)
+    # Centered Typewriter Text
+    text_greet = "Where to? All tactical navigation subsystems online."
+    draw.text((W // 2 - 210, cockpit_y + 138), text_greet, fill='#FFFFFF', font=font_ai_title)
+    draw.text((W // 2 - 170, cockpit_y + 164), "Standing by for tactical destination instructions.", fill='#8B949E', font=FONT_TEXT)
 
     # Hero Action Buttons
-    # Voice Button
-    draw.rounded_rectangle([(140, jarvis_y + 120), (330, jarvis_y + 165)], radius=6, fill='#101F2D', outline='#00E5FF', width=1)
-    draw.text((160, jarvis_y + 134), "🎙️  VOICE ENGAGE", fill='#00E5FF', font=FONT_HEAD)
-
+    btn_y = cockpit_y + 188
     # Add Destination Button
-    draw.rounded_rectangle([(345, jarvis_y + 120), (510, jarvis_y + 165)], radius=6, fill='#00E5FF')
-    draw.text((370, jarvis_y + 134), "+ ADD PLACE", fill='#0A0D12', font=FONT_HEAD)
+    draw.rounded_rectangle([(44, btn_y), (350, btn_y + 38)], radius=6, fill='#00E5FF')
+    draw.text((120, btn_y + 10), "+ ADD DESTINATION", fill='#0A0D12', font=FONT_HEAD)
 
-    # Full Map Quick Launch
-    draw.rounded_rectangle([(525, jarvis_y + 120), (W - 40, jarvis_y + 165)], radius=6, fill='#121721', outline='#21262D', width=1)
-    draw.text((550, jarvis_y + 134), "🗺️  MAP TAB", fill='#8B949E', font=FONT_HEAD)
+    # Open Map Button
+    draw.rounded_rectangle([(365, btn_y), (670, btn_y + 38)], radius=6, fill='#121721', outline='#21262D', width=1)
+    draw.text((460, btn_y + 10), "🗺️  OPEN MAP", fill='#F0F6FC', font=FONT_HEAD)
+
+    # Mic Button
+    draw.rounded_rectangle([(685, btn_y), (W - 44, btn_y + 38)], radius=6, fill='#121721', outline='#21262D', width=1)
+    draw.text((718, btn_y + 10), "🎙️", fill='#00E5FF', font=FONT_HEAD)
 
     # =========================================================================
     # 4. SAVED DESTINATIONS SECTION (STANDALONE CARDS)
     # =========================================================================
-    sec1_y = jarvis_y + jarvis_h + 16
+    sec1_y = cockpit_y + cockpit_h + 16
     draw.text((26, sec1_y), "SAVED DESTINATIONS", fill='#00E5FF', font=FONT_HEAD)
     draw.text((200, sec1_y + 2), "•  Direct target waypoints", fill='#8B949E', font=FONT_MONO_SM)
 

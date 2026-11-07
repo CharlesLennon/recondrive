@@ -56,6 +56,8 @@ fun InteractiveMapScreen(
     osmTileManager: OsmTileManager = com.recondrive.app.ReconApplication.instance.osmTileManager,
     initialWaypoint: Pair<Double, Double>? = null,
     initialWaypointName: String? = null,
+    savedZoom: Float = 13.5f,
+    onZoomChanged: (Float) -> Unit = {},
     onNavigateToWaypoint: (lat: Double, lon: Double) -> Unit = { _, _ -> },
     onOpenSkins: () -> Unit = {},
     onOpenOfflinePacks: () -> Unit = {},
@@ -70,12 +72,17 @@ fun InteractiveMapScreen(
     val tileRevision by osmTileManager.revision.collectAsState()
     val timelineEntries by com.recondrive.app.ReconApplication.instance.locationTimelineManager.timelineEntries.collectAsState()
 
-    // Interactive Viewport State (Default: Vehicle Current Position, default zoom 12.5f for clear regional overview)
+    // Interactive Viewport State (Default: Vehicle Current Position, default zoom 13.5f for clear regional overview)
     var cameraLat by remember { mutableDoubleStateOf(initialWaypoint?.first ?: currentLat) }
     var cameraLon by remember { mutableDoubleStateOf(initialWaypoint?.second ?: currentLon) }
-    var zoom by remember { mutableFloatStateOf(12.5f) } // 6.0f (whole UK) to 18.5f (street level)
+    var zoom by remember { mutableFloatStateOf(savedZoom) }
     var isFollowingGps by remember { mutableStateOf(initialWaypoint == null) }
     var isFogLayerActive by remember { mutableStateOf(true) }
+
+    // Preserve zoom level across tab changes and navigation transitions
+    LaunchedEffect(zoom) {
+        onZoomChanged(zoom)
+    }
 
     // Selected Target Waypoint
     var selectedWaypoint by remember(initialWaypoint) { mutableStateOf<Pair<Double, Double>?>(initialWaypoint) }

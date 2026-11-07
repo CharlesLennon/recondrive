@@ -18,11 +18,18 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
@@ -35,11 +42,14 @@ import com.recondrive.app.ui.theme.*
 import com.recondrive.app.update.AppUpdateManager
 import com.recondrive.app.update.UpdateState
 import kotlinx.coroutines.delay
+import kotlin.math.*
+import kotlin.random.Random
 
 /**
- * Clean J.A.R.V.I.S. AI Cockpit & Tactical HUD
+ * Clean AI Navigation Cockpit & Tactical HUD
  * Features an intelligent prompt that types in like ChatGPT on load,
- * followed by a smooth animated reveal of user-saved destinations and stacked contact groups.
+ * centered animated galaxy core canvas, followed by a smooth animated reveal of
+ * user-saved destinations and stacked contact groups.
  * Speed defaults to MPH across all primary instrumentation.
  */
 @Composable
@@ -83,7 +93,7 @@ fun TacticalHudScreen(
     // -------------------------------------------------------------------------
     // GPT-Style Typewriter Text Streaming Animation on Load
     // -------------------------------------------------------------------------
-    val fullAiGreeting = remember { "Where to, sir? All tactical navigation subsystems online." }
+    val fullAiGreeting = remember { "Where to? All tactical navigation subsystems online." }
     var displayedAiGreeting by remember { mutableStateOf("") }
     var isAiStreamingComplete by remember { mutableStateOf(false) }
 
@@ -108,18 +118,6 @@ fun TacticalHudScreen(
             repeatMode = RepeatMode.Reverse
         ),
         label = "cursor_alpha"
-    )
-
-    // Holographic Arc Reactor Pulse
-    val pulseTransition = rememberInfiniteTransition(label = "arc_reactor")
-    val arcPulse by pulseTransition.animateFloat(
-        initialValue = 0.7f,
-        targetValue = 1.0f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(1200, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "arc_pulse"
     )
 
     // Dialogs
@@ -169,7 +167,7 @@ fun TacticalHudScreen(
             .verticalScroll(rememberScrollState())
     ) {
         // =====================================================================
-        // 1. TOP STATUS BAR (J.A.R.V.I.S. Core Intelligence Status)
+        // 1. TOP STATUS BAR (AI Navigation Core Telemetry Status)
         // =====================================================================
         Row(
             modifier = Modifier
@@ -180,7 +178,7 @@ fun TacticalHudScreen(
         ) {
             Column(modifier = Modifier.weight(1f)) {
                 Text(
-                    text = "J.A.R.V.I.S. // TACTICAL NAVIGATION CORE",
+                    text = "TACTICAL NAVIGATION CORE",
                     color = Color(mapSkin.highwayColor),
                     fontSize = 13.sp,
                     fontWeight = FontWeight.Bold,
@@ -325,7 +323,7 @@ fun TacticalHudScreen(
         Spacer(modifier = Modifier.height(14.dp))
 
         // =====================================================================
-        // 3. J.A.R.V.I.S. AI GREETING (Types in like GPT on load)
+        // 3. AI NAVIGATION COCKPIT & GALAXY CORE (Types in like GPT on load)
         // =====================================================================
         Card(
             modifier = Modifier.fillMaxWidth(),
@@ -333,97 +331,72 @@ fun TacticalHudScreen(
             shape = RoundedCornerShape(12.dp),
             border = androidx.compose.foundation.BorderStroke(1.dp, Color(mapSkin.highwayColor).copy(alpha = 0.7f))
         ) {
-            Column(modifier = Modifier.padding(14.dp)) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(18.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                // Top Status Indicator
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    verticalAlignment = Alignment.CenterVertically
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center
                 ) {
-                    // Pulsing Holographic Arc Reactor Core
                     Box(
                         modifier = Modifier
-                            .size(48.dp)
+                            .size(7.dp)
                             .clip(CircleShape)
-                            .background(Color(mapSkin.highwayColor).copy(alpha = 0.15f * arcPulse))
-                            .border(1.5.dp, Color(mapSkin.highwayColor), CircleShape),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        Canvas(modifier = Modifier.size(28.dp)) {
-                            drawCircle(color = Color(mapSkin.highwayColor), radius = (size.minDimension / 4f) * arcPulse)
-                            drawCircle(color = Color(mapSkin.highwayColor).copy(alpha = 0.4f), radius = size.minDimension / 2f, style = Stroke(width = 2f))
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.width(12.dp))
-
-                    Column(modifier = Modifier.weight(1f)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(
-                                text = "J.A.R.V.I.S.",
-                                color = Color(mapSkin.highwayColor),
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold,
-                                fontFamily = FontFamily.Monospace
-                            )
-                            Spacer(modifier = Modifier.width(6.dp))
-                            Text(
-                                text = "ONLINE",
-                                color = ReconGreen,
-                                fontSize = 9.sp,
-                                fontWeight = FontWeight.Bold,
-                                fontFamily = FontFamily.Monospace
-                            )
-                        }
-
-                        // GPT Typewriter Streaming Text
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text(
-                                text = displayedAiGreeting,
-                                color = TextPrimary,
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.Bold,
-                                fontFamily = FontFamily.Monospace,
-                                lineHeight = 21.sp
-                            )
-                            if (!isAiStreamingComplete) {
-                                Text(
-                                    text = "▋",
-                                    color = ReconCyan.copy(alpha = cursorAlpha),
-                                    fontSize = 16.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    fontFamily = FontFamily.Monospace
-                                )
-                            }
-                        }
-
-                        Spacer(modifier = Modifier.height(2.dp))
-                        Text(
-                            text = if (isListeningVoice) "Listening for voice command coordinates..." else "Standing by for tactical destination instructions.",
-                            color = if (isListeningVoice) ReconAmber else TextSecondary,
-                            fontSize = 11.sp
-                        )
-                    }
-
-                    // Voice Command Action Button
-                    IconButton(
-                        onClick = { isListeningVoice = !isListeningVoice },
-                        modifier = Modifier
-                            .size(38.dp)
-                            .background(if (isListeningVoice) ReconAmber else Color(mapSkin.highwayColor).copy(alpha = 0.2f), CircleShape)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Mic,
-                            contentDescription = "Voice Search",
-                            tint = if (isListeningVoice) TacticalObsidian else Color(mapSkin.highwayColor),
-                            modifier = Modifier.size(18.dp)
-                        )
-                    }
+                            .background(ReconGreen)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "AI NAVIGATION CORE // ONLINE",
+                        color = ReconGreen,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace,
+                        letterSpacing = 0.5.sp
+                    )
                 }
 
-                // Quick AI Action Buttons
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(14.dp))
+
+                // Centered Animated Galaxy Core
+                GalaxyCoreAnimation(
+                    modifier = Modifier.size(104.dp),
+                    coreColor = Color(mapSkin.highwayColor),
+                    sizeDp = 104.dp
+                )
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                // Centered GPT Typewriter Streaming Text
+                Text(
+                    text = displayedAiGreeting + if (!isAiStreamingComplete && cursorAlpha > 0.4f) " ▋" else "",
+                    color = TextPrimary,
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Bold,
+                    fontFamily = FontFamily.Monospace,
+                    textAlign = TextAlign.Center,
+                    lineHeight = 22.sp
+                )
+
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = if (isListeningVoice) "Listening for voice command coordinates..." else "Standing by for tactical destination instructions.",
+                    color = if (isListeningVoice) ReconAmber else TextSecondary,
+                    fontSize = 11.sp,
+                    fontFamily = FontFamily.Monospace,
+                    textAlign = TextAlign.Center
+                )
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                // Action Buttons Row (Add Destination, Open Map, Voice Command)
                 Row(
                     modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
                     Button(
                         onClick = {
@@ -431,11 +404,11 @@ fun TacticalHudScreen(
                             showAddDialog = true
                         },
                         colors = ButtonDefaults.buttonColors(containerColor = Color(mapSkin.highwayColor)),
-                        shape = RoundedCornerShape(6.dp),
+                        shape = RoundedCornerShape(8.dp),
                         modifier = Modifier.weight(1f),
-                        contentPadding = PaddingValues(vertical = 8.dp)
+                        contentPadding = PaddingValues(vertical = 10.dp)
                     ) {
-                        Icon(imageVector = Icons.Default.AddLocationAlt, contentDescription = null, tint = TacticalObsidian, modifier = Modifier.size(14.dp))
+                        Icon(imageVector = Icons.Default.AddLocationAlt, contentDescription = null, tint = TacticalObsidian, modifier = Modifier.size(15.dp))
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(text = "ADD DESTINATION", color = TacticalObsidian, fontSize = 11.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
                     }
@@ -444,13 +417,28 @@ fun TacticalHudScreen(
                         onClick = onSearchClick,
                         colors = ButtonDefaults.outlinedButtonColors(contentColor = TextPrimary),
                         border = androidx.compose.foundation.BorderStroke(1.dp, TacticalBorder),
-                        shape = RoundedCornerShape(6.dp),
+                        shape = RoundedCornerShape(8.dp),
                         modifier = Modifier.weight(1f),
-                        contentPadding = PaddingValues(vertical = 8.dp)
+                        contentPadding = PaddingValues(vertical = 10.dp)
                     ) {
-                        Icon(imageVector = Icons.Default.Map, contentDescription = null, tint = TextPrimary, modifier = Modifier.size(14.dp))
+                        Icon(imageVector = Icons.Default.Map, contentDescription = null, tint = Color(mapSkin.highwayColor), modifier = Modifier.size(15.dp))
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(text = "OPEN MAP", color = TextPrimary, fontSize = 11.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
+                    }
+
+                    IconButton(
+                        onClick = { isListeningVoice = !isListeningVoice },
+                        modifier = Modifier
+                            .size(40.dp)
+                            .background(if (isListeningVoice) ReconAmber else TacticalBorder.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
+                            .border(1.dp, if (isListeningVoice) ReconAmber else TacticalBorder, RoundedCornerShape(8.dp))
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Mic,
+                            contentDescription = "Voice Command",
+                            tint = if (isListeningVoice) TacticalObsidian else Color(mapSkin.highwayColor),
+                            modifier = Modifier.size(18.dp)
+                        )
                     }
                 }
             }
@@ -936,6 +924,225 @@ private fun StackedPersonCard(
                         }
                     }
                 }
+            }
+        }
+    }
+}
+
+/**
+ * Celestial star particle data for the Galaxy animation.
+ */
+private data class GalaxyStar(
+    val normalizedRadius: Float,
+    val baseAngleRad: Float,
+    val radiusPx: Float,
+    val color: Color,
+    val alpha: Float,
+    val speedMultiplier: Float
+)
+
+/**
+ * Centered Swirling Cosmic Galaxy Animation.
+ * Features rotating logarithmic spiral arms, differential orbital velocity,
+ * luminous cosmic core glow, and subtle tactical targeting reticles.
+ */
+@Composable
+fun GalaxyCoreAnimation(
+    modifier: Modifier = Modifier,
+    coreColor: Color = ReconCyan,
+    sizeDp: Dp = 104.dp
+) {
+    val infiniteTransition = rememberInfiniteTransition(label = "galaxy_rot")
+
+    // Primary galactic rotation: 18s per full 360-degree loop
+    val rotationDeg by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 360f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(18000, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "galaxy_rotation"
+    )
+
+    // Breathing / pulsing core expansion
+    val corePulse by infiniteTransition.animateFloat(
+        initialValue = 0.85f,
+        targetValue = 1.15f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(2200, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "galaxy_pulse"
+    )
+
+    // Pre-calculate celestial stars distributed along spiral arms and core
+    val stars = remember(coreColor) {
+        val list = mutableListOf<GalaxyStar>()
+        val rng = Random(42) // Fixed seed for stable stellar placement
+        val arms = 3
+        val starsPerArm = 28
+
+        for (arm in 0 until arms) {
+            val armBaseAngle = arm * (2f * Math.PI.toFloat() / arms)
+            for (i in 0 until starsPerArm) {
+                val t = (i + 1).toFloat() / starsPerArm
+                val radiusFactor = t.pow(0.85f)
+                val spiralAngle = armBaseAngle + 2.8f * t.pow(0.7f)
+                val scatterAngle = (rng.nextFloat() - 0.5f) * 0.35f
+                val scatterRadius = (rng.nextFloat() - 0.5f) * 0.08f
+
+                val finalR = (radiusFactor + scatterRadius).coerceIn(0.12f, 0.96f)
+                val finalAngle = spiralAngle + scatterAngle
+                val starSize = if (finalR < 0.3f) 2.2f + rng.nextFloat() * 1.5f else 1.2f + rng.nextFloat() * 2.0f
+
+                val starColor = when {
+                    finalR < 0.25f -> if (rng.nextFloat() < 0.5f) Color.White else coreColor
+                    rng.nextFloat() < 0.6f -> coreColor
+                    rng.nextFloat() < 0.85f -> Color(0xFF64B5F6) // Electric blue
+                    else -> ReconAmber.copy(alpha = 0.9f)
+                }
+
+                val starAlpha = (0.4f + rng.nextFloat() * 0.6f) * (1f - (finalR * 0.25f))
+                val speedMult = 1.15f - (finalR * 0.30f)
+
+                list.add(GalaxyStar(finalR, finalAngle, starSize, starColor, starAlpha, speedMult))
+            }
+        }
+
+        // Additional galactic bulge stars near core
+        for (i in 0 until 18) {
+            val r = (rng.nextFloat().pow(1.8f) * 0.32f).coerceAtLeast(0.05f)
+            val angle = rng.nextFloat() * 2f * Math.PI.toFloat()
+            val size = 1.5f + rng.nextFloat() * 2.0f
+            val starColor = if (rng.nextFloat() < 0.6f) Color.White else coreColor
+            list.add(GalaxyStar(r, angle, size, starColor, 0.85f, 1.25f))
+        }
+
+        list
+    }
+
+    Box(
+        modifier = modifier
+            .size(sizeDp)
+            .clip(CircleShape)
+            .background(TacticalObsidian)
+            .border(1.dp, coreColor.copy(alpha = 0.35f), CircleShape),
+        contentAlignment = Alignment.Center
+    ) {
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            val center = Offset(size.width / 2f, size.height / 2f)
+            val maxR = size.minDimension / 2f
+            val radAngle = rotationDeg * (Math.PI.toFloat() / 180f)
+
+            // 1. Deep Cosmic Radial Core Glow
+            val glowRadius = maxR * 0.58f * corePulse
+            drawCircle(
+                brush = Brush.radialGradient(
+                    colors = listOf(
+                        Color.White.copy(alpha = 0.75f * corePulse),
+                        coreColor.copy(alpha = 0.45f * corePulse),
+                        coreColor.copy(alpha = 0.12f),
+                        Color.Transparent
+                    ),
+                    center = center,
+                    radius = glowRadius
+                ),
+                radius = glowRadius,
+                center = center
+            )
+
+            // 2. Faint Outer HUD Perimeter Ring with tactical dashes
+            drawCircle(
+                color = coreColor.copy(alpha = 0.30f),
+                radius = maxR * 0.94f,
+                style = Stroke(
+                    width = 1.dp.toPx(),
+                    pathEffect = PathEffect.dashPathEffect(floatArrayOf(4f, 8f))
+                )
+            )
+
+            // 3. Counter-rotating Inner Tactical Orbit Ring
+            val innerRingAngle = -radAngle * 0.5f
+            drawCircle(
+                color = coreColor.copy(alpha = 0.20f),
+                radius = maxR * 0.50f,
+                style = Stroke(
+                    width = 1.dp.toPx(),
+                    pathEffect = PathEffect.dashPathEffect(floatArrayOf(8f, 10f), phase = innerRingAngle * 10f)
+                )
+            )
+
+            // 4. Spiral Arms Glowing Dust Lanes
+            val arms = 3
+            for (arm in 0 until arms) {
+                val armBaseAngle = arm * (2f * Math.PI.toFloat() / arms)
+                val path = Path()
+                var first = true
+                val steps = 24
+                for (s in 2..steps) {
+                    val t = s.toFloat() / steps
+                    val r = t * maxR * 0.92f
+                    val a = armBaseAngle + 2.8f * t.pow(0.7f) + radAngle * (1.1f - t * 0.2f)
+                    val x = center.x + r * cos(a)
+                    val y = center.y + r * sin(a)
+                    if (first) {
+                        path.moveTo(x, y)
+                        first = false
+                    } else {
+                        path.lineTo(x, y)
+                    }
+                }
+                drawPath(
+                    path = path,
+                    color = coreColor.copy(alpha = 0.20f * corePulse),
+                    style = Stroke(width = 2.5.dp.toPx(), cap = StrokeCap.Round)
+                )
+            }
+
+            // 5. Draw Orbiting Celestial Galaxy Stars
+            for (star in stars) {
+                val currentAngle = star.baseAngleRad + (radAngle * star.speedMultiplier)
+                val starR = star.normalizedRadius * maxR
+                val sx = center.x + starR * cos(currentAngle)
+                val sy = center.y + starR * sin(currentAngle)
+
+                val twinkle = (0.8f + 0.2f * sin(currentAngle * 3f)).coerceIn(0.6f, 1f)
+                drawCircle(
+                    color = star.color.copy(alpha = (star.alpha * twinkle).coerceIn(0f, 1f)),
+                    radius = star.radiusPx,
+                    center = Offset(sx, sy)
+                )
+            }
+
+            // 6. Supermassive Central Cosmic Core Nucleus
+            drawCircle(
+                color = Color.White,
+                radius = 3.5f * corePulse,
+                center = center
+            )
+            drawCircle(
+                color = coreColor,
+                radius = 6.0f * corePulse,
+                center = center,
+                style = Stroke(width = 1.5f)
+            )
+
+            // 7. Tactical Reticle Crosshair Ticks at Outer Edge (N, S, E, W)
+            val tickLen = 5.dp.toPx()
+            val tickRadius = maxR * 0.94f
+            for (i in 0 until 4) {
+                val a = i * (Math.PI.toFloat() / 2f)
+                val x1 = center.x + (tickRadius - tickLen / 2f) * cos(a)
+                val y1 = center.y + (tickRadius - tickLen / 2f) * sin(a)
+                val x2 = center.x + (tickRadius + tickLen / 2f) * cos(a)
+                val y2 = center.y + (tickRadius + tickLen / 2f) * sin(a)
+                drawLine(
+                    color = coreColor.copy(alpha = 0.5f),
+                    start = Offset(x1, y1),
+                    end = Offset(x2, y2),
+                    strokeWidth = 1.5f
+                )
             }
         }
     }
