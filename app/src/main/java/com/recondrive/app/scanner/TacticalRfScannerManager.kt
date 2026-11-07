@@ -1439,6 +1439,7 @@ class TacticalRfScannerManager(
                     RfCategory.CCTV_SURVEILLANCE -> 2
                     RfCategory.DRONE_UAV -> 3
                     RfCategory.ACCESS_POINT -> 4
+                    RfCategory.CELL_TOWER -> 5
                 }
             }.thenByDescending { it.rssi }
         )

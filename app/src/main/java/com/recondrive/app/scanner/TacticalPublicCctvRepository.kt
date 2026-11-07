@@ -322,7 +322,7 @@ class TacticalPublicCctvRepository(private val context: Context) {
             val (distMeters, bearingDeg, role) = archetype
             if (distMeters > radiusMeters) continue
 
-            val bRad = Math.toRadians(bearingDeg)
+            val bRad = Math.toRadians(bearingDeg.toDouble())
             val camLat = lat + (distMeters * cos(bRad)) / 111320.0
             val camLon = lon + (distMeters * sin(bRad)) / (111320.0 * cos(Math.toRadians(lat)).coerceAtLeast(0.01))
 
