@@ -33,6 +33,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.recondrive.app.fog.FogPreferences
 import com.recondrive.app.map.*
+import com.recondrive.app.skin.FogGridOverlay
 import com.recondrive.app.skin.SkinManager
 import com.recondrive.app.ui.theme.*
 import kotlin.math.*
@@ -474,7 +475,74 @@ fun InteractiveMapScreen(
             // -----------------------------------------------------------------
             val vehicleScreenPos = project(currentLat, currentLon)
             if (isFogLayerActive) {
-                // Explored track glow around vehicle trajectory
+                val nativeCanvas = drawContext.canvas.nativeCanvas
+
+                // Surveillance Radar Beam Radius: Scales with configured fogRange (50m to 500m) and map zoom
+                // Guaranteed visible sector: 85px minimum, max 42% of screen dimension
+                val baseBeamPx = 95f + (fogRange.toFloat() - 50f) * (240f / 450f)
+                val zoomScale = (1.0f + (zoom - 13.0f) * 0.12f).coerceIn(0.70f, 1.45f)
+                val screenBeamRadius = (baseBeamPx * zoomScale).coerceIn(85f, (width.coerceAtMost(height) * 0.42f))
+
+                // 1. Android Native Path with EVEN_ODD FillType (Rock-solid hardware-accelerated cutout)
+                val androidShroudPath = android.graphics.Path().apply {
+                    fillType = android.graphics.Path.FillType.EVEN_ODD
+                    addRect(0f, 0f, width, height, android.graphics.Path.Direction.CW)
+                    addCircle(vehicleScreenPos.x, vehicleScreenPos.y, screenBeamRadius, android.graphics.Path.Direction.CW)
+                }
+
+                // 2. Base Fog Shroud Fill (Density dynamically driven by fogOpacity 15% to 100%)
+                val effectiveOpacity = (fogSkin.shroudOpacity * (0.35f + fogOpacity * 0.65f)).coerceIn(0.25f, 0.98f)
+                val shroudPaint = android.graphics.Paint().apply {
+                    color = fogSkin.shroudColor
+                    alpha = (effectiveOpacity * 255).toInt().coerceIn(0, 255)
+                    style = android.graphics.Paint.Style.FILL
+                    isAntiAlias = true
+                }
+                nativeCanvas.drawPath(androidShroudPath, shroudPaint)
+
+                // 3. Vignette Transition Shadow (Atmospheric boundary separating cleared sector from dense shroud)
+                val shadowRingPaint = android.graphics.Paint().apply {
+                    color = fogSkin.shroudColor
+                    alpha = (effectiveOpacity * 200).toInt().coerceIn(0, 255)
+                    style = android.graphics.Paint.Style.STROKE
+                    strokeWidth = 24f
+                    isAntiAlias = true
+                }
+                nativeCanvas.drawCircle(vehicleScreenPos.x, vehicleScreenPos.y, screenBeamRadius + 12f, shadowRingPaint)
+
+                // 4. Perimeter Laser Glowing Boundary (Theme-specific laser border)
+                val auraPaint = android.graphics.Paint().apply {
+                    color = fogSkin.perimeterGlowColor
+                    alpha = 85
+                    style = android.graphics.Paint.Style.STROKE
+                    strokeWidth = fogSkin.borderStrokeWidth + 6f
+                    isAntiAlias = true
+                }
+                nativeCanvas.drawCircle(vehicleScreenPos.x, vehicleScreenPos.y, screenBeamRadius + 2f, auraPaint)
+
+                val perimeterPaint = android.graphics.Paint().apply {
+                    color = fogSkin.perimeterGlowColor
+                    style = android.graphics.Paint.Style.STROKE
+                    strokeWidth = fogSkin.borderStrokeWidth.coerceAtLeast(2.5f)
+                    isAntiAlias = true
+                    if (fogSkin.isDashedBorder) {
+                        pathEffect = android.graphics.DashPathEffect(floatArrayOf(14f, 8f), 0f)
+                    }
+                }
+                nativeCanvas.drawCircle(vehicleScreenPos.x, vehicleScreenPos.y, screenBeamRadius, perimeterPaint)
+
+                // Inner tactical range dashed circle
+                val innerRingPaint = android.graphics.Paint().apply {
+                    color = fogSkin.perimeterGlowColor
+                    alpha = 75
+                    style = android.graphics.Paint.Style.STROKE
+                    strokeWidth = 1.5f
+                    isAntiAlias = true
+                    pathEffect = android.graphics.DashPathEffect(floatArrayOf(6f, 6f), 0f)
+                }
+                nativeCanvas.drawCircle(vehicleScreenPos.x, vehicleScreenPos.y, (screenBeamRadius * 0.92f).coerceAtLeast(10f), innerRingPaint)
+
+                // 5. Explored Road Trajectory Glowing Track
                 val exploredTrail = Path().apply {
                     val p1 = project(currentLat - 0.008, currentLon - 0.005)
                     val p2 = project(currentLat - 0.004, currentLon - 0.002)
@@ -488,48 +556,125 @@ fun InteractiveMapScreen(
                     style = Stroke(width = 6f)
                 )
 
-                // Surveillance Beam Cleared Boundary (Dynamic scaling with fogRange & zoom level)
-                val zoomFactor = 2.0.pow((zoom - 14.0f).toDouble()).toFloat()
-                val screenBeamRadius = (fogRange.toFloat() * zoomFactor).coerceIn(25f, (width.coerceAtLeast(height) * 0.85f))
-
-                // Outer Fog Shroud (Full Viewport minus the Cleared Surveillance Hole)
-                val screenRectPath = Path().apply {
-                    addRect(androidx.compose.ui.geometry.Rect(0f, 0f, width, height))
-                }
-                val beamHolePath = Path().apply {
-                    addOval(
-                        androidx.compose.ui.geometry.Rect(
-                            center = vehicleScreenPos,
-                            radius = screenBeamRadius
-                        )
-                    )
-                }
-                val fogShroudPath = Path().apply {
-                    op(screenRectPath, beamHolePath, androidx.compose.ui.graphics.PathOperation.Difference)
+                // 6. Fog Texture & Grid Overlay (Dynamic Fog Skin Styling)
+                val overlayPaint = android.graphics.Paint().apply {
+                    color = fogSkin.perimeterGlowColor
+                    alpha = (50 * fogOpacity).toInt().coerceIn(15, 90)
+                    style = android.graphics.Paint.Style.STROKE
+                    strokeWidth = 1.2f
+                    isAntiAlias = true
                 }
 
-                // Shroud overlay with opacity driven directly by fogOpacity (default 50% / 0.50f)
-                val effectiveOpacity = (fogSkin.shroudOpacity * fogOpacity).coerceIn(0.05f, 1.0f)
-                drawPath(
-                    path = fogShroudPath,
-                    color = Color(fogSkin.shroudColor).copy(alpha = effectiveOpacity)
-                )
+                when (fogSkin.gridOverlay) {
+                    FogGridOverlay.RADAR_RINGS -> {
+                        overlayPaint.pathEffect = android.graphics.DashPathEffect(floatArrayOf(10f, 10f), 0f)
+                        for (mul in floatArrayOf(1.6f, 2.3f, 3.2f, 4.4f)) {
+                            val r = screenBeamRadius * mul
+                            if (r < width.coerceAtLeast(height) * 1.5f) {
+                                nativeCanvas.drawCircle(vehicleScreenPos.x, vehicleScreenPos.y, r, overlayPaint)
+                            }
+                        }
+                        val span = width.coerceAtLeast(height) * 1.5f
+                        nativeCanvas.drawLine(vehicleScreenPos.x - span, vehicleScreenPos.y, vehicleScreenPos.x + span, vehicleScreenPos.y, overlayPaint)
+                        nativeCanvas.drawLine(vehicleScreenPos.x, vehicleScreenPos.y - span, vehicleScreenPos.x, vehicleScreenPos.y + span, overlayPaint)
+                    }
+                    FogGridOverlay.HEX_SCANLINES -> {
+                        var y = 0f
+                        overlayPaint.pathEffect = null
+                        while (y < height) {
+                            nativeCanvas.drawLine(0f, y, width, y, overlayPaint)
+                            y += 28f
+                        }
+                    }
+                    FogGridOverlay.CROSSHAIRS_ONLY -> {
+                        overlayPaint.pathEffect = null
+                        var x = 60f
+                        while (x < width) {
+                            var y = 60f
+                            while (y < height) {
+                                val dx = x - vehicleScreenPos.x
+                                val dy = y - vehicleScreenPos.y
+                                if (dx * dx + dy * dy > screenBeamRadius * screenBeamRadius) {
+                                    nativeCanvas.drawLine(x - 8f, y, x + 8f, y, overlayPaint)
+                                    nativeCanvas.drawLine(x, y - 8f, x, y + 8f, overlayPaint)
+                                }
+                                y += 120f
+                            }
+                            x += 120f
+                        }
+                    }
+                    FogGridOverlay.BURNT_EMBERS -> {
+                        val emberPaint = android.graphics.Paint().apply {
+                            color = android.graphics.Color.parseColor("#FF6D00")
+                            alpha = 140
+                            style = android.graphics.Paint.Style.FILL
+                            isAntiAlias = true
+                        }
+                        for (angle in 0 until 360 step 20) {
+                            val rad = Math.toRadians(angle.toDouble())
+                            val offsetDist = screenBeamRadius + 15f + ((angle * 7) % 25)
+                            val ex = vehicleScreenPos.x + offsetDist * cos(rad).toFloat()
+                            val ey = vehicleScreenPos.y + offsetDist * sin(rad).toFloat()
+                            nativeCanvas.drawCircle(ex, ey, 3.5f, emberPaint)
+                        }
+                    }
+                    FogGridOverlay.SMOKE_PARTICLES -> {
+                        val mistPaint = android.graphics.Paint().apply {
+                            color = fogSkin.perimeterGlowColor
+                            alpha = (30 * fogOpacity).toInt().coerceIn(10, 50)
+                            style = android.graphics.Paint.Style.FILL
+                            isAntiAlias = true
+                        }
+                        for (i in 0 until 12) {
+                            val angle = i * 30
+                            val rad = Math.toRadians(angle.toDouble())
+                            val rDist = screenBeamRadius * (1.4f + (i % 3) * 0.4f)
+                            val mx = vehicleScreenPos.x + rDist * cos(rad).toFloat()
+                            val my = vehicleScreenPos.y + rDist * sin(rad).toFloat()
+                            nativeCanvas.drawCircle(mx, my, screenBeamRadius * 0.45f, mistPaint)
+                        }
+                    }
+                    FogGridOverlay.CLEAN_NONE -> {
+                        // Total clean blackout void
+                    }
+                }
 
-                // Glowing perimeter boundary around cleared surveillance beam
-                drawCircle(
-                    color = Color(fogSkin.perimeterGlowColor),
-                    radius = screenBeamRadius,
-                    center = vehicleScreenPos,
-                    style = Stroke(width = fogSkin.borderStrokeWidth)
-                )
+                // 7. Off-Screen Radar Tracker Beacon (If user panned away from vehicle)
+                if (vehicleScreenPos.x !in 0f..width || vehicleScreenPos.y !in 0f..height) {
+                    val dx = vehicleScreenPos.x - width / 2f
+                    val dy = vehicleScreenPos.y - height / 2f
+                    val angle = atan2(dy.toDouble(), dx.toDouble())
+                    val edgeMargin = 45f
+                    val clampedX = (width / 2f + (width / 2f - edgeMargin) * cos(angle).toFloat()).coerceIn(edgeMargin, width - edgeMargin)
+                    val clampedY = (height / 2f + (height / 2f - edgeMargin) * sin(angle).toFloat()).coerceIn(edgeMargin, height - edgeMargin)
+                    val distKm = UkOsmDataEngine.calculateDistanceKm(cameraLat, cameraLon, currentLat, currentLon)
 
-                // Inner tactical range pulse ring
-                drawCircle(
-                    color = Color(fogSkin.perimeterGlowColor).copy(alpha = 0.25f),
-                    radius = (screenBeamRadius * 0.94f).coerceAtLeast(8f),
-                    center = vehicleScreenPos,
-                    style = Stroke(width = 1.5f, pathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(6f, 6f)))
-                )
+                    val trackerAura = android.graphics.Paint().apply {
+                        color = fogSkin.perimeterGlowColor
+                        alpha = 100
+                        style = android.graphics.Paint.Style.FILL
+                        isAntiAlias = true
+                    }
+                    nativeCanvas.drawCircle(clampedX, clampedY, 18f, trackerAura)
+
+                    val trackerCore = android.graphics.Paint().apply {
+                        color = fogSkin.perimeterGlowColor
+                        style = android.graphics.Paint.Style.FILL
+                        isAntiAlias = true
+                    }
+                    nativeCanvas.drawCircle(clampedX, clampedY, 9f, trackerCore)
+
+                    val trackerText = android.graphics.Paint().apply {
+                        color = android.graphics.Color.WHITE
+                        textSize = 22f
+                        typeface = android.graphics.Typeface.create(android.graphics.Typeface.MONOSPACE, android.graphics.Typeface.BOLD)
+                        isAntiAlias = true
+                        setShadowLayer(4f, 0f, 0f, android.graphics.Color.BLACK)
+                    }
+                    val tStr = "RADAR: %.1f km".format(distKm)
+                    val tw = trackerText.measureText(tStr)
+                    nativeCanvas.drawText(tStr, (clampedX - tw / 2f).coerceIn(10f, width - tw - 10f), (clampedY - 22f).coerceAtLeast(30f), trackerText)
+                }
             }
 
             // -----------------------------------------------------------------
@@ -659,9 +804,11 @@ fun InteractiveMapScreen(
 
             Spacer(modifier = Modifier.height(6.dp))
 
-            // Active OSM & Layer Mode Status Chips
+            // Active OSM, Fog Status & Layer Mode Status Chips
             Row(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -684,6 +831,30 @@ fun InteractiveMapScreen(
                         Text(
                             text = if (hasOfflineData) "OFFLINE PACK ACTIVE • UK DATA READY" else "OSM ACTIVE • NO API KEY REQUIRED",
                             color = ReconCyan,
+                            fontSize = 9.sp,
+                            fontFamily = FontFamily.Monospace,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+
+                // Fog Shroud Status Chip (Interactive Toggle)
+                Surface(
+                    color = TacticalSurface.copy(alpha = 0.95f),
+                    shape = RoundedCornerShape(12.dp),
+                    border = androidx.compose.foundation.BorderStroke(
+                        1.dp,
+                        if (isFogLayerActive) Color(fogSkin.perimeterGlowColor) else TacticalBorder
+                    ),
+                    modifier = Modifier.clickable { isFogLayerActive = !isFogLayerActive }
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = if (isFogLayerActive) "🌫️ FOG: ${fogRange}m (${(fogOpacity * 100).toInt()}%)" else "👁️ FOG: OFF",
+                            color = if (isFogLayerActive) Color(fogSkin.perimeterGlowColor) else TextSecondary,
                             fontSize = 9.sp,
                             fontFamily = FontFamily.Monospace,
                             fontWeight = FontWeight.Bold
