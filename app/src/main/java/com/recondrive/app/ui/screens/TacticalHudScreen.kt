@@ -226,7 +226,7 @@ fun TacticalHudScreen(
                             .size(46.dp)
                             .clip(CircleShape)
                             .background(Color(mapSkin.highwayColor).copy(alpha = 0.15f))
-                            .border(1.5f, Color(mapSkin.highwayColor), CircleShape),
+                            .border(1.5.dp, Color(mapSkin.highwayColor), CircleShape),
                         contentAlignment = Alignment.Center
                     ) {
                         Canvas(modifier = Modifier.size(28.dp)) {
