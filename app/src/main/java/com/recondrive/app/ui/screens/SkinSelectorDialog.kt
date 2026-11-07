@@ -491,8 +491,8 @@ private fun MapSkinList(
                         horizontalArrangement = Arrangement.SpaceEvenly
                     ) {
                         Box(modifier = Modifier.size(8.dp).clip(CircleShape).background(Color(skin.highwayColor)))
-                        Box(modifier = Modifier.size(8.dp).clip(CircleShape).background(Color(skin.routeColor)))
-                        Box(modifier = Modifier.size(8.dp).clip(CircleShape).background(Color(skin.waterColor)))
+                        Box(modifier = Modifier.size(8.dp).clip(CircleShape).background(Color(skin.majorRoadColor)))
+                        Box(modifier = Modifier.size(8.dp).clip(CircleShape).background(Color(skin.minorRoadColor)))
                     }
 
                     Spacer(modifier = Modifier.width(12.dp))

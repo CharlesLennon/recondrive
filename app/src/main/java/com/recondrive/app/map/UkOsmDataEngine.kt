@@ -932,7 +932,7 @@ object UkOsmDataEngine {
         bounds: UkBoundingBox,
         zoom: Float
     ): List<OsmRoadSegment> {
-        if (zoom < 11.0f) return emptyList()
+        if (zoom < 9.5f) return emptyList()
 
         val localStreets = mutableListOf<OsmRoadSegment>()
 
@@ -941,7 +941,8 @@ object UkOsmDataEngine {
             zoom >= 15.5f -> 0.003  // ~300m fine residential grid
             zoom >= 13.5f -> 0.007  // ~700m city streets & avenues
             zoom >= 12.0f -> 0.015  // ~1.5km regional collectors
-            else -> 0.030           // ~3km primary interconnects
+            zoom >= 10.5f -> 0.030  // ~3km primary interconnects
+            else -> 0.060           // ~6km regional sector grid
         }
 
         val startLat = floor(bounds.minLat / step) * step

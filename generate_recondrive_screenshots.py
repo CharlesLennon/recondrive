@@ -608,16 +608,26 @@ def generate_screenshot_06():
 
     # 1. Background Vector Landmass & Streamed OSM Street Grid
     # Streamed raster tile background grid texture
-    for grid_x in range(0, W, 32):
+    for grid_x in range(0, W, 48):
         draw.line([(grid_x, 0), (grid_x, H)], fill='#0F1622', width=1)
-    for grid_y in range(0, H, 32):
+    for grid_y in range(0, H, 48):
         draw.line([(0, grid_y), (W, grid_y)], fill='#0F1622', width=1)
 
+    # Local & Residential Street Grid (High-Contrast Tactical Slate #567498)
+    for sx in range(40, W - 40, 48):
+        # North-south local streets with dark casing
+        draw.line([(sx, 120), (sx, H - 180)], fill='#000000', width=4)
+        draw.line([(sx, 120), (sx, H - 180)], fill='#567498', width=2)
+    for sy in range(140, H - 200, 48):
+        # East-west local streets with dark casing
+        draw.line([(20, sy), (W - 20, sy)], fill='#000000', width=4)
+        draw.line([(20, sy), (W - 20, sy)], fill='#567498', width=2)
+
     # Secondary city street blocks (OSM urban building & street density)
-    for bx in range(80, W - 80, 56):
-        for by in range(160, H - 280, 56):
+    for bx in range(88, W - 88, 48):
+        for by in range(180, H - 240, 48):
             if math.hypot(bx - cx, by - cy) < 320:
-                draw.rectangle([(bx, by), (bx + 48, by + 48)], fill='#0D131D', outline='#162232', width=1)
+                draw.rectangle([(bx + 4, by + 4), (bx + 44, by + 44)], fill='#0E1624', outline='#1C2A3E', width=1)
 
     # 2. Vector Water Features (River Thames meandering with realistic bends & bridges)
     thames_pts = [
@@ -654,8 +664,8 @@ def generate_screenshot_06():
         (cx + 220, cy - 80),
         (cx + 240, cy + 20)
     ]
-    draw.line(nc_pts, fill='#005577', width=6)
-    draw.line(nc_pts, fill='#00A8CC', width=3)
+    draw.line(nc_pts, fill='#000000', width=8)
+    draw.line(nc_pts, fill='#00D4FF', width=4)
 
     # A205 South Circular
     sc_pts = [
@@ -666,29 +676,38 @@ def generate_screenshot_06():
         (cx + 180, cy + 130),
         (cx + 240, cy + 40)
     ]
-    draw.line(sc_pts, fill='#005577', width=5)
-    draw.line(sc_pts, fill='#00A8CC', width=3)
+    draw.line(sc_pts, fill='#000000', width=8)
+    draw.line(sc_pts, fill='#00D4FF', width=4)
 
     # M25 Outer London Orbital Motorway
-    draw.ellipse([(cx - 340, cy - 280), (cx + 340, cy + 280)], outline='#002844', width=12)
-    draw.ellipse([(cx - 340, cy - 280), (cx + 340, cy + 280)], outline='#00E5FF', width=4)
+    draw.ellipse([(cx - 340, cy - 280), (cx + 340, cy + 280)], outline='#000000', width=14)
+    draw.ellipse([(cx - 340, cy - 280), (cx + 340, cy + 280)], outline='#38E1FF', width=6)
 
     # Radial Motorways & Trunks
     # M1 North
-    draw.line([(cx - 60, cy - 80), (cx - 140, cy - 260), (cx - 200, 0)], fill='#00E5FF', width=5)
+    draw.line([(cx - 60, cy - 80), (cx - 140, cy - 260), (cx - 200, 0)], fill='#000000', width=9)
+    draw.line([(cx - 60, cy - 80), (cx - 140, cy - 260), (cx - 200, 0)], fill='#38E1FF', width=6)
     # M4 West
-    draw.line([(cx - 80, cy + 10), (cx - 280, cy + 20), (0, cy + 30)], fill='#00E5FF', width=5)
-    # A40 Westway
-    draw.line([(cx - 240, cy - 40), (cx - 80, cy - 10), (cx, cy)], fill='#00A8CC', width=4)
-    # A4 Piccadilly / Knightsbridge
-    draw.line([(cx - 200, cy + 30), (cx - 60, cy + 15), (cx, cy)], fill='#00A8CC', width=4)
-    # A11 Whitechapel / Stratford
-    draw.line([(cx, cy), (cx + 120, cy - 30), (cx + 240, cy - 60)], fill='#00A8CC', width=4)
-    # A13 Commercial Rd / Thames Gateway
-    draw.line([(cx, cy + 20), (cx + 160, cy + 30), (W, cy + 60)], fill='#00A8CC', width=4)
-    # A2 Old Kent Rd & A3 South
-    draw.line([(cx, cy + 20), (cx + 120, cy + 140), (cx + 240, cy + 260)], fill='#00A8CC', width=4)
-    draw.line([(cx, cy + 20), (cx - 80, cy + 140), (cx - 180, cy + 280)], fill='#00A8CC', width=4)
+    draw.line([(cx - 80, cy + 10), (cx - 280, cy + 20), (0, cy + 30)], fill='#000000', width=9)
+    draw.line([(cx - 80, cy + 10), (cx - 280, cy + 20), (0, cy + 30)], fill='#38E1FF', width=6)
+
+    # A-Road Radial Corridors (High-Contrast Electric Cyan #00D4FF)
+    a_roads = [
+        # A40 Westway
+        [(cx - 240, cy - 40), (cx - 80, cy - 10), (cx, cy)],
+        # A4 Piccadilly / Knightsbridge
+        [(cx - 200, cy + 30), (cx - 60, cy + 15), (cx, cy)],
+        # A11 Whitechapel / Stratford
+        [(cx, cy), (cx + 120, cy - 30), (cx + 240, cy - 60)],
+        # A13 Commercial Rd / Thames Gateway
+        [(cx, cy + 20), (cx + 160, cy + 30), (W, cy + 60)],
+        # A2 Old Kent Rd & A3 South
+        [(cx, cy + 20), (cx + 120, cy + 140), (cx + 240, cy + 260)],
+        [(cx, cy + 20), (cx - 80, cy + 140), (cx - 180, cy + 280)]
+    ]
+    for pts in a_roads:
+        draw.line(pts, fill='#000000', width=7)
+        draw.line(pts, fill='#00D4FF', width=4)
 
     # 4. Explored Fog of War Trail & 50m / 50% Active Shroud
     explored_trail = [

@@ -239,7 +239,7 @@ fun InteractiveMapScreen(
             // Stroke coastline outline
             drawPath(
                 path = gbPath,
-                color = Color(mapSkin.minorRoadColor).copy(alpha = 0.6f),
+                color = Color(mapSkin.minorRoadColor).copy(alpha = 0.30f),
                 style = Stroke(width = (zoom * 0.25f).coerceIn(1.5f, 4f))
             )
 
@@ -261,7 +261,7 @@ fun InteractiveMapScreen(
             )
             drawPath(
                 path = niPath,
-                color = Color(mapSkin.minorRoadColor).copy(alpha = 0.6f),
+                color = Color(mapSkin.minorRoadColor).copy(alpha = 0.30f),
                 style = Stroke(width = (zoom * 0.25f).coerceIn(1.5f, 4f))
             )
 
@@ -331,9 +331,9 @@ fun InteractiveMapScreen(
             // -----------------------------------------------------------------
             // D. DRAW SECONDARY & LOCAL STREET GRID (Continuous spatial coverage)
             // -----------------------------------------------------------------
-            if (zoom >= 11.0f) {
+            if (zoom >= 9.5f) {
                 val localGrid = UkOsmDataEngine.getLocalStreetGridForBounds(viewBounds, zoom)
-                val roadAlpha = if (mapRenderingMode == "VECTOR") 1.0f else if (tilesRenderedCount > 0) 0.70f else 0.90f
+                val roadAlpha = if (mapRenderingMode == "VECTOR") 1.0f else 0.95f
                 for (road in localGrid) {
                     val path = Path()
                     var started = false
@@ -346,16 +346,36 @@ fun InteractiveMapScreen(
                             path.lineTo(sc.x, sc.y)
                         }
                     }
-                    val strokeW = when (road.type) {
-                        OsmRoadType.PRIMARY -> 2.5f
-                        OsmRoadType.SECONDARY -> 1.8f
-                        else -> 1.2f
+
+                    if (road.type == OsmRoadType.SECONDARY) {
+                        val secWidth = (zoom * 0.32f).coerceIn(3.0f, 6.5f)
+                        // Dark casing underlay for sharp road edge separation
+                        drawPath(
+                            path = path,
+                            color = Color.Black.copy(alpha = 0.55f),
+                            style = Stroke(width = secWidth + 2.0f)
+                        )
+                        // Secondary arterial line using majorRoadColor
+                        drawPath(
+                            path = path,
+                            color = Color(mapSkin.majorRoadColor).copy(alpha = 0.85f),
+                            style = Stroke(width = secWidth)
+                        )
+                    } else {
+                        val minorWidth = (zoom * 0.22f).coerceIn(2.2f, 4.5f)
+                        // Contrast casing underlay
+                        drawPath(
+                            path = path,
+                            color = Color.Black.copy(alpha = 0.40f),
+                            style = Stroke(width = minorWidth + 1.5f)
+                        )
+                        // High-contrast minor road line
+                        drawPath(
+                            path = path,
+                            color = Color(mapSkin.minorRoadColor).copy(alpha = roadAlpha),
+                            style = Stroke(width = minorWidth)
+                        )
                     }
-                    drawPath(
-                        path = path,
-                        color = Color(mapSkin.minorRoadColor).copy(alpha = roadAlpha),
-                        style = Stroke(width = strokeW)
-                    )
                 }
             }
 
@@ -377,36 +397,59 @@ fun InteractiveMapScreen(
 
                 when (road.type) {
                     OsmRoadType.MOTORWAY -> {
+                        val mwBase = (zoom * 0.52f).coerceIn(4.5f, 11f)
+                        // Underlay dark border casing
+                        drawPath(
+                            path = path,
+                            color = Color.Black.copy(alpha = 0.85f),
+                            style = Stroke(width = mwBase + 5f)
+                        )
                         // Tactical motorway glow
                         drawPath(
                             path = path,
-                            color = Color(mapSkin.highwayColor).copy(alpha = 0.35f),
-                            style = Stroke(width = (zoom * 0.7f).coerceIn(5f, 14f))
+                            color = Color(mapSkin.highwayColor).copy(alpha = 0.45f),
+                            style = Stroke(width = mwBase + 3.5f)
                         )
                         // Core corridor
                         drawPath(
                             path = path,
                             color = Color(mapSkin.highwayColor),
-                            style = Stroke(width = (zoom * 0.4f).coerceIn(3f, 7f))
+                            style = Stroke(width = mwBase)
                         )
                     }
                     OsmRoadType.PRIMARY, OsmRoadType.TRUNK -> {
+                        // A-Roads: bold, crisp, and high-visibility using majorRoadColor
+                        val aRoadBase = (zoom * 0.40f).coerceIn(3.5f, 8.5f)
+                        // Underlay dark border casing
                         drawPath(
                             path = path,
-                            color = Color(mapSkin.routeColor).copy(alpha = 0.35f),
-                            style = Stroke(width = (zoom * 0.5f).coerceIn(3.5f, 8f))
+                            color = Color.Black.copy(alpha = 0.75f),
+                            style = Stroke(width = aRoadBase + 4f)
                         )
+                        // A-Road corridor glow
                         drawPath(
                             path = path,
-                            color = Color(mapSkin.routeColor),
-                            style = Stroke(width = (zoom * 0.3f).coerceIn(2f, 5f))
+                            color = Color(mapSkin.majorRoadColor).copy(alpha = 0.40f),
+                            style = Stroke(width = aRoadBase + 2.5f)
+                        )
+                        // Core corridor
+                        drawPath(
+                            path = path,
+                            color = Color(mapSkin.majorRoadColor),
+                            style = Stroke(width = aRoadBase)
                         )
                     }
                     else -> {
+                        val rBase = (zoom * 0.28f).coerceIn(2.8f, 6.0f)
+                        drawPath(
+                            path = path,
+                            color = Color.Black.copy(alpha = 0.6f),
+                            style = Stroke(width = rBase + 2f)
+                        )
                         drawPath(
                             path = path,
                             color = Color(mapSkin.minorRoadColor),
-                            style = Stroke(width = 2.5f)
+                            style = Stroke(width = rBase)
                         )
                     }
                 }

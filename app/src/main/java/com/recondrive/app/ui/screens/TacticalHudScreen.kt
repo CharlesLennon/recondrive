@@ -427,14 +427,20 @@ fun TacticalHudScreen(
                 )
 
                 // Background Map Roads (Map Skin colors)
+                // Background minor road network with contrast casing
                 val bgRoad = Path().apply {
                     moveTo(0f, cy + 80f)
                     lineTo(size.width, cy - 40f)
                 }
                 drawPath(
                     path = bgRoad,
+                    color = Color.Black.copy(alpha = 0.5f),
+                    style = Stroke(width = 5.5f)
+                )
+                drawPath(
+                    path = bgRoad,
                     color = Color(mapSkin.minorRoadColor),
-                    style = Stroke(width = 3f)
+                    style = Stroke(width = 3.5f)
                 )
 
                 // Explored Road Track (Driven by Fog Skin Explored Road Glow)

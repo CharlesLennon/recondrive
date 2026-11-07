@@ -27,12 +27,12 @@ enum class MapSkin(
         backgroundColorHex = "#0A0D12",
         waterColorHex = "#06131D",
         landColorHex = "#0E141E",
-        minorRoadColorHex = "#1C2636",
-        majorRoadColorHex = "#00A8CC",
-        highwayColorHex = "#00E5FF",
+        minorRoadColorHex = "#567498",
+        majorRoadColorHex = "#00D4FF",
+        highwayColorHex = "#38E1FF",
         routeColorHex = "#FFD600",
         vehicleCursorColorHex = "#00E5FF",
-        labelColorHex = "#8B949E"
+        labelColorHex = "#C9D1D9"
     ),
     CYBERPUNK_NEON(
         id = "cyberpunk_neon",
@@ -41,12 +41,12 @@ enum class MapSkin(
         backgroundColorHex = "#05050A",
         waterColorHex = "#0D0826",
         landColorHex = "#120A20",
-        minorRoadColorHex = "#2E104D",
+        minorRoadColorHex = "#7E3CA6",
         majorRoadColorHex = "#00F0FF",
         highwayColorHex = "#FF007F",
         routeColorHex = "#FFE600",
         vehicleCursorColorHex = "#FF007F",
-        labelColorHex = "#E0B0FF"
+        labelColorHex = "#F0D0FF"
     ),
     MILITARY_TOPO(
         id = "military_topo",
@@ -55,12 +55,12 @@ enum class MapSkin(
         backgroundColorHex = "#141A12",
         waterColorHex = "#0E1C1A",
         landColorHex = "#1A2218",
-        minorRoadColorHex = "#2C3528",
-        majorRoadColorHex = "#B58451",
-        highwayColorHex = "#D4A373",
+        minorRoadColorHex = "#667A5F",
+        majorRoadColorHex = "#E0A96D",
+        highwayColorHex = "#F5CA98",
         routeColorHex = "#70E000",
         vehicleCursorColorHex = "#70E000",
-        labelColorHex = "#A3B18A"
+        labelColorHex = "#D0DCC0"
     ),
     MIDNIGHT_STEALTH(
         id = "midnight_stealth",
@@ -69,12 +69,12 @@ enum class MapSkin(
         backgroundColorHex = "#0E0E10",
         waterColorHex = "#18181C",
         landColorHex = "#141416",
-        minorRoadColorHex = "#24242A",
-        majorRoadColorHex = "#4A4A55",
-        highwayColorHex = "#828292",
+        minorRoadColorHex = "#58586A",
+        majorRoadColorHex = "#9898AB",
+        highwayColorHex = "#D8D8E6",
         routeColorHex = "#FFFFFF",
         vehicleCursorColorHex = "#FFFFFF",
-        labelColorHex = "#9A9AA6"
+        labelColorHex = "#D0D0DC"
     ),
     CLASSIC_OSM_LIGHT(
         id = "classic_osm_light",
@@ -88,7 +88,7 @@ enum class MapSkin(
         highwayColorHex = "#FCA765",
         routeColorHex = "#0066FF",
         vehicleCursorColorHex = "#D90429",
-        labelColorHex = "#404040"
+        labelColorHex = "#333333"
     ),
     ANTIQUE_PARCHMENT(
         id = "antique_parchment",
@@ -97,12 +97,12 @@ enum class MapSkin(
         backgroundColorHex = "#EADBBF",
         waterColorHex = "#9FB7A8",
         landColorHex = "#E2D0B0",
-        minorRoadColorHex = "#C8B594",
-        majorRoadColorHex = "#735137",
-        highwayColorHex = "#4A321E",
+        minorRoadColorHex = "#9C7F5E",
+        majorRoadColorHex = "#633F23",
+        highwayColorHex = "#3E220E",
         routeColorHex = "#9E2A2B",
         vehicleCursorColorHex = "#8B1E0F",
-        labelColorHex = "#3A281A"
+        labelColorHex = "#26170C"
     );
 
     val backgroundColor: Int get() = Color.parseColor(backgroundColorHex)

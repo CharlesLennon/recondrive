@@ -29,9 +29,9 @@ class CarSurfaceRenderer(
 
     // Reusable Paints
     private val bgPaint = Paint().apply { style = Paint.Style.FILL }
-    private val roadMinorPaint = Paint().apply { style = Paint.Style.STROKE; strokeWidth = 3.0f; isAntiAlias = true }
-    private val roadMajorPaint = Paint().apply { style = Paint.Style.STROKE; strokeWidth = 6.0f; isAntiAlias = true }
-    private val roadHighwayPaint = Paint().apply { style = Paint.Style.STROKE; strokeWidth = 9.0f; isAntiAlias = true }
+    private val roadMinorPaint = Paint().apply { style = Paint.Style.STROKE; strokeWidth = 3.5f; isAntiAlias = true }
+    private val roadMajorPaint = Paint().apply { style = Paint.Style.STROKE; strokeWidth = 7.5f; isAntiAlias = true }
+    private val roadHighwayPaint = Paint().apply { style = Paint.Style.STROKE; strokeWidth = 12.0f; isAntiAlias = true }
     private val routePaint = Paint().apply {
         style = Paint.Style.STROKE
         strokeWidth = 10.0f
