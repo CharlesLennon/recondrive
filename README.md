@@ -1,7 +1,7 @@
 # 🛰️ ReconDrive: Tactical OSM & Android Auto Exploration Navigator
 
 [![GitHub Release](https://img.shields.io/github/v/release/CharlesLennon/recondrive?color=cyan&label=Latest%20Release)](https://github.com/CharlesLennon/recondrive/releases/latest)
-[![Download APK](https://img.shields.io/badge/Download-APK%20(v1.0.16)-brightgreen?logo=android)](https://github.com/CharlesLennon/recondrive/releases/download/v1.0.16/ReconDrive-v1.0.16-tactical.apk)
+[![Download APK](https://img.shields.io/badge/Download-APK%20(v1.0.17)-brightgreen?logo=android)](https://github.com/CharlesLennon/recondrive/releases/download/v1.0.17/recondrive-v1.0.17.apk)
 [![Build Android APK](https://github.com/CharlesLennon/recondrive/actions/workflows/build-apk.yml/badge.svg)](https://github.com/CharlesLennon/recondrive/actions/workflows/build-apk.yml)
 [![Android](https://img.shields.io/badge/Platform-Android%20%7C%20Android%20Auto-green.svg)](https://developer.android.com/training/cars/apps)
 [![Kotlin](https://img.shields.io/badge/Language-Kotlin%201.9.23-blue.svg)](https://kotlinlang.org/)
@@ -27,23 +27,37 @@ Full hardware-accelerated map surface projection on the car dashboard showing ex
 
 ---
 
-### 2. Handset Tactical HUD & AI Navigation Cockpit (Jetpack Compose)
-Mobile portrait dashboard featuring a centered animated cosmic galaxy core canvas, intelligent prompt asking *"Where to? All tactical navigation subsystems online."*, saved location cards (Home, Work) with photo thumbnails, stacked contact cards for sub-destinations (e.g., Annabell), high-visibility speedometer (MPH default), heading bearing tape, radar canvas preview, and one-tap destination engagement routing.
+### 2. Handset Tactical HUD & AI Navigation Cockpit (Non-Scrolling Rigid Viewport)
+Mobile portrait dashboard engineered to fit completely on-screen with **zero vertical scrolling**:
+- **Centered Animated Galaxy Core**: 3 logarithmic spiral arms, differential orbital mechanics, and pulsing cosmic bulge.
+- **Intelligent Prompt**: GPT-style typewriter text asking *"Where to? All tactical navigation subsystems online."*
+- **Primary Telemetry**: High-visibility speedometer (MPH default), heading bearing tape, and Fog optics calibration.
+- **Horizontal Quick-Engage Carousel**: Saved locations (Home, Work) and stacked contact groups arranged in a sleek swipeable horizontal row, keeping the screen 100% fixed vertically.
 
 ![Handset Tactical HUD](screenshots/screenshot_02_handset_tactical_hud.png)
 *Fig 2. Mobile tactical HUD featuring centered animated galaxy AI cockpit prompt, saved destination cards with photo previews, stacked contact cards, and real-time telemetry.*
 
 ---
 
-### 3. Interactive UK Map Tab (Google Maps-Style Free-Roaming)
-Full-screen interactive OpenStreetMap navigation tab supporting smooth panning, pinch-to-zoom, compass bearing reset, floating GPS re-center FAB, target waypoint dropping with distance & ETA calculation, and quick jump chips across the United Kingdom:
+### 3. SIGINT RF Spectrum & Wardrive Scanner (Cars, CCTV, Drones & ANPR Detection)
+Dedicated RF reconnaissance tab inspired by cybersecurity wardriving tools:
+- **Vehicle Emitter Detection**: Uses Wi-Fi SSIDs, BLE beacons, and MAC OUIs to detect nearby connected cars (Tesla, Ford SYNC, GM OnStar, BMW, Mercedes MBUX, VAG MMI) and in-vehicle dashcams (VIOFO, BlackVue, Nextbase, 70mai, Garmin).
+- **Surveillance Optic Auditing**: Sniffs out commercial IP CCTV cameras (Hikvision, Dahua), smart doorbells (Ring, Google Nest, Eufy, Arlo), and municipal ANPR / speed enforcement cameras.
+- **Drone / UAV Identification**: Intercepts FAA/CAA Direct Remote ID broadcasts from airborne drones (DJI, Mavic, Parrot).
+- **360° Tactical Radar Scope**: Real-time rotating phosphor beam plotting detected emitters as glowing blips according to signal RSSI and estimated line-of-sight distance.
+- **Pin to Map**: Lock onto any detected vehicle or camera coordinate and navigate directly to it on the interactive map!
+
+---
+
+### 4. Interactive UK Map Tab (Google Maps-Style Free-Roaming)
+Full-screen interactive OpenStreetMap navigation tab supporting smooth panning, pinch-to-zoom (with persistent zoom memory across tab navigation), compass bearing reset, floating GPS re-center FAB, target waypoint dropping with distance & ETA calculation, and quick jump chips across the United Kingdom:
 
 ![Interactive Google Maps-style UK Map](screenshots/screenshot_06_interactive_uk_map.png)
 *Fig 3. Interactive free-roaming UK map with complete OpenStreetMap road geometries, London M25 orbital ring, River Thames, target waypoints, and Fog of War overlay.*
 
 ---
 
-### 4. Decoupled Customization & Fog Optics
+### 5. Decoupled Customization & Fog Optics
 Map cartography themes and Fog of War aesthetics are **completely decoupled** — pair any map style with any fog shroud style, and fine-tune surveillance beam range and shroud opacity:
 
 | 🗺️ Map Theme Picker (Decoupled Cartography) | 🎛️ Fog Range & Opacity Calibration |

@@ -41,6 +41,9 @@ class ReconApplication : Application() {
     lateinit var deviceOrientationManager: com.recondrive.app.sensor.DeviceOrientationManager
         private set
 
+    lateinit var rfScannerManager: com.recondrive.app.scanner.TacticalRfScannerManager
+        private set
+
     override fun onCreate() {
         super.onCreate()
         
@@ -67,6 +70,7 @@ class ReconApplication : Application() {
         savedDestinationRepository = com.recondrive.app.destinations.SavedDestinationRepository(this)
         locationTimelineManager = com.recondrive.app.telemetry.LocationTimelineManager(this)
         deviceOrientationManager = com.recondrive.app.sensor.DeviceOrientationManager(this)
+        rfScannerManager = com.recondrive.app.scanner.TacticalRfScannerManager(this)
     }
 
     companion object {

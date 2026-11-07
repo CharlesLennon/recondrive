@@ -239,7 +239,28 @@ class MainActivity : ComponentActivity() {
                                             text = "MAP",
                                             color = if (selectedTab == 1) ReconCyan else TextSecondary,
                                             fontFamily = FontFamily.Monospace,
-                                            fontSize = 10.sp,
+                                            fontSize = 9.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+                                )
+
+                                NavigationBarItem(
+                                    selected = selectedTab == 2,
+                                    onClick = { selectedTab = 2 },
+                                    icon = {
+                                        Icon(
+                                            imageVector = Icons.Default.Sensors,
+                                            contentDescription = "SCANNER",
+                                            tint = if (selectedTab == 2) ReconCyan else TextSecondary
+                                        )
+                                    },
+                                    label = {
+                                        Text(
+                                            text = "SCANNER",
+                                            color = if (selectedTab == 2) ReconCyan else TextSecondary,
+                                            fontFamily = FontFamily.Monospace,
+                                            fontSize = 9.sp,
                                             fontWeight = FontWeight.Bold
                                         )
                                     }
@@ -389,6 +410,23 @@ class MainActivity : ComponentActivity() {
                                     onOpenTimeline = { showTimelineSheet = true }
                                 )
                             }
+                            2 -> {
+                                com.recondrive.app.ui.screens.TacticalScannerScreen(
+                                    scannerManager = ReconApplication.instance.rfScannerManager,
+                                    currentLat = currentLat,
+                                    currentLon = currentLon,
+                                    onNavigateToLocation = { name, destLat, destLon ->
+                                        targetWaypoint = destLat to destLon
+                                        targetWaypointName = name
+                                        selectedTab = 1
+                                        Toast.makeText(
+                                            this@MainActivity,
+                                            "RF Target locked: $name. Opening Tactical Map...",
+                                            Toast.LENGTH_SHORT
+                                        ).show()
+                                    }
+                                )
+                            }
                         }
                     }
                 }
@@ -403,6 +441,10 @@ class MainActivity : ComponentActivity() {
         )
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             permissionsToRequest.add(Manifest.permission.POST_NOTIFICATIONS)
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            permissionsToRequest.add(Manifest.permission.BLUETOOTH_SCAN)
+            permissionsToRequest.add(Manifest.permission.BLUETOOTH_CONNECT)
         }
 
         val missing = permissionsToRequest.filter {
