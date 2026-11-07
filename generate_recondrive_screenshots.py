@@ -424,27 +424,28 @@ def generate_screenshot_04():
     # Explored track
     draw.line([(mcx - 120, mcy + 40), (mcx, mcy), (mcx + 120, mcy - 40)], fill='#00E676', width=6)
 
-    # Cleared Circle (180m radius scaled)
+    # Cleared Circle (50m radius scaled)
+    mini_r = 48
     for gr in (3, 2, 1):
-        draw.ellipse([(mcx - 68 - gr, mcy - 68 - gr), (mcx + 68 + gr, mcy + 68 + gr)], outline='#00E5FF', width=1)
-    draw.ellipse([(mcx - 68, mcy - 68), (mcx + 68, mcy + 68)], outline='#00E5FF', width=2)
+        draw.ellipse([(mcx - mini_r - gr, mcy - mini_r - gr), (mcx + mini_r + gr, mcy + mini_r + gr)], outline='#00E5FF', width=1)
+    draw.ellipse([(mcx - mini_r, mcy - mini_r), (mcx + mini_r, mcy + mini_r)], outline='#00E5FF', width=2)
     
     # Player marker
     draw.polygon([(mcx + 8, mcy - 8), (mcx - 4, mcy - 2), (mcx - 2, mcy + 2), (mcx - 8, mcy + 8)], fill='#00E5FF')
 
-    draw.text((mcx - 140, mini_y + mini_h - 26), "SURVEILLANCE BEAM: 180M  •  OPACITY: 95% DENSE", fill='#00E5FF', font=FONT_MONO_SM)
+    draw.text((mcx - 140, mini_y + mini_h - 26), "SURVEILLANCE BEAM: 50M  •  OPACITY: 50% DEFAULT", fill='#00E5FF', font=FONT_MONO_SM)
 
     # 2. Fog Range Slider Card
     card1_y = mini_y + mini_h + 20
     draw.rounded_rectangle([(mx + 20, card1_y), (mx + mw - 20, card1_y + 220)], radius=8, fill='#121721', outline='#21262D', width=1)
     draw.text((mx + 38, card1_y + 20), "FOG OF WAR RANGE (SURVEILLANCE BEAM)", fill='#00E5FF', font=FONT_HEAD)
-    draw.text((mx + mw - 160, card1_y + 20), "180 METERS", fill='#F0F6FC', font=FONT_MONO)
+    draw.text((mx + mw - 160, card1_y + 20), "50 METERS", fill='#F0F6FC', font=FONT_MONO)
 
     # Slider Track
     sl_y = card1_y + 66
     draw.rectangle([(mx + 38, sl_y), (mx + mw - 38, sl_y + 10)], fill='#21262D')
-    # Active track (180m / 500m ~ 32%)
-    sl_active = (mx + mw - 76) * 0.32
+    # Active track (50m / 500m min position)
+    sl_active = (mx + mw - 76) * 0.02
     draw.rectangle([(mx + 38, sl_y), (mx + 38 + sl_active, sl_y + 10)], fill='#00E5FF')
     draw.ellipse([(mx + 38 + sl_active - 10, sl_y - 5), (mx + 38 + sl_active + 10, sl_y + 15)], fill='#00E5FF')
 
@@ -453,7 +454,7 @@ def generate_screenshot_04():
 
     # Preset Buttons
     draw.text((mx + 38, card1_y + 128), "QUICK RANGE PRESETS:", fill='#8B949E', font=FONT_MONO_XS)
-    presets = [("60m Tight", False), ("120m Urban", False), ("180m Standard", True), ("260m Wide", False), ("450m Sat", False)]
+    presets = [("50m", True), ("100m", False), ("180m", False), ("260m", False), ("450m", False)]
     px = mx + 38
     for ptxt, is_sel in presets:
         pw = draw.textlength(ptxt, font=FONT_MONO_SM) + 20
@@ -467,13 +468,13 @@ def generate_screenshot_04():
     card2_y = card1_y + 240
     draw.rounded_rectangle([(mx + 20, card2_y), (mx + mw - 20, card2_y + 220)], radius=8, fill='#121721', outline='#21262D', width=1)
     draw.text((mx + 38, card2_y + 20), "SHROUD OPACITY (DARKNESS & DENSITY)", fill='#00E676', font=FONT_HEAD)
-    draw.text((mx + mw - 160, card2_y + 20), "95% DENSITY", fill='#F0F6FC', font=FONT_MONO)
+    draw.text((mx + mw - 160, card2_y + 20), "50% DENSITY", fill='#F0F6FC', font=FONT_MONO)
 
     # Slider Track
     sl2_y = card2_y + 66
     draw.rectangle([(mx + 38, sl2_y), (mx + mw - 38, sl2_y + 10)], fill='#21262D')
-    # Active track (95% ~ 94%)
-    sl2_active = (mx + mw - 76) * 0.94
+    # Active track (50% ~ 38%)
+    sl2_active = (mx + mw - 76) * 0.38
     draw.rectangle([(mx + 38, sl2_y), (mx + 38 + sl2_active, sl2_y + 10)], fill='#00E676')
     draw.ellipse([(mx + 38 + sl2_active - 10, sl2_y - 5), (mx + 38 + sl2_active + 10, sl2_y + 15)], fill='#00E676')
 
@@ -482,7 +483,7 @@ def generate_screenshot_04():
 
     # Presets
     draw.text((mx + 38, card2_y + 128), "QUICK OPACITY PRESETS:", fill='#8B949E', font=FONT_MONO_XS)
-    opac_presets = [("30% Mist", False), ("60% Haze", False), ("85% Dense", False), ("95% Standard", True), ("100% Void", False)]
+    opac_presets = [("30% Mist", False), ("50% Half", True), ("75% Dark", False), ("100% Void", False)]
     px = mx + 38
     for optxt, is_sel in opac_presets:
         pw = draw.textlength(optxt, font=FONT_MONO_SM) + 20
@@ -495,7 +496,7 @@ def generate_screenshot_04():
     # Bottom Active Summary Bar
     draw.rounded_rectangle([(mx + 20, my + mh - 90), (mx + mw - 20, my + mh - 20)], radius=8, fill='#121721', outline='#21262D', width=1)
     draw.text((mx + 36, my + mh - 76), "ACTIVE OPTICS PROFILE", fill='#8B949E', font=FONT_MONO_XS)
-    draw.text((mx + 36, my + mh - 58), "Surveillance: 180m  •  Density: 95%  •  Dynamic Speed-Scaling: ACTIVE", fill='#F0F6FC', font=FONT_HEAD)
+    draw.text((mx + 36, my + mh - 58), "Surveillance: 50m  •  Density: 50%  •  Dynamic Speed-Scaling: ACTIVE", fill='#F0F6FC', font=FONT_HEAD)
 
     draw.rounded_rectangle([(mx + mw - 140, my + mh - 76), (mx + mw - 36, my + mh - 34)], radius=6, fill='#00E5FF')
     draw.text((mx + mw - 110, my + mh - 62), "APPLY", fill='#0A0D12', font=FONT_HEAD)
@@ -689,7 +690,7 @@ def generate_screenshot_06():
     draw.line([(cx, cy + 20), (cx + 120, cy + 140), (cx + 240, cy + 260)], fill='#00A8CC', width=4)
     draw.line([(cx, cy + 20), (cx - 80, cy + 140), (cx - 180, cy + 280)], fill='#00A8CC', width=4)
 
-    # 4. Explored Fog of War Trail & Cleared Perimeter
+    # 4. Explored Fog of War Trail & 50m / 50% Active Shroud
     explored_trail = [
         (cx - 180, cy + 140),
         (cx - 80, cy + 70),
@@ -700,11 +701,19 @@ def generate_screenshot_06():
     for gw in (20, 14, 6):
         draw.line(explored_trail, fill='#00E676' if gw == 6 else '#004D25', width=gw)
 
-    # Cleared surveillance beam
-    beam_r = 160.0
+    # Fog of War 50% Shroud (Mask outside cleared 50m beam)
+    beam_r = 95.0
+    shroud = Image.new('RGBA', (W, H), (7, 10, 15, 128))  # 50% opacity
+    shroud_draw = ImageDraw.Draw(shroud)
+    shroud_draw.ellipse([(cx - beam_r, cy - beam_r), (cx + beam_r, cy + beam_r)], fill=(0, 0, 0, 0))
+    img.paste(shroud, (0, 0), shroud)
+
+    # Cleared surveillance beam glowing perimeter
     for gr in (3, 2, 1):
         draw.ellipse([(cx - beam_r - gr, cy - beam_r - gr), (cx + beam_r + gr, cy + beam_r + gr)], outline='#00E5FF', width=1)
     draw.ellipse([(cx - beam_r, cy - beam_r), (cx + beam_r, cy + beam_r)], outline='#00E5FF', width=2)
+    # Inner pulse ring
+    draw.ellipse([(cx - beam_r * 0.9, cy - beam_r * 0.9), (cx + beam_r * 0.9, cy + beam_r * 0.9)], outline='#00E5FF44', width=1)
 
     # 5. Target Waypoint (Amber destination pin & dashed route line)
     wp_x, wp_y = cx + 180, cy - 200
@@ -792,8 +801,15 @@ def generate_screenshot_06():
     draw.ellipse([(fab_x - 6, 470), (fab_x + 54, 530)], fill='#00E5FF', outline='#00E5FF', width=2)
     draw.text((fab_x + 12, 488), "🎯", fill='#0A0D12', font=FONT_TITLE)
 
-    # 9. Bottom Destination Card (Waypointed to M1/North)
+    # Telemetry Badge
     card_y = H - 250
+    telem_y = card_y - 75
+    draw.rounded_rectangle([(24, telem_y), (220, telem_y + 62)], radius=6, fill='#121721EE', outline='#21262D', width=1)
+    draw.text((36, telem_y + 8), "Z13.5 • 51.5074°N, 0.1278°W", fill='#00E5FF', font=FONT_MONO_XS)
+    draw.text((36, telem_y + 24), "LOCK: GPS VEHICLE", fill='#00E676', font=FONT_MONO_XS)
+    draw.text((36, telem_y + 40), "FOG: 50m @ 50%", fill='#00E5FF', font=FONT_MONO_XS)
+
+    # 9. Bottom Destination Card (Waypointed to M1/North)
     draw.rounded_rectangle([(24, card_y), (W - 24, card_y + 130)], radius=12, fill='#121721', outline='#00E5FF', width=1)
     draw.text((44, card_y + 16), "TACTICAL WAYPOINT // M1 CORRIDOR", fill='#FFD600', font=FONT_HEAD)
     draw.text((44, card_y + 40), "Distance: 14.2 km  •  ETA: ~18 min  •  Heading: 352° N", fill='#F0F6FC', font=FONT_MONO_SM)
