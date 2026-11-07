@@ -749,18 +749,21 @@ def generate_screenshot_06():
     draw.rounded_rectangle([(W - 130, 56), (W - 36, 88)], radius=4, fill='#070A0F', outline='#00E676', width=1)
     draw.text((W - 118, 64), "UK OSM", fill='#00E676', font=FONT_MONO_XS)
 
-    # Top OSM Status Active Indicator Chip
+    # Top OSM Status Active Indicator Chips
     draw.rounded_rectangle([(24, 106), (360, 134)], radius=12, fill='#121721', outline='#00E5FF', width=1)
     draw.ellipse([(36, 117), (44, 125)], fill='#00E676')
-    draw.text((50, 114), "OSM DATA ACTIVE • UK 100% COVERAGE", fill='#00E5FF', font=FONT_MONO_XS)
+    draw.text((50, 114), "OSM ACTIVE • NO API KEY REQUIRED", fill='#00E5FF', font=FONT_MONO_XS)
+
+    draw.rounded_rectangle([(372, 106), (510, 134)], radius=12, fill='#121721', outline='#FFD600', width=1)
+    draw.text((384, 114), "MODE: HYBRID", fill='#FFD600', font=FONT_MONO_XS)
 
     # Quick Jump Chips
-    chips = ["🏛️ London", "🐝 Manchester", "🏭 Birmingham", "🏰 Edinburgh", "🐉 Cardiff", "⚓ Belfast"]
+    chips = ["🏛️ London", "🏖️ Brighton", "🐝 Manchester", "🏭 Birmingham", "🏰 Edinburgh", "🐉 Cardiff", "⚓ Belfast"]
     ch_x = 24
     for chip in chips:
         ch_w = draw.textlength(chip, font=FONT_TEXT) + 24
         draw.rounded_rectangle([(ch_x, 144), (ch_x + ch_w, 178)], radius=16, fill='#121721', outline='#21262D', width=1)
-        draw.text((ch_x + 12, 154), chip, fill='#F0F6FC' if "London" in chip else '#8B949E', font=FONT_TEXT)
+        draw.text((ch_x + 12, 154), chip, fill='#F0F6FC' if "London" in chip or "Brighton" in chip else '#8B949E', font=FONT_TEXT)
         ch_x += ch_w + 8
 
     # 8. Right Floating Tactical Controls (Google Maps-style)

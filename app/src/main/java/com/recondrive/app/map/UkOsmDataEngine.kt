@@ -682,9 +682,9 @@ object UkOsmDataEngine {
             lanes = 2
         ),
 
-        // A23: Brixton / Croydon / Brighton Road
+        // A23 / M23: London through Crawley, Gatwick, Clayton Hill to Brighton Seafront
         OsmRoadSegment(
-            name = "A23 Brixton Rd",
+            name = "A23 / M23 London-Brighton Arterial",
             ref = "A23",
             type = OsmRoadType.PRIMARY,
             points = listOf(
@@ -693,7 +693,53 @@ object UkOsmDataEngine {
                 51.4620 to -0.1150, // Brixton
                 51.4250 to -0.1250, // Streatham
                 51.3750 to -0.1000, // Croydon
-                51.3000 to -0.1400  // Coulsdon / M23 J7
+                51.3000 to -0.1400, // Coulsdon / M23 J7
+                51.2400 to -0.1500, // Redhill / M25 J8
+                51.1500 to -0.1700, // Gatwick Airport
+                51.1100 to -0.1900, // Crawley
+                51.0200 to -0.1800, // Pease Pottage
+                50.9500 to -0.1600, // Burgess Hill
+                50.8800 to -0.1600, // Clayton Hill / Pyecombe (South Downs)
+                50.8622 to -0.2438, // Devil's Dyke / South Downs Way
+                50.8500 to -0.1500, // Preston Park
+                50.8225 to -0.1372  // Brighton Seafront
+            ),
+            lanes = 3
+        ),
+
+        // A27: South Coast Expressway (Eastbourne to Southampton via Brighton & Portsmouth)
+        OsmRoadSegment(
+            name = "A27 South Coast Expressway",
+            ref = "A27",
+            type = OsmRoadType.TRUNK,
+            points = listOf(
+                50.8500 to 0.2800,  // Eastbourne / Polegate
+                50.8700 to 0.0100,  // Lewes
+                50.8600 to -0.1500, // Brighton Bypass (Falmer / Univ of Sussex)
+                50.8622 to -0.2438, // Pyecombe / Devil's Dyke Interchange
+                50.8400 to -0.2700, // Shoreham-by-Sea / River Adur Flyover
+                50.8200 to -0.3700, // Worthing
+                50.8250 to -0.5400, // Arundel Castle
+                50.8400 to -0.7800, // Chichester Bypass
+                50.8500 to -0.9800, // Havant
+                50.8400 to -1.0600, // Portsmouth North / M27
+                50.8800 to -1.2500, // Fareham
+                50.9100 to -1.4000  // Southampton East
+            ),
+            lanes = 3
+        ),
+
+        // A24: London to Worthing via Dorking & Horsham
+        OsmRoadSegment(
+            name = "A24 South Downs Corridor",
+            ref = "A24",
+            type = OsmRoadType.PRIMARY,
+            points = listOf(
+                51.3500 to -0.2500, // Epsom
+                51.2300 to -0.3300, // Dorking
+                51.0600 to -0.3300, // Horsham
+                50.9000 to -0.4000, // Washington Roundabout
+                50.8200 to -0.3700  // Worthing Seafront
             ),
             lanes = 2
         ),
@@ -845,6 +891,14 @@ object UkOsmDataEngine {
         OsmPlace("Southampton", "Hampshire", 50.9097, -1.4044, true, 269000),
         OsmPlace("Portsmouth", "Hampshire", 50.8198, -1.0880, true, 248000),
         OsmPlace("Brighton", "East Sussex", 50.8225, -0.1372, true, 290000),
+        OsmPlace("Hove", "East Sussex", 50.8350, -0.1700, false, 90000),
+        OsmPlace("Worthing", "West Sussex", 50.8179, -0.3729, true, 110000),
+        OsmPlace("Crawley", "West Sussex", 51.1130, -0.1870, true, 118000),
+        OsmPlace("Lewes", "East Sussex", 50.8740, 0.0120, false, 17000),
+        OsmPlace("Pyecombe / South Downs", "West Sussex", 50.8800, -0.1600, false, 5000),
+        OsmPlace("Chichester", "West Sussex", 50.8365, -0.7792, true, 31000),
+        OsmPlace("Eastbourne", "East Sussex", 50.7680, 0.2905, true, 103000),
+        OsmPlace("Hastings", "East Sussex", 50.8552, 0.5729, true, 92000),
         OsmPlace("Plymouth", "Devon", 50.3755, -4.1427, true, 264000),
         OsmPlace("Exeter", "Devon", 50.7184, -3.5339, true, 131000),
         OsmPlace("Norwich", "Norfolk", 52.6309, 1.2974, true, 143000),

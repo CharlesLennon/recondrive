@@ -16,9 +16,9 @@ import java.net.HttpURLConnection
 import java.net.URL
 
 /**
- * High-performance OpenStreetMap & Carto Raster Tile Streaming and Caching Engine
- * Streams online vector-rendered raster tiles for street-level cartography across the UK and the globe,
- * storing tiles in memory and on disk for instant offline reuse.
+ * High-performance OpenStreetMap Standard Raster Tile Streaming and Caching Engine.
+ * Connects directly to open, non-commercial OpenStreetMap Foundation CDNs and OpenTopoMap mirrors.
+ * Requires ZERO API keys, has ZERO watermarks, and caches tiles locally for instant offline reuse.
  */
 class OsmTileManager(private val context: Context) {
 
@@ -29,20 +29,41 @@ class OsmTileManager(private val context: Context) {
     private val _revision = MutableStateFlow(0)
     val revision: StateFlow<Int> = _revision.asStateFlow()
 
-    private val tileDir = File(context.cacheDir, "osm_tiles").apply {
+    // Using osm_tiles_v3 to ensure complete separation from poisoned Carto watermarked caches
+    private val tileDir = File(context.cacheDir, "osm_tiles_v3").apply {
         if (!exists()) mkdirs()
     }
 
+    init {
+        // Automatically purge obsolete Carto cache directories on startup
+        scope.launch(Dispatchers.IO) {
+            try {
+                val oldDir = File(context.cacheDir, "osm_tiles")
+                if (oldDir.exists()) {
+                    Timber.i("Purging legacy watermarked Carto tile cache directory...")
+                    oldDir.deleteRecursively()
+                }
+            } catch (e: Exception) {
+                Timber.w(e, "Error clearing legacy tile cache")
+            }
+        }
+    }
+
     /**
-     * Resolves the appropriate tile server URL template based on current Map Skin
+     * Resolves the open tile server URL template (No API Key Required).
      */
     fun getTileUrlTemplate(skinId: String): String {
         return when (skinId) {
-            "classic_daylight" -> "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
-            "vintage_cartographer" -> "https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png"
-            "midnight_monochrome" -> "https://a.basemaps.cartocdn.com/rastertiles/dark_all/{z}/{x}/{y}.png"
-            else -> "https://a.basemaps.cartocdn.com/rastertiles/dark_all/{z}/{x}/{y}.png" // Tactical Obsidian & Cyberpunk
+            "military_topo" -> "https://tile.opentopomap.org/{z}/{x}/{y}.png"
+            else -> "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
         }
+    }
+
+    /**
+     * Fallback open mirror URL template in case of network throttle.
+     */
+    fun getFallbackUrlTemplate(skinId: String): String {
+        return "https://a.tile.openstreetmap.fr/osmfr/{z}/{x}/{y}.png"
     }
 
     /**
@@ -50,7 +71,12 @@ class OsmTileManager(private val context: Context) {
      * If not available, schedules background download and returns null for instant vector fallback.
      */
     fun getTile(z: Int, x: Int, y: Int, skinId: String = "tactical_obsidian"): ImageBitmap? {
-        val key = "${skinId}_${z}_${x}_${y}"
+        val safeZ = z.coerceIn(0, 19)
+        val n = 1 shl safeZ
+        val safeX = x.coerceIn(0, n - 1)
+        val safeY = y.coerceIn(0, n - 1)
+
+        val key = "osm_${safeZ}_${safeX}_${safeY}"
 
         // 1. Check in-memory LRU cache
         memoryCache.get(key)?.let { return it }
@@ -81,43 +107,28 @@ class OsmTileManager(private val context: Context) {
 
         scope.launch {
             try {
-                val template = getTileUrlTemplate(skinId)
-                val urlStr = template
-                    .replace("{z}", z.toString())
-                    .replace("{x}", x.toString())
-                    .replace("{y}", y.toString())
-
-                val url = URL(urlStr)
-                val conn = (url.openConnection() as HttpURLConnection).apply {
-                    setRequestProperty("User-Agent", "ReconDrive/1.0 (Android Tactical Navigation; OpenStreetMap)")
-                    connectTimeout = 3000
-                    readTimeout = 3000
-                    instanceFollowRedirects = true
+                var bytes = fetchTileBytes(getTileUrlTemplate(skinId), safeZ, safeX, safeY)
+                if (bytes == null || bytes.size < 500) {
+                    // Try fallback mirror
+                    bytes = fetchTileBytes(getFallbackUrlTemplate(skinId), safeZ, safeX, safeY)
                 }
 
-                if (conn.responseCode == 200) {
-                    val bytes = conn.inputStream.use { it.readBytes() }
-                    conn.disconnect()
+                if (bytes != null && bytes.size >= 500) {
+                    // Save to disk
+                    FileOutputStream(diskFile).use { fos ->
+                        fos.write(bytes)
+                        fos.flush()
+                    }
 
-                    if (bytes.isNotEmpty()) {
-                        // Save to disk
-                        FileOutputStream(diskFile).use { fos ->
-                            fos.write(bytes)
-                            fos.flush()
-                        }
-
-                        // Decode to bitmap
-                        val bmp = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
-                        if (bmp != null) {
-                            val imgBmp = bmp.asImageBitmap()
-                            memoryCache.put(key, imgBmp)
-                            withContext(Dispatchers.Main) {
-                                _revision.value++
-                            }
+                    // Decode to bitmap
+                    val bmp = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                    if (bmp != null) {
+                        val imgBmp = bmp.asImageBitmap()
+                        memoryCache.put(key, imgBmp)
+                        withContext(Dispatchers.Main) {
+                            _revision.value++
                         }
                     }
-                } else {
-                    conn.disconnect()
                 }
             } catch (e: Exception) {
                 // Silently ignore network timeouts or offline state; vector map handles rendering
@@ -129,6 +140,31 @@ class OsmTileManager(private val context: Context) {
         }
 
         return null
+    }
+
+    private fun fetchTileBytes(template: String, z: Int, x: Int, y: Int): ByteArray? {
+        val urlStr = template
+            .replace("{z}", z.toString())
+            .replace("{x}", x.toString())
+            .replace("{y}", y.toString())
+
+        val url = URL(urlStr)
+        val conn = (url.openConnection() as HttpURLConnection).apply {
+            setRequestProperty("User-Agent", "ReconDrive/1.0 (Android Tactical Navigation; OpenStreetMap)")
+            connectTimeout = 4000
+            readTimeout = 4000
+            instanceFollowRedirects = true
+        }
+
+        return try {
+            if (conn.responseCode == 200) {
+                conn.inputStream.use { it.readBytes() }
+            } else {
+                null
+            }
+        } finally {
+            conn.disconnect()
+        }
     }
 
     fun clearCache() {

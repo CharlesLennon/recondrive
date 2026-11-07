@@ -73,6 +73,51 @@ fun InteractiveMapScreen(
     var selectedWaypoint by remember { mutableStateOf<Pair<Double, Double>?>(null) }
     var waypointName by remember { mutableStateOf("Custom Tactical Waypoint") }
 
+    // Map Rendering Mode: "HYBRID" (OSM Tiles + Vector), "VECTOR" (Pure Offline Vector Engine), "TILES" (OSM Streets)
+    var mapRenderingMode by remember { mutableStateOf("HYBRID") }
+    val downloadedPacks = remember { offlineTileRepository.getDownloadedRegions() }
+    val hasOfflineData = downloadedPacks.isNotEmpty()
+
+    // Real-time Tactical ColorFilter applied to OpenStreetMap tiles (Zero API key required)
+    val tileColorFilter = remember(mapSkin.id, mapRenderingMode) {
+        if (mapRenderingMode == "TILES" || mapSkin.id == "classic_osm_light") {
+            null
+        } else if (mapSkin.id == "antique_parchment") {
+            androidx.compose.ui.graphics.ColorFilter.colorMatrix(
+                androidx.compose.ui.graphics.ColorMatrix(
+                    floatArrayOf(
+                        0.9f, 0.05f, 0.05f, 0f, 20f,
+                        0.05f, 0.85f, 0.05f, 0f, 15f,
+                        0.05f, 0.05f, 0.65f, 0f, 0f,
+                        0f, 0f, 0f, 0.95f, 0f
+                    )
+                )
+            )
+        } else if (mapSkin.id == "midnight_stealth") {
+            androidx.compose.ui.graphics.ColorFilter.colorMatrix(
+                androidx.compose.ui.graphics.ColorMatrix(
+                    floatArrayOf(
+                        -0.70f, 0f, 0f, 0f, 160f,
+                        0f, -0.70f, 0f, 0f, 160f,
+                        0f, 0f, -0.70f, 0f, 160f,
+                        0f, 0f, 0f, 0.90f, 0f
+                    )
+                )
+            )
+        } else { // tactical_obsidian, cyberpunk_neon, military_topo
+            androidx.compose.ui.graphics.ColorFilter.colorMatrix(
+                androidx.compose.ui.graphics.ColorMatrix(
+                    floatArrayOf(
+                        -0.75f, 0f, 0f, 0f, 165f,
+                        0f, -0.75f, 0f, 0f, 175f,
+                        0f, 0f, -0.65f, 0f, 195f,
+                        0f, 0f, 0f, 0.88f, 0f
+                    )
+                )
+            )
+        }
+    }
+
     // Sync with GPS if in follow mode
     LaunchedEffect(currentLat, currentLon) {
         if (isFollowingGps) {
@@ -221,42 +266,45 @@ fun InteractiveMapScreen(
             )
 
             // -----------------------------------------------------------------
-            // B. DRAW REAL OPENSTREETMAP RASTER TILES (Carto Dark / OSM Standard)
+            // B. DRAW REAL OPENSTREETMAP RASTER TILES (Skipped in VECTOR ONLY mode)
             // -----------------------------------------------------------------
-            val tileZ = zoom.toInt().coerceIn(1, 18)
-            val n = 1 shl tileZ
-            val tileScale = 2.0.pow((zoom - tileZ).toDouble())
-            val tileSizeOnScreen = (256.0 * tileScale).toFloat()
-
-            val cameraLatRad = Math.toRadians(cameraLat.coerceIn(-85.0511, 85.0511))
-            val cameraTileX = (cameraLon + 180.0) / 360.0 * n
-            val cameraTileY = (1.0 - ln(tan(cameraLatRad) + 1.0 / cos(cameraLatRad)) / PI) / 2.0 * n
-
-            val halfTilesW = (width / (2.0 * tileSizeOnScreen))
-            val halfTilesH = (height / (2.0 * tileSizeOnScreen))
-
-            val minTx = (floor(cameraTileX - halfTilesW).toInt()).coerceIn(0, n - 1)
-            val maxTx = (ceil(cameraTileX + halfTilesW).toInt()).coerceIn(0, n - 1)
-            val minTy = (floor(cameraTileY - halfTilesH).toInt()).coerceIn(0, n - 1)
-            val maxTy = (ceil(cameraTileY + halfTilesH).toInt()).coerceIn(0, n - 1)
-
             var tilesRenderedCount = 0
-            for (tx in minTx..maxTx) {
-                for (ty in minTy..maxTy) {
-                    val tileBmp = osmTileManager.getTile(tileZ, tx, ty, mapSkin.id)
-                    if (tileBmp != null) {
-                        val sX = (width / 2f) + ((tx - cameraTileX) * tileSizeOnScreen).toFloat()
-                        val sY = (height / 2f) + ((ty - cameraTileY) * tileSizeOnScreen).toFloat()
+            if (mapRenderingMode != "VECTOR") {
+                val tileZ = zoom.toInt().coerceIn(1, 18)
+                val n = 1 shl tileZ
+                val tileScale = 2.0.pow((zoom - tileZ).toDouble())
+                val tileSizeOnScreen = (256.0 * tileScale).toFloat()
 
-                        drawImage(
-                            image = tileBmp,
-                            dstOffset = androidx.compose.ui.unit.IntOffset(sX.toInt(), sY.toInt()),
-                            dstSize = androidx.compose.ui.unit.IntSize(
-                                ceil(tileSizeOnScreen).toInt() + 1,
-                                ceil(tileSizeOnScreen).toInt() + 1
+                val cameraLatRad = Math.toRadians(cameraLat.coerceIn(-85.0511, 85.0511))
+                val cameraTileX = (cameraLon + 180.0) / 360.0 * n
+                val cameraTileY = (1.0 - ln(tan(cameraLatRad) + 1.0 / cos(cameraLatRad)) / PI) / 2.0 * n
+
+                val halfTilesW = (width / (2.0 * tileSizeOnScreen))
+                val halfTilesH = (height / (2.0 * tileSizeOnScreen))
+
+                val minTx = (floor(cameraTileX - halfTilesW).toInt()).coerceIn(0, n - 1)
+                val maxTx = (ceil(cameraTileX + halfTilesW).toInt()).coerceIn(0, n - 1)
+                val minTy = (floor(cameraTileY - halfTilesH).toInt()).coerceIn(0, n - 1)
+                val maxTy = (ceil(cameraTileY + halfTilesH).toInt()).coerceIn(0, n - 1)
+
+                for (tx in minTx..maxTx) {
+                    for (ty in minTy..maxTy) {
+                        val tileBmp = osmTileManager.getTile(tileZ, tx, ty, mapSkin.id)
+                        if (tileBmp != null) {
+                            val sX = (width / 2f) + ((tx - cameraTileX) * tileSizeOnScreen).toFloat()
+                            val sY = (height / 2f) + ((ty - cameraTileY) * tileSizeOnScreen).toFloat()
+
+                            drawImage(
+                                image = tileBmp,
+                                dstOffset = androidx.compose.ui.unit.IntOffset(sX.toInt(), sY.toInt()),
+                                dstSize = androidx.compose.ui.unit.IntSize(
+                                    ceil(tileSizeOnScreen).toInt() + 1,
+                                    ceil(tileSizeOnScreen).toInt() + 1
+                                ),
+                                colorFilter = tileColorFilter
                             )
-                        )
-                        tilesRenderedCount++
+                            tilesRenderedCount++
+                        }
                     }
                 }
             }
@@ -285,7 +333,7 @@ fun InteractiveMapScreen(
             // -----------------------------------------------------------------
             if (zoom >= 11.0f) {
                 val localGrid = UkOsmDataEngine.getLocalStreetGridForBounds(viewBounds, zoom)
-                val roadAlpha = if (tilesRenderedCount > 0) 0.35f else 0.85f
+                val roadAlpha = if (mapRenderingMode == "VECTOR") 1.0f else if (tilesRenderedCount > 0) 0.70f else 0.90f
                 for (road in localGrid) {
                     val path = Path()
                     var started = false
@@ -520,18 +568,20 @@ fun InteractiveMapScreen(
 
             Spacer(modifier = Modifier.height(6.dp))
 
-            // Active OSM Data Indicator Chip
+            // Active OSM & Layer Mode Status Chips
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.Start
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                verticalAlignment = Alignment.CenterVertically
             ) {
+                // Active Status Chip
                 Surface(
                     color = TacticalSurface.copy(alpha = 0.95f),
                     shape = RoundedCornerShape(12.dp),
                     border = androidx.compose.foundation.BorderStroke(1.dp, ReconCyan.copy(alpha = 0.6f))
                 ) {
                     Row(
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Box(
@@ -541,8 +591,35 @@ fun InteractiveMapScreen(
                         )
                         Spacer(modifier = Modifier.width(5.dp))
                         Text(
-                            text = "OSM DATA ACTIVE • UK 100% COVERAGE",
+                            text = if (hasOfflineData) "OFFLINE PACK ACTIVE • UK DATA READY" else "OSM ACTIVE • NO API KEY REQUIRED",
                             color = ReconCyan,
+                            fontSize = 9.sp,
+                            fontFamily = FontFamily.Monospace,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+
+                // Layer Mode Selector Chip
+                Surface(
+                    color = TacticalSurface.copy(alpha = 0.95f),
+                    shape = RoundedCornerShape(12.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, ReconAmber.copy(alpha = 0.8f)),
+                    modifier = Modifier.clickable {
+                        mapRenderingMode = when (mapRenderingMode) {
+                            "HYBRID" -> "VECTOR"
+                            "VECTOR" -> "TILES"
+                            else -> "HYBRID"
+                        }
+                    }
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "MODE: $mapRenderingMode",
+                            color = ReconAmber,
                             fontSize = 9.sp,
                             fontFamily = FontFamily.Monospace,
                             fontWeight = FontWeight.Bold
@@ -562,6 +639,7 @@ fun InteractiveMapScreen(
             ) {
                 val cityPresets = listOf(
                     "🏛️ London" to (51.5074 to -0.1278),
+                    "🏖️ Brighton" to (50.8225 to -0.1372),
                     "🐝 Manchester" to (53.4808 to -2.2426),
                     "🏭 Birmingham" to (52.4862 to -1.8904),
                     "🏰 Edinburgh" to (55.9533 to -3.1883),
@@ -632,6 +710,23 @@ fun InteractiveMapScreen(
                     contentDescription = "Fog Toggle",
                     modifier = Modifier.size(18.dp)
                 )
+            }
+
+            // Map Rendering Layer Mode Toggle (HYBRID / VECTOR / TILES)
+            FloatingActionButton(
+                onClick = {
+                    mapRenderingMode = when (mapRenderingMode) {
+                        "HYBRID" -> "VECTOR"
+                        "VECTOR" -> "TILES"
+                        else -> "HYBRID"
+                    }
+                },
+                containerColor = if (mapRenderingMode == "VECTOR") ReconGreen else TacticalSurface,
+                contentColor = if (mapRenderingMode == "VECTOR") TacticalObsidian else ReconCyan,
+                shape = CircleShape,
+                modifier = Modifier.size(42.dp)
+            ) {
+                Icon(imageVector = Icons.Default.Map, contentDescription = "Layer Mode", modifier = Modifier.size(18.dp))
             }
 
             // Skin Selector Shortcut
