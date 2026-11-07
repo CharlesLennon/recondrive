@@ -15,13 +15,33 @@ class FogPreferences(context: Context) {
 
     private val prefs: SharedPreferences = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
-    // Exploration scan radius in meters (50m to 500m, default 180m)
+    init {
+        // Automatically migrate legacy default settings (180m / 95% opacity) to new standard: 50m range and 50% opacity
+        val prefsVer = prefs.getInt(KEY_PREFS_VERSION, 0)
+        if (prefsVer < CURRENT_PREFS_VERSION) {
+            val oldRange = prefs.getInt(KEY_FOG_RANGE, -1)
+            val oldOpacity = prefs.getFloat(KEY_FOG_OPACITY, -1f)
+            val editor = prefs.edit().putInt(KEY_PREFS_VERSION, CURRENT_PREFS_VERSION)
+
+            // If user was on old default 180m, migrate to 50m
+            if (oldRange == -1 || oldRange == 180) {
+                editor.putInt(KEY_FOG_RANGE, DEFAULT_RANGE_METERS)
+            }
+            // If user was on old default 0.95f, migrate to 0.50f (50%)
+            if (oldOpacity == -1f || kotlin.math.abs(oldOpacity - 0.95f) < 0.02f) {
+                editor.putFloat(KEY_FOG_OPACITY, DEFAULT_OPACITY)
+            }
+            editor.apply()
+        }
+    }
+
+    // Exploration scan radius in meters (50m to 500m, default 50m)
     private val _fogRangeMeters = MutableStateFlow(
         prefs.getInt(KEY_FOG_RANGE, DEFAULT_RANGE_METERS)
     )
     val fogRangeMeters: StateFlow<Int> = _fogRangeMeters.asStateFlow()
 
-    // Shroud opacity (0.20f to 1.00f, default 0.95f)
+    // Shroud opacity (0.20f to 1.00f, default 0.50f = 50%)
     private val _fogOpacity = MutableStateFlow(
         prefs.getFloat(KEY_FOG_OPACITY, DEFAULT_OPACITY)
     )
@@ -60,7 +80,7 @@ class FogPreferences(context: Context) {
      * Cycles to the next range preset (useful for Android Auto in-car buttons).
      */
     fun cycleNextRange(): Int {
-        val presets = listOf(60, 120, 180, 260, 400)
+        val presets = listOf(50, 100, 180, 260, 400)
         val current = _fogRangeMeters.value
         val nextIdx = (presets.indexOfFirst { it >= current } + 1) % presets.size
         val nextRange = presets[nextIdx]
@@ -72,7 +92,7 @@ class FogPreferences(context: Context) {
      * Cycles to the next opacity preset (useful for Android Auto in-car buttons).
      */
     fun cycleNextOpacity(): Float {
-        val presets = listOf(0.40f, 0.70f, 0.90f, 1.00f)
+        val presets = listOf(0.30f, 0.50f, 0.75f, 1.00f)
         val current = _fogOpacity.value
         val nextIdx = (presets.indexOfFirst { it >= current - 0.05f } + 1) % presets.size
         val nextOpacity = presets[nextIdx]
@@ -82,15 +102,17 @@ class FogPreferences(context: Context) {
 
     companion object {
         private const val PREFS_NAME = "recondrive_fog_prefs"
+        private const val KEY_PREFS_VERSION = "pref_fog_prefs_version"
+        private const val CURRENT_PREFS_VERSION = 2
         private const val KEY_FOG_RANGE = "pref_fog_range_meters"
         private const val KEY_FOG_OPACITY = "pref_fog_opacity"
         private const val KEY_BACKGROUND_TRACKING = "pref_background_tracking"
 
-        const val DEFAULT_RANGE_METERS = 180
+        const val DEFAULT_RANGE_METERS = 50
         const val MIN_RANGE_METERS = 50
         const val MAX_RANGE_METERS = 500
 
-        const val DEFAULT_OPACITY = 0.95f
+        const val DEFAULT_OPACITY = 0.50f
         const val MIN_OPACITY = 0.20f
         const val MAX_OPACITY = 1.00f
     }

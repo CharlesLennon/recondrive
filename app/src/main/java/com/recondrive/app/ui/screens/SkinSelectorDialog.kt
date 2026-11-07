@@ -254,38 +254,38 @@ private fun FogOpticsCalibrationPanel(
                     strokeWidth = 4f
                 )
 
-                // Shroud overlay outside dynamic radius
-                val radiusPx = (40f + (currentRange - 50) * (55f / 450f)).coerceIn(35f, 100f)
+                // Shroud overlay outside dynamic radius (Path Difference Hole Punch)
+                val radiusPx = (35f + (currentRange - 50) * (50f / 450f)).coerceIn(30f, 95f)
 
-                // Cleared circle
-                drawCircle(
-                    color = Color(currentFogSkin.exploredRoadGlowColor),
-                    radius = radiusPx,
-                    center = Offset(cx, cy),
-                    style = Stroke(width = 3f)
-                )
-
-                // Shroud outside circle
+                val miniShroud = androidx.compose.ui.graphics.Path().apply {
+                    addRect(androidx.compose.ui.geometry.Rect(0f, 0f, size.width, size.height))
+                }
+                val miniHole = androidx.compose.ui.graphics.Path().apply {
+                    addOval(androidx.compose.ui.geometry.Rect(center = Offset(cx, cy), radius = radiusPx))
+                }
+                val maskedMiniShroud = androidx.compose.ui.graphics.Path().apply {
+                    op(miniShroud, miniHole, androidx.compose.ui.graphics.PathOperation.Difference)
+                }
                 val shroudAlpha = (currentFogSkin.shroudOpacity * currentOpacity).coerceIn(0.1f, 1.0f)
-                drawCircle(
-                    color = Color(currentFogSkin.shroudColor).copy(alpha = shroudAlpha),
-                    radius = size.width,
-                    center = Offset(cx, cy)
+                drawPath(
+                    path = maskedMiniShroud,
+                    color = Color(currentFogSkin.shroudColor).copy(alpha = shroudAlpha)
                 )
 
-                // Cutout cleared circle
-                drawCircle(
-                    color = Color(currentMapSkin.backgroundColor),
-                    radius = radiusPx,
-                    center = Offset(cx, cy)
-                )
-
-                // Reticle boundary
+                // Cleared circle border & glowing reticle boundary
                 drawCircle(
                     color = Color(currentFogSkin.perimeterGlowColor),
                     radius = radiusPx,
                     center = Offset(cx, cy),
                     style = Stroke(width = currentFogSkin.borderStrokeWidth)
+                )
+
+                // Inner pulse ring
+                drawCircle(
+                    color = Color(currentFogSkin.perimeterGlowColor).copy(alpha = 0.3f),
+                    radius = radiusPx * 0.9f,
+                    center = Offset(cx, cy),
+                    style = Stroke(width = 1.5f)
                 )
 
                 // Center vehicle dot
@@ -354,11 +354,11 @@ private fun FogOpticsCalibrationPanel(
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     val rangePresets = listOf(
-                        60 to "60m Tight",
-                        120 to "120m Urban",
-                        180 to "180m Standard",
-                        260 to "260m Wide",
-                        450 to "450m Sat"
+                        50 to "50m",
+                        100 to "100m",
+                        180 to "180m",
+                        260 to "260m",
+                        450 to "450m"
                     )
                     for ((meters, label) in rangePresets) {
                         Surface(
@@ -368,7 +368,7 @@ private fun FogOpticsCalibrationPanel(
                             modifier = Modifier.clickable { onRangeChange(meters) }
                         ) {
                             Text(
-                                text = "${meters}m",
+                                text = label,
                                 color = if (currentRange == meters) TacticalObsidian else TextSecondary,
                                 fontSize = 10.sp,
                                 fontWeight = FontWeight.Bold,
@@ -428,8 +428,8 @@ private fun FogOpticsCalibrationPanel(
                 ) {
                     val opacityPresets = listOf(
                         0.30f to "30% Mist",
-                        0.60f to "60% Haze",
-                        0.85f to "85% Dense",
+                        0.50f to "50% Half",
+                        0.75f to "75% Dark",
                         1.00f to "100% Void"
                     )
                     for ((opac, label) in opacityPresets) {

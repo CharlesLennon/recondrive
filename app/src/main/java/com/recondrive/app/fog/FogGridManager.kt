@@ -61,7 +61,7 @@ class FogGridManager(
     fun processLocation(location: Location) {
         scope.launch {
             val speedKmh = location.speed * 3.6f
-            val baseRange = fogPreferences?.fogRangeMeters?.value?.toDouble() ?: 180.0
+            val baseRange = fogPreferences?.fogRangeMeters?.value?.toDouble() ?: 50.0
             val speedFactor = when {
                 speedKmh > 60f -> 1.25
                 speedKmh > 25f -> 1.0

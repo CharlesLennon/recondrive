@@ -150,7 +150,7 @@ class CarSurfaceRenderer(
             canvas.drawPath(routePath, routePaint)
 
             // 5. Draw Tactical Fog of War Shroud & Perimeter (Scaled by user Fog Range & Opacity)
-            val beamRadius = (180f * (configuredRangeMeters / 180f)).coerceIn(70f, 380f)
+            val beamRadius = (70f + (configuredRangeMeters - 50) * (280f / 450f)).coerceIn(50f, 380f)
 
             // Outer Fog Shroud (Mask outside cleared radius)
             val shroudPath = Path().apply {

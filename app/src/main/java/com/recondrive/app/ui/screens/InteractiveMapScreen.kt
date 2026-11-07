@@ -431,13 +431,47 @@ fun InteractiveMapScreen(
                     style = Stroke(width = 6f)
                 )
 
-                // Surveillance Beam Cleared Boundary
-                val screenBeamRadius = (fogRange * 2.0.pow(zoom.toDouble() - 14.0)).toFloat().coerceIn(40f, 400f)
+                // Surveillance Beam Cleared Boundary (Dynamic scaling with fogRange & zoom level)
+                val zoomFactor = 2.0.pow((zoom - 14.0f).toDouble()).toFloat()
+                val screenBeamRadius = (fogRange.toFloat() * zoomFactor).coerceIn(25f, (width.coerceAtLeast(height) * 0.85f))
+
+                // Outer Fog Shroud (Full Viewport minus the Cleared Surveillance Hole)
+                val screenRectPath = Path().apply {
+                    addRect(androidx.compose.ui.geometry.Rect(0f, 0f, width, height))
+                }
+                val beamHolePath = Path().apply {
+                    addOval(
+                        androidx.compose.ui.geometry.Rect(
+                            center = vehicleScreenPos,
+                            radius = screenBeamRadius
+                        )
+                    )
+                }
+                val fogShroudPath = Path().apply {
+                    op(screenRectPath, beamHolePath, androidx.compose.ui.graphics.PathOperation.Difference)
+                }
+
+                // Shroud overlay with opacity driven directly by fogOpacity (default 50% / 0.50f)
+                val effectiveOpacity = (fogSkin.shroudOpacity * fogOpacity).coerceIn(0.05f, 1.0f)
+                drawPath(
+                    path = fogShroudPath,
+                    color = Color(fogSkin.shroudColor).copy(alpha = effectiveOpacity)
+                )
+
+                // Glowing perimeter boundary around cleared surveillance beam
                 drawCircle(
                     color = Color(fogSkin.perimeterGlowColor),
                     radius = screenBeamRadius,
                     center = vehicleScreenPos,
                     style = Stroke(width = fogSkin.borderStrokeWidth)
+                )
+
+                // Inner tactical range pulse ring
+                drawCircle(
+                    color = Color(fogSkin.perimeterGlowColor).copy(alpha = 0.25f),
+                    radius = (screenBeamRadius * 0.94f).coerceAtLeast(8f),
+                    center = vehicleScreenPos,
+                    style = Stroke(width = 1.5f, pathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(6f, 6f)))
                 )
             }
 
@@ -817,6 +851,13 @@ fun InteractiveMapScreen(
                         color = if (isFollowingGps) ReconGreen else TextSecondary,
                         fontSize = 9.sp,
                         fontFamily = FontFamily.Monospace
+                    )
+                    Text(
+                        text = if (isFogLayerActive) "FOG: ${fogRange}m @ ${(fogOpacity * 100).toInt()}%" else "FOG: SHROUD OFF",
+                        color = if (isFogLayerActive) Color(fogSkin.perimeterGlowColor) else TextSecondary,
+                        fontSize = 9.sp,
+                        fontFamily = FontFamily.Monospace,
+                        fontWeight = FontWeight.Bold
                     )
                 }
             }

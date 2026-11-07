@@ -463,8 +463,25 @@ fun TacticalHudScreen(
                     style = Stroke(width = 8f)
                 )
 
-                // Fog Cleared Boundary (Scaled dynamically by user Fog Range)
-                val canvasBeamRadius = (120f * (currentRange / 180f)).coerceIn(50f, 250f)
+                // Fog Shroud Mask & Cleared Surveillance Boundary (Scaled by user Fog Range & Opacity)
+                val canvasBeamRadius = (60f + (currentRange - 50) * (180f / 450f)).coerceIn(40f, 260f)
+
+                val hudShroud = Path().apply {
+                    addRect(androidx.compose.ui.geometry.Rect(0f, 0f, size.width, size.height))
+                }
+                val hudHole = Path().apply {
+                    addOval(androidx.compose.ui.geometry.Rect(center = Offset(cx, cy), radius = canvasBeamRadius))
+                }
+                val maskedHudShroud = Path().apply {
+                    op(hudShroud, hudHole, androidx.compose.ui.graphics.PathOperation.Difference)
+                }
+                val effectiveOpacity = (fogSkin.shroudOpacity * currentOpacity).coerceIn(0.10f, 1.0f)
+                drawPath(
+                    path = maskedHudShroud,
+                    color = Color(fogSkin.shroudColor).copy(alpha = effectiveOpacity)
+                )
+
+                // Glowing reticle boundary
                 drawCircle(
                     color = Color(fogSkin.perimeterGlowColor),
                     radius = canvasBeamRadius,
