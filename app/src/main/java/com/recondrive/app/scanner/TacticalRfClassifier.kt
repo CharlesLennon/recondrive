@@ -85,6 +85,18 @@ object TacticalRfClassifier {
         "AC:CC:8E" to "Axis Communications",
         "00:16:6C" to "Hanwha Techwin (Samsung CCTV)",
 
+        // Automated License Plate Readers (ALPR / ANPR) & Law Enforcement RF
+        "B4:1E:52" to "Flock Safety ALPR",
+        "00:03:7F" to "Flock Safety / Qualcomm",
+        "00:20:4A" to "Lantronix (Flock ALPR SoM)",
+        "00:80:A3" to "Lantronix (Flock ALPR SoM)",
+        "00:25:DF" to "Axon Enterprise (Police Signal)",
+        "00:19:15" to "Axon Enterprise (Police Signal)",
+        "00:0A:28" to "Motorola Solutions / Vigilant ALPR",
+        "00:1B:44" to "Motorola Solutions / ALPR",
+        "00:1F:F8" to "Siemens / Yunex Traffic ANPR",
+        "00:0C:4D" to "Jenoptik / Gatso Speed Enforcement",
+
         // IoT, Single Board Computers & Beacon Hardware
         "24:0A:C4" to "Espressif Systems (ESP32 IoT)",
         "30:AE:A4" to "Espressif Systems (ESP32 IoT)",
@@ -147,22 +159,50 @@ object TacticalRfClassifier {
         }
 
         // =====================================================================
-        // 2. TESLA VEHICLE TELEMETRY (Wi-Fi, BLE Phone-Key & Service UUID 0x0211)
+        // 2. DIGITAL CAR KEYS & PHONE-AS-A-KEY (Tesla, BMW, Ford, UWB, CCC 3.0)
         // =====================================================================
         val hasTeslaUuid = serviceUuids.any { it.contains("0211", ignoreCase = true) || it.contains("0212", ignoreCase = true) }
-        if (sLower.contains("tesla") || sLower.contains("cybertruck") || knownVendor?.contains("Tesla") == true || hasTeslaUuid) {
-            val details = if (hasTeslaUuid) {
-                "Tesla active BLE Phone-as-a-Key transceiver (Service UUID 0x0211) detected."
-            } else {
-                "In-vehicle Wi-Fi gateway / BLE phone-key transceiver active."
+        val isExplicitCarKey = sLower.contains("digitalkey") || sLower.contains("paak") || sLower.contains("carkey") ||
+                sLower.contains("keyfob") || sLower.contains("tesla_key") || sLower.contains("bmw_key") ||
+                sLower.contains("comfortaccess") || sLower.contains("fordpass_key") || sLower.contains("genesickey")
+
+        if (hasTeslaUuid || sLower.contains("tesla_key") || sLower.contains("tesla_keyfob")) {
+            return ClassificationResult(
+                category = RfCategory.CAR_KEY,
+                targetName = if (s.isNotBlank()) "TESLA DIGITAL KEY ($s)" else "TESLA BLE VEHICLE KEY / FOB",
+                vendor = "Tesla Motors, Inc.",
+                threatLevel = "ACTIVE VEHICLE KEY",
+                details = "Tesla active Phone-as-a-Key transceiver (Service UUID 0x0211) emitting in proximity.",
+                protocolOverride = "BLE 5.0 (Tesla Key Transceiver)"
+            )
+        }
+
+        if (isExplicitCarKey) {
+            val keyMake = when {
+                sLower.contains("bmw") -> "BMW"
+                sLower.contains("ford") -> "FORD"
+                sLower.contains("genesis") -> "GENESIS"
+                sLower.contains("kia") -> "KIA"
+                sLower.contains("tesla") -> "TESLA"
+                else -> "DIGITAL"
             }
+            return ClassificationResult(
+                category = RfCategory.CAR_KEY,
+                targetName = "$keyMake DIGITAL CAR KEY ($s)",
+                vendor = "$keyMake Motor Corp",
+                threatLevel = "ACTIVE VEHICLE KEY",
+                details = "Digital vehicle key / Phone-as-a-Key transceiver emitting in physical proximity.",
+                protocolOverride = "BLE / UWB Digital Key"
+            )
+        }
+
+        if (sLower.contains("tesla") || sLower.contains("cybertruck") || knownVendor?.contains("Tesla") == true) {
             return ClassificationResult(
                 category = RfCategory.VEHICLE,
                 targetName = if (s.isNotBlank()) "TESLA ($s)" else "TESLA VEHICLE DETECTED",
                 vendor = "Tesla Motors, Inc.",
                 threatLevel = "CONNECTED VEHICLE TELEMETRY",
-                details = details,
-                protocolOverride = if (hasTeslaUuid) "BLE 5.0 (Tesla Key Transceiver)" else null
+                details = "In-vehicle Wi-Fi gateway / BLE transceiver active."
             )
         }
 
@@ -381,9 +421,37 @@ object TacticalRfClassifier {
                 details = "HD optic camera telemetry."
             )
         }
+        // Automated License Plate Readers (Flock Safety, Vigilant, Axon, Municipal ANPR)
+        if (sLower.contains("flock") || knownVendor?.contains("Flock") == true) {
+            return ClassificationResult(
+                category = RfCategory.CCTV_SURVEILLANCE,
+                targetName = if (s.isNotBlank()) "FLOCK ALPR ($s)" else "FLOCK SAFETY ALPR CAMERA (FALCON)",
+                vendor = "Flock Safety, Inc.",
+                threatLevel = "AUTOMATED LICENSE PLATE READER (ALPR)",
+                details = "Flock Safety municipal/neighborhood ALPR camera node broadcasting Wi-Fi/BLE telemetry."
+            )
+        }
+        if (sLower.contains("axon") || knownVendor?.contains("Axon") == true) {
+            return ClassificationResult(
+                category = RfCategory.CCTV_SURVEILLANCE,
+                targetName = if (s.isNotBlank()) "AXON POLICE TECH ($s)" else "AXON POLICE IN-VEHICLE / BODY-CAM",
+                vendor = "Axon Enterprise, Inc.",
+                threatLevel = "LAW ENFORCEMENT RF BEACON",
+                details = "Axon Signal Bluetooth LE police trigger / camera telemetry active."
+            )
+        }
+        if (sLower.contains("vigilant") || knownVendor?.contains("Vigilant") == true) {
+            return ClassificationResult(
+                category = RfCategory.CCTV_SURVEILLANCE,
+                targetName = if (s.isNotBlank()) "VIGILANT ALPR ($s)" else "MOTOROLA VIGILANT ALPR CAMERA",
+                vendor = "Motorola Solutions / Vigilant",
+                threatLevel = "AUTOMATED LICENSE PLATE READER (ALPR)",
+                details = "Commercial highway automated license plate recognition camera."
+            )
+        }
         if (sLower.contains("anpr") || sLower.contains("trafficcam") || sLower.contains("speedcam") ||
             sLower.contains("gatso") || sLower.contains("redflex") || sLower.contains("truvelo") ||
-            knownVendor?.contains("ANPR") == true
+            knownVendor?.contains("ANPR") == true || knownVendor?.contains("Jenoptik") == true
         ) {
             return ClassificationResult(
                 category = RfCategory.CCTV_SURVEILLANCE,
@@ -417,11 +485,11 @@ object TacticalRfClassifier {
 
             return when {
                 isAirTag -> ClassificationResult(
-                    category = RfCategory.ACCESS_POINT,
-                    targetName = "APPLE AIRTAG / FINDMY BEACON",
+                    category = RfCategory.CAR_KEY,
+                    targetName = "SMART CAR KEY FOB (AIRTAG / FINDMY)",
                     vendor = "Apple, Inc.",
-                    threatLevel = "COVERT TRACKING BEACON",
-                    details = "Apple AirTag / Find My offline tracking beacon payload (0x12) in close proximity.",
+                    threatLevel = "VEHICLE KEY FOB TRACKER",
+                    details = "Apple AirTag / Find My vehicle key fob offline beacon (payload 0x12) in close proximity.",
                     protocolOverride = "BLE 5.2 (Apple FindMy)"
                 )
                 isAirPods -> ClassificationResult(
@@ -454,11 +522,11 @@ object TacticalRfClassifier {
         // Samsung Manufacturer ID: 0x0075 (117)
         if (manufacturerId == 0x0075 || sLower.contains("smarttag")) {
             return ClassificationResult(
-                category = RfCategory.ACCESS_POINT,
-                targetName = "SAMSUNG SMARTTAG / GALAXY TRACKER",
+                category = RfCategory.CAR_KEY,
+                targetName = "SAMSUNG SMARTTAG CAR KEY FOB",
                 vendor = "Samsung Electronics",
-                threatLevel = "PERSONAL ASSET TRACKER",
-                details = "Samsung SmartThings Find / Galaxy SmartTag tracking beacon.",
+                threatLevel = "VEHICLE KEY FOB TRACKER",
+                details = "Samsung SmartThings Find / Galaxy SmartTag vehicle key tracking beacon.",
                 protocolOverride = "BLE 5.0 (SmartThings Find)"
             )
         }
@@ -467,11 +535,11 @@ object TacticalRfClassifier {
         val hasTileUuid = serviceUuids.any { it.contains("feed", ignoreCase = true) }
         if (manufacturerId == 0x006B || hasTileUuid || sLower.contains("tile")) {
             return ClassificationResult(
-                category = RfCategory.ACCESS_POINT,
-                targetName = "TILE SMART ASSET TRACKER",
+                category = RfCategory.CAR_KEY,
+                targetName = "TILE SMART CAR KEY FOB",
                 vendor = "Tile, Inc.",
-                threatLevel = "PERSONAL ASSET TRACKER",
-                details = "Tile BLE smart asset tracking beacon.",
+                threatLevel = "VEHICLE KEY FOB TRACKER",
+                details = "Tile BLE vehicle key smart tracking beacon.",
                 protocolOverride = "BLE Tile Network"
             )
         }

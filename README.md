@@ -1,7 +1,7 @@
 # 🛰️ ReconDrive: Tactical OSM & Android Auto Exploration Navigator
 
 [![GitHub Release](https://img.shields.io/github/v/release/CharlesLennon/recondrive?color=cyan&label=Latest%20Release)](https://github.com/CharlesLennon/recondrive/releases/latest)
-[![Download APK](https://img.shields.io/badge/Download-APK%20(v1.0.22)-brightgreen?logo=android)](https://github.com/CharlesLennon/recondrive/releases/download/v1.0.22/recondrive-v1.0.22.apk)
+[![Download APK](https://img.shields.io/badge/Download-APK%20(v1.0.23)-brightgreen?logo=android)](https://github.com/CharlesLennon/recondrive/releases/download/v1.0.23/recondrive-v1.0.23.apk)
 [![Build Android APK](https://github.com/CharlesLennon/recondrive/actions/workflows/build-apk.yml/badge.svg)](https://github.com/CharlesLennon/recondrive/actions/workflows/build-apk.yml)
 [![Android](https://img.shields.io/badge/Platform-Android%20%7C%20Android%20Auto-green.svg)](https://developer.android.com/training/cars/apps)
 [![Kotlin](https://img.shields.io/badge/Language-Kotlin%201.9.23-blue.svg)](https://kotlinlang.org/)

@@ -101,6 +101,10 @@ class TacticalRfScannerManager(
     private val sensorManager = context.applicationContext.getSystemService(Context.SENSOR_SERVICE) as? SensorManager
     private val magnetometer = sensorManager?.getDefaultSensor(Sensor.TYPE_MAGNETIC_FIELD)
 
+    // UWB & Near-Infrared Optical Detection Engines
+    val uwbEngine: TacticalUwbEngine = TacticalUwbEngine(context)
+    val irEngine: TacticalInfraredDetectionEngine = TacticalInfraredDetectionEngine(context)
+
     private var wifiP2pChannel: WifiP2pManager.Channel? = null
 
     private var wifiReceiverRegistered = false
@@ -204,6 +208,24 @@ class TacticalRfScannerManager(
             wifiP2pChannel = wifiP2pManager?.initialize(context.applicationContext, Looper.getMainLooper(), null)
         } catch (e: Exception) {
             Timber.w(e, "Wi-Fi P2P initialization failed")
+        }
+
+        uwbEngine.startRanging()
+
+        scope.launch {
+            uwbEngine.activeUwbSessions.collect { sessions ->
+                for (session in sessions) {
+                    processUwbSession(session)
+                }
+            }
+        }
+
+        scope.launch {
+            irEngine.irAlertDetected.collect { isAlert ->
+                if (isAlert) {
+                    processOpticalIrAlert()
+                }
+            }
         }
 
         // Start 24/7 background hardware scanning immediately
@@ -321,7 +343,7 @@ class TacticalRfScannerManager(
             listOf(
                 "4C:FC:AA:8B:19:2E", "00:26:7E:44:91:FA", "9C:8E:99:A2:4B:11",
                 "C0:56:E3:7A:02:D4", "00:62:EC:3F:89:AB", "B4:FB:E4:11:80:55",
-                "60:60:1F:B1:33:09"
+                "60:60:1F:B1:33:09", "UWB_BMW_DIGITAL_KEY_3", "TESLA_KEY_SIM_0211", "NIR_OPTICAL_ILLUMINATOR"
             ).forEach {
                 targetMap.remove(it)
                 stationaryPinpointMap.remove(it)
@@ -1174,6 +1196,71 @@ class TacticalRfScannerManager(
         }
     }
 
+    private fun processUwbSession(session: TacticalUwbEngine.UwbKeySession) {
+        val dist = session.distanceMeters.toDouble().coerceAtLeast(0.5)
+        val relBearing = (session.azimuthDegrees + 360f) % 360f
+        val bearingRad = Math.toRadians(((relBearing + lastKnownHeading) % 360f).toDouble())
+
+        val deltaLat = (dist * cos(bearingRad)) / 111320.0
+        val deltaLon = (dist * sin(bearingRad)) / (111320.0 * cos(Math.toRadians(lastKnownLat)).coerceAtLeast(0.1))
+        val targetLat = lastKnownLat + deltaLat
+        val targetLon = lastKnownLon + deltaLon
+
+        val target = DetectedRfTarget(
+            id = session.sessionId,
+            name = session.vehicleModel,
+            rawSsidOrBleName = "UWB_CAR_KEY_CH9",
+            macAddress = session.sessionId,
+            vendor = "CCC Digital Key 3.0 / FiRa",
+            category = RfCategory.CAR_KEY,
+            rssi = (-40 - (dist * 4)).toInt(),
+            estimatedDistanceMeters = dist,
+            frequencyMhz = 7987,
+            protocol = session.protocol,
+            threatLevel = "ACTIVE DIGITAL CAR KEY (UWB)",
+            details = "Centimeter-accurate UWB ranging (LoS: ${session.lineOfSight}) • Azimuth: ${"%.1f".format(session.azimuthDegrees)}°",
+            timestamp = session.timestamp,
+            detectedLat = targetLat,
+            detectedLon = targetLon,
+            relativeBearingDeg = relBearing,
+            locationHistory = emptyList(),
+            motionTrend = RelativeMotionTrend.APPROACHING,
+            savedMetadata = savedDeviceRepository.getDevice(session.sessionId)
+        )
+
+        targetMap[session.sessionId] = target
+        syncTargetsToFlow()
+    }
+
+    private fun processOpticalIrAlert() {
+        val irId = "NIR_OPTICAL_ILLUMINATOR"
+        val now = System.currentTimeMillis()
+        val irType = irEngine.lastDetectedIrType.value ?: "ACTIVE 850/940nm INFRARED ILLUMINATION RING"
+        val target = DetectedRfTarget(
+            id = irId,
+            name = "OPTICAL INFRARED ILLUMINATOR [NIR 850/940nm]",
+            rawSsidOrBleName = "NIR_850_940NM",
+            macAddress = "NIR:85:00:94:00:IR",
+            vendor = "Optical Surveillance Hardware",
+            category = RfCategory.CCTV_SURVEILLANCE,
+            rssi = -52,
+            estimatedDistanceMeters = 8.5,
+            frequencyMhz = 0,
+            protocol = "Near-Infrared Optical (850/940nm)",
+            threatLevel = "ACTIVE NIR SURVEILLANCE OPTIC",
+            details = "$irType detected via optical sensor saturation.",
+            timestamp = now,
+            detectedLat = lastKnownLat,
+            detectedLon = lastKnownLon,
+            relativeBearingDeg = 0f,
+            locationHistory = emptyList(),
+            motionTrend = RelativeMotionTrend.STATIONARY,
+            savedMetadata = null
+        )
+        targetMap[irId] = target
+        syncTargetsToFlow()
+    }
+
     private fun syncTargetsToFlow() {
         val now = System.currentTimeMillis()
         // Prune targets that have not been observed in > 180 seconds (unless simulated or saved)
@@ -1186,16 +1273,17 @@ class TacticalRfScannerManager(
             }
         }
 
-        // Sort with saved items and high-threat items (Vehicles & CCTV) first, followed by signal strength
+        // Sort with keys, saved items, vehicles, and CCTV first, followed by signal strength
         val sorted = targetMap.values.toList().sortedWith(
             compareBy<DetectedRfTarget> {
                 if (it.savedMetadata != null) 0 else 1
             }.thenBy {
                 when (it.category) {
-                    RfCategory.VEHICLE -> 0
-                    RfCategory.CCTV_SURVEILLANCE -> 1
-                    RfCategory.DRONE_UAV -> 2
-                    RfCategory.ACCESS_POINT -> 3
+                    RfCategory.CAR_KEY -> 0
+                    RfCategory.VEHICLE -> 1
+                    RfCategory.CCTV_SURVEILLANCE -> 2
+                    RfCategory.DRONE_UAV -> 3
+                    RfCategory.ACCESS_POINT -> 4
                 }
             }.thenByDescending { it.rssi }
         )

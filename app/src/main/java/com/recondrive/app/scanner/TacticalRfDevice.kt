@@ -5,6 +5,7 @@ package com.recondrive.app.scanner
  */
 enum class RfCategory {
     VEHICLE,
+    CAR_KEY,
     CCTV_SURVEILLANCE,
     DRONE_UAV,
     ACCESS_POINT

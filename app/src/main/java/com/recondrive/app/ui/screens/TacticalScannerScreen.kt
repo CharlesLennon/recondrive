@@ -116,6 +116,7 @@ fun TacticalScannerScreen(
     }
 
     val vehicleCount = detectedTargets.count { it.category == RfCategory.VEHICLE }
+    val keyCount = detectedTargets.count { it.category == RfCategory.CAR_KEY }
     val cctvCount = detectedTargets.count { it.category == RfCategory.CCTV_SURVEILLANCE }
     val droneCount = detectedTargets.count { it.category == RfCategory.DRONE_UAV }
     val wifiCount = detectedTargets.count { it.category == RfCategory.ACCESS_POINT }
@@ -259,8 +260,21 @@ fun TacticalScannerScreen(
         // =====================================================================
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(5.dp)
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
         ) {
+            TelemetryThreatBadge(
+                label = "KEYS",
+                count = keyCount,
+                color = Color(0xFFFFD600),
+                icon = Icons.Default.Key,
+                selected = selectedFilterCategory == RfCategory.CAR_KEY && !filterSavedOnly,
+                onClick = {
+                    filterSavedOnly = false
+                    selectedFilterCategory = if (selectedFilterCategory == RfCategory.CAR_KEY) null else RfCategory.CAR_KEY
+                },
+                modifier = Modifier.weight(1f)
+            )
+
             TelemetryThreatBadge(
                 label = "CARS",
                 count = vehicleCount,
@@ -519,6 +533,64 @@ fun TacticalScannerScreen(
             }
         }
 
+        // =====================================================================
+        // UWB & OPTICAL NIR INFRARED DETECTION STATUS BANNER
+        // =====================================================================
+        Surface(
+            color = TacticalSurface,
+            shape = RoundedCornerShape(8.dp),
+            border = androidx.compose.foundation.BorderStroke(1.dp, TacticalBorder),
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(vertical = 2.dp)
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(5.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(5.dp)
+                            .clip(CircleShape)
+                            .background(Color(0xFFFFD600))
+                    )
+                    Text(
+                        text = "UWB DIGITAL KEY: CH5/9 ACTIVE",
+                        color = Color(0xFFFFD600),
+                        fontSize = 8.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace
+                    )
+                }
+
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(5.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(5.dp)
+                            .clip(CircleShape)
+                            .background(Color(0xFFFF5252))
+                    )
+                    Text(
+                        text = "NIR 850/940nm OPTICS: SENSING",
+                        color = Color(0xFFFF5252),
+                        fontSize = 8.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace
+                    )
+                }
+            }
+        }
+
         Spacer(modifier = Modifier.height(4.dp))
 
         // =====================================================================
@@ -676,6 +748,15 @@ fun TacticalScannerScreen(
                 onClick = {
                     filterSavedOnly = !filterSavedOnly
                     selectedFilterCategory = null
+                }
+            )
+            FilterChipItem(
+                label = "🔑 KEYS ($keyCount)",
+                selected = selectedFilterCategory == RfCategory.CAR_KEY && !filterSavedOnly,
+                activeColor = Color(0xFFFFD600),
+                onClick = {
+                    filterSavedOnly = false
+                    selectedFilterCategory = RfCategory.CAR_KEY
                 }
             )
             FilterChipItem(
@@ -1142,6 +1223,7 @@ private fun LiveScannerRoadMapCanvas(
                 val isSaved = target.savedMetadata != null
                 val categoryColor = when {
                     isSaved -> ReconAmber
+                    target.category == RfCategory.CAR_KEY -> Color(0xFFFFD600)
                     target.category == RfCategory.VEHICLE -> ReconCyan
                     target.category == RfCategory.CCTV_SURVEILLANCE -> Color(0xFFFF5252)
                     target.category == RfCategory.DRONE_UAV -> Color(0xFFBA68C8)
@@ -1225,6 +1307,7 @@ private fun LiveScannerRoadMapCanvas(
                     val subPaint = android.graphics.Paint().apply {
                         color = when {
                             isSaved -> android.graphics.Color.parseColor("#FFD54F")
+                            target.category == RfCategory.CAR_KEY -> android.graphics.Color.parseColor("#FFD600")
                             target.category == RfCategory.VEHICLE -> android.graphics.Color.parseColor("#00E5FF")
                             target.category == RfCategory.CCTV_SURVEILLANCE -> android.graphics.Color.parseColor("#FF5252")
                             target.category == RfCategory.DRONE_UAV -> android.graphics.Color.parseColor("#BA68C8")
@@ -1244,6 +1327,7 @@ private fun LiveScannerRoadMapCanvas(
                     val titlePrefix = when {
                         !savedPlate.isNullOrBlank() -> "[$savedPlate] "
                         isSaved -> "⭐ "
+                        target.category == RfCategory.CAR_KEY -> "🔑 "
                         target.category == RfCategory.VEHICLE -> "🚗 "
                         target.category == RfCategory.CCTV_SURVEILLANCE -> "📷 "
                         target.category == RfCategory.DRONE_UAV -> "🛸 "
@@ -1439,6 +1523,7 @@ private fun RfTargetHorizontalCard(
     val isSaved = target.savedMetadata != null
     val categoryColor = when {
         isSaved -> ReconAmber
+        target.category == RfCategory.CAR_KEY -> Color(0xFFFFD600)
         target.category == RfCategory.VEHICLE -> ReconCyan
         target.category == RfCategory.CCTV_SURVEILLANCE -> Color(0xFFFF5252)
         target.category == RfCategory.DRONE_UAV -> Color(0xFFBA68C8)
@@ -1447,6 +1532,7 @@ private fun RfTargetHorizontalCard(
 
     val iconVector = when {
         isSaved -> Icons.Default.Star
+        target.category == RfCategory.CAR_KEY -> Icons.Default.Key
         target.category == RfCategory.VEHICLE -> Icons.Default.DirectionsCar
         target.category == RfCategory.CCTV_SURVEILLANCE -> Icons.Default.Videocam
         target.category == RfCategory.DRONE_UAV -> Icons.Default.Flight
