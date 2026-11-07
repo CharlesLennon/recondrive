@@ -95,7 +95,7 @@ fun TacticalHudScreen(
     // -------------------------------------------------------------------------
     // GPT-Style Typewriter Text Streaming Animation on Load
     // -------------------------------------------------------------------------
-    val fullAiGreeting = remember { "Where to? All tactical navigation subsystems online." }
+    val fullAiGreeting = remember { "Where to, sir?" }
     var displayedAiGreeting by remember { mutableStateOf("") }
     var isAiStreamingComplete by remember { mutableStateOf(false) }
 
@@ -384,7 +384,7 @@ fun TacticalHudScreen(
 
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(
-                    text = if (isListeningVoice) "Listening for voice command coordinates..." else "Standing by for tactical destination instructions.",
+                    text = if (isListeningVoice) "Listening for voice command coordinates..." else "All tactical navigation subsystems online. Standing by for instructions.",
                     color = if (isListeningVoice) ReconAmber else TextSecondary,
                     fontSize = 9.sp,
                     fontFamily = FontFamily.Monospace,

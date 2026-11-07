@@ -49,7 +49,7 @@ fun EditDeviceIntelDialog(
     var alertSound by remember { mutableStateOf(existing?.alertSound ?: "SONAR_PING") }
     var notifyOnDetection by remember { mutableStateOf(existing?.notifyOnDetection ?: true) }
 
-    val presetGroups = listOf("KNOWN VEHICLES", "NEIGHBORS", "SURVEILLANCE", "WORK", "VIP", "CUSTOM")
+    val presetGroups = listOf("KNOWN VEHICLES", "SURVEILLANCE", "WORK", "VIP", "CUSTOM")
     val soundOptions = listOf(
         "SONAR_PING" to "Sonar Ping",
         "TACTICAL_CHIRP" to "Tactical Chirp",
@@ -107,7 +107,7 @@ fun EditDeviceIntelDialog(
                     value = nickname,
                     onValueChange = { nickname = it },
                     label = { Text("Custom Nickname / Alias", color = TextSecondary, fontSize = 10.sp) },
-                    placeholder = { Text("e.g. Neighbor's Blue Tesla", color = TextSecondary.copy(alpha = 0.5f), fontSize = 10.sp) },
+                    placeholder = { Text("e.g. Target Vehicle 1", color = TextSecondary.copy(alpha = 0.5f), fontSize = 10.sp) },
                     singleLine = true,
                     colors = OutlinedTextFieldDefaults.colors(
                         focusedTextColor = TextPrimary,
@@ -130,7 +130,7 @@ fun EditDeviceIntelDialog(
                         value = numberPlate,
                         onValueChange = { numberPlate = it.uppercase() },
                         label = { Text("Number Plate", color = TextSecondary, fontSize = 10.sp) },
-                        placeholder = { Text("LJ71 WXA", color = TextSecondary.copy(alpha = 0.5f), fontSize = 10.sp) },
+                        placeholder = { Text("AB12 CDE", color = TextSecondary.copy(alpha = 0.5f), fontSize = 10.sp) },
                         singleLine = true,
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedTextColor = ReconAmber,
@@ -146,7 +146,7 @@ fun EditDeviceIntelDialog(
                         value = doorNumber,
                         onValueChange = { doorNumber = it },
                         label = { Text("Door # / House", color = TextSecondary, fontSize = 10.sp) },
-                        placeholder = { Text("Door #42", color = TextSecondary.copy(alpha = 0.5f), fontSize = 10.sp) },
+                        placeholder = { Text("Door #10", color = TextSecondary.copy(alpha = 0.5f), fontSize = 10.sp) },
                         singleLine = true,
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedTextColor = TextPrimary,

@@ -947,7 +947,8 @@ object UkOsmDataEngine {
 
         // 1. Grid resolution step size based on zoom level
         val step = when {
-            zoom >= 18.0f -> 0.00045 // ~45m intimate residential lanes & cul-de-sacs
+            zoom >= 19.5f -> 0.00015 // ~15m intimate curbside, driveways & alleys
+            zoom >= 18.0f -> 0.00035 // ~35m residential street lanes & cul-de-sacs
             zoom >= 16.5f -> 0.00090 // ~90m neighborhood street blocks
             zoom >= 15.0f -> 0.00180 // ~180m local road network
             zoom >= 13.5f -> 0.00400 // ~400m urban avenues & collectors

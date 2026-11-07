@@ -47,6 +47,9 @@ class ReconApplication : Application() {
     lateinit var tacticalSoundManager: com.recondrive.app.audio.TacticalSoundManager
         private set
 
+    lateinit var csiSensingEngine: com.recondrive.app.scanner.TacticalCsiSensingEngine
+        private set
+
     lateinit var rfScannerManager: com.recondrive.app.scanner.TacticalRfScannerManager
         private set
 
@@ -78,10 +81,12 @@ class ReconApplication : Application() {
         deviceOrientationManager = com.recondrive.app.sensor.DeviceOrientationManager(this)
         savedRfDeviceRepository = com.recondrive.app.scanner.SavedRfDeviceRepository(this)
         tacticalSoundManager = com.recondrive.app.audio.TacticalSoundManager(this)
+        csiSensingEngine = com.recondrive.app.scanner.TacticalCsiSensingEngine(this)
         rfScannerManager = com.recondrive.app.scanner.TacticalRfScannerManager(
             context = this,
             savedDeviceRepository = savedRfDeviceRepository,
-            soundManager = tacticalSoundManager
+            soundManager = tacticalSoundManager,
+            csiEngine = csiSensingEngine
         )
     }
 

@@ -38,12 +38,12 @@ data class DeviceBreadcrumb(
  */
 data class SavedRfDevice(
     val id: String,                         // MAC Address or BSSID (Primary Key)
-    val originalName: String,               // Original detected name (e.g. "Tesla Model 3")
-    val customNickname: String = "",       // Custom user alias (e.g. "Neighbor's Blue Tesla")
-    val numberPlate: String = "",           // UK Vehicle registration mark (e.g. "LJ71 WXA")
-    val doorNumberOrAddress: String = "",   // Physical house / door number (e.g. "Door #42")
-    val notes: String = "",                 // User notes (e.g. "Parked in driveway facing street")
-    val group: String = "SURVEILLANCE",     // Group / Category (e.g. "KNOWN VEHICLES", "NEIGHBORS", "SURVEILLANCE", "WORK", "CUSTOM")
+    val originalName: String,               // Original detected name
+    val customNickname: String = "",       // Custom user alias
+    val numberPlate: String = "",           // UK Vehicle registration mark
+    val doorNumberOrAddress: String = "",   // Physical house / door number
+    val notes: String = "",                 // User notes
+    val group: String = "SURVEILLANCE",     // Group / Category (e.g. "KNOWN VEHICLES", "SURVEILLANCE", "WORK", "CUSTOM")
     val alertSound: String = "SONAR_PING",  // "SONAR_PING", "TACTICAL_CHIRP", "RADAR_BEEP", "VOICE_ALERT", "SILENT"
     val notifyOnDetection: Boolean = true,  // Trigger acoustic alert and notification when seen
     val firstSeenTimestamp: Long = System.currentTimeMillis(),

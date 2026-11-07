@@ -64,7 +64,7 @@ class SavedRfDeviceRepository(private val context: Context) {
     fun getDistinctGroups(): List<String> {
         val groups = deviceMap.values.map { it.group }.filter { it.isNotBlank() }.distinct()
         return if (groups.isEmpty()) {
-            listOf("KNOWN VEHICLES", "SURVEILLANCE", "NEIGHBORS", "WORK", "CUSTOM")
+            listOf("KNOWN VEHICLES", "SURVEILLANCE", "WORK", "CUSTOM")
         } else {
             groups
         }
@@ -105,20 +105,7 @@ class SavedRfDeviceRepository(private val context: Context) {
 
     private fun loadFromDisk() {
         if (!storageFile.exists()) {
-            // Seed a sample saved target to showcase feature immediately
-            val sample = SavedRfDevice(
-                id = "4C:FC:AA:8B:19:2E",
-                originalName = "TESLA MODEL 3 (CONNECTED)",
-                customNickname = "Neighbor's Tesla",
-                numberPlate = "LJ71 WXA",
-                doorNumberOrAddress = "Door #42, High Street",
-                notes = "White Model 3, parked on front gravel drive",
-                group = "KNOWN VEHICLES",
-                alertSound = "SONAR_PING",
-                notifyOnDetection = true
-            )
-            deviceMap[sample.id] = sample
-            syncAndPersist()
+            _savedDevices.value = emptyList()
             return
         }
 

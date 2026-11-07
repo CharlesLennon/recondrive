@@ -32,7 +32,8 @@ import kotlin.math.*
 class TacticalRfScannerManager(
     private val context: Context,
     val savedDeviceRepository: SavedRfDeviceRepository = com.recondrive.app.ReconApplication.instance.savedRfDeviceRepository,
-    val soundManager: TacticalSoundManager = com.recondrive.app.ReconApplication.instance.tacticalSoundManager
+    val soundManager: TacticalSoundManager = com.recondrive.app.ReconApplication.instance.tacticalSoundManager,
+    val csiEngine: TacticalCsiSensingEngine? = null
 ) {
 
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
@@ -94,13 +95,13 @@ class TacticalRfScannerManager(
     }
 
     init {
-        populateTacticalSimulationTargets(lastKnownLat, lastKnownLon)
+        // Zero hardcoded mock targets on startup - populated purely from live radio environment
         startPeriodicSweep()
     }
 
     /**
      * Updates user's real host vehicle location and heading.
-     * Instantly repositions relative simulation targets and anchors live tracking.
+     * Anchors live tracking relative to current vehicle position.
      */
     fun updateLastKnownLocation(lat: Double, lon: Double, heading: Float = lastKnownHeading) {
         val prevLat = lastKnownLat
@@ -112,8 +113,9 @@ class TacticalRfScannerManager(
         val distMoved = hypot(lat - prevLat, lon - prevLon) * 111320.0
         if (!hasReceivedRealLocation || distMoved > 40.0) {
             hasReceivedRealLocation = true
-            // Reposition simulated targets around user's live position (within 8m - 35m)
-            populateTacticalSimulationTargets(lat, lon)
+            if (_isSimulationEnabled.value) {
+                populateTacticalSimulationTargets(lat, lon)
+            }
         }
     }
 
@@ -160,6 +162,10 @@ class TacticalRfScannerManager(
         _isSimulationEnabled.value = !_isSimulationEnabled.value
         if (_isSimulationEnabled.value) {
             populateTacticalSimulationTargets(lastKnownLat, lastKnownLon)
+        } else {
+            targetMap.remove("02:00:00:AA:BB:01")
+            targetMap.remove("02:00:00:AA:BB:02")
+            syncTargetsToFlow()
         }
     }
 
@@ -241,6 +247,8 @@ class TacticalRfScannerManager(
                 val bssid = scan.BSSID ?: continue
                 val rssi = scan.level
                 val freq = scan.frequency
+
+                csiEngine?.feedLiveSample(rssi)
 
                 val classification = TacticalRfClassifier.classify(ssid, bssid)
                 val dist = TacticalRfClassifier.estimateDistance(rssi)
@@ -329,6 +337,8 @@ class TacticalRfScannerManager(
             val rawName = result.scanRecord?.deviceName ?: device.name ?: ""
             val rssi = result.rssi
             val now = System.currentTimeMillis()
+
+            csiEngine?.feedLiveSample(rssi)
 
             val classification = TacticalRfClassifier.classify(rawName, address)
             val dist = TacticalRfClassifier.estimateDistance(rssi)
@@ -449,10 +459,12 @@ class TacticalRfScannerManager(
     }
 
     /**
-     * Seeds realistic tactical simulation targets positioned tightly around the user's current GPS location
-     * (within 8m - 35m) so PIN dropping lands right on the user's street, never across town!
+     * Optional synthetic test beacons (only populated if user explicitly turns on SIM mode).
+     * Strictly anonymous RF carriers without hardcoded personal intel or vehicle plates.
      */
     fun populateTacticalSimulationTargets(userLat: Double, userLon: Double) {
+        if (!_isSimulationEnabled.value) return
+
         val now = System.currentTimeMillis()
 
         // Offsets in meters converted to precise lat/lon delta
@@ -463,173 +475,63 @@ class TacticalRfScannerManager(
             return (userLat + dLat) to (userLon + dLon)
         }
 
-        val teslaCoord = getCoord(8.4, 45.0)
-        val fordCoord = getCoord(14.2, 120.0)
-        val viofoCoord = getCoord(11.5, 210.0)
-        val hikvisionCoord = getCoord(18.2, 315.0)
-        val ringCoord = getCoord(9.8, 80.0)
-        val anprCoord = getCoord(34.0, 5.0)
-        val droneCoord = getCoord(23.5, 175.0)
+        val testApCoord = getCoord(15.0, 45.0)
+        val testBleCoord = getCoord(22.0, 190.0)
 
         fun createBreadcrumbs(c: Pair<Double, Double>, dist: Double, rssi: Int, b: Float): List<DeviceBreadcrumb> {
             return listOf(
-                DeviceBreadcrumb(now - 8000, userLat - 0.0001, userLon, b, dist + 4.0, rssi - 4, c.first, c.second),
-                DeviceBreadcrumb(now - 4000, userLat - 0.00005, userLon, b, dist + 2.0, rssi - 2, c.first, c.second),
+                DeviceBreadcrumb(now - 6000, userLat - 0.0001, userLon, b, dist + 3.0, rssi - 3, c.first, c.second),
+                DeviceBreadcrumb(now - 3000, userLat - 0.00005, userLon, b, dist + 1.5, rssi - 1, c.first, c.second),
                 DeviceBreadcrumb(now, userLat, userLon, b, dist, rssi, c.first, c.second)
             )
         }
 
-        val targets = listOf(
+        val simTargets = listOf(
             DetectedRfTarget(
-                id = "4C:FC:AA:8B:19:2E",
-                name = "TESLA MODEL 3 (CONNECTED)",
-                rawSsidOrBleName = "Tesla_Guest_9182",
-                macAddress = "4C:FC:AA:8B:19:2E",
-                vendor = "Tesla Motors, Inc.",
-                category = RfCategory.VEHICLE,
-                rssi = -58,
-                estimatedDistanceMeters = 8.4,
-                frequencyMhz = 5180,
-                protocol = "Wi-Fi 6 (802.11ax) + BLE Key",
-                threatLevel = "MOBILE TELEMETRY",
-                details = "Tesla in-cabin infotainment hotspot & BLE phone-key link in range.",
-                timestamp = now,
-                detectedLat = teslaCoord.first,
-                detectedLon = teslaCoord.second,
-                relativeBearingDeg = 45f,
-                locationHistory = createBreadcrumbs(teslaCoord, 8.4, -58, 45f),
-                motionTrend = RelativeMotionTrend.APPROACHING,
-                savedMetadata = savedDeviceRepository.getDevice("4C:FC:AA:8B:19:2E")
-            ),
-            DetectedRfTarget(
-                id = "00:26:7E:44:91:FA",
-                name = "FORD SYNC VEHICLE AP",
-                rawSsidOrBleName = "Ford Audio_SYNC3",
-                macAddress = "00:26:7E:44:91:FA",
-                vendor = "Ford Motor Company",
-                category = RfCategory.VEHICLE,
-                rssi = -68,
-                estimatedDistanceMeters = 14.2,
-                frequencyMhz = 2412,
-                protocol = "Wi-Fi 802.11n + Bluetooth",
-                threatLevel = "MOBILE TELEMETRY",
-                details = "In-vehicle SYNC cockpit infotainment network.",
-                timestamp = now,
-                detectedLat = fordCoord.first,
-                detectedLon = fordCoord.second,
-                relativeBearingDeg = 120f,
-                locationHistory = createBreadcrumbs(fordCoord, 14.2, -68, 120f),
-                motionTrend = RelativeMotionTrend.STATIONARY,
-                savedMetadata = savedDeviceRepository.getDevice("00:26:7E:44:91:FA")
-            ),
-            DetectedRfTarget(
-                id = "9C:8E:99:A2:4B:11",
-                name = "VIOFO 4K AUTOMOTIVE DASHCAM",
-                rawSsidOrBleName = "VIOFO_A129PRO_4B11",
-                macAddress = "9C:8E:99:A2:4B:11",
-                vendor = "VIOFO Ltd.",
-                category = RfCategory.VEHICLE,
+                id = "02:00:00:AA:BB:01",
+                name = "RF TEST EMITTER (5.2 GHz)",
+                rawSsidOrBleName = "TEST-CARRIER-01",
+                macAddress = "02:00:00:AA:BB:01",
+                vendor = "Test Carrier",
+                category = RfCategory.ACCESS_POINT,
                 rssi = -64,
-                estimatedDistanceMeters = 11.5,
+                estimatedDistanceMeters = 15.0,
                 frequencyMhz = 5240,
                 protocol = "Wi-Fi 5GHz (802.11ac)",
-                threatLevel = "SURVEILLANCE OPTIC",
-                details = "Vehicle forward-facing optic streaming video.",
+                threatLevel = "SYNTHETIC SIGNAL",
+                details = "Simulated RF test carrier for testing range & bearing.",
                 timestamp = now,
-                detectedLat = viofoCoord.first,
-                detectedLon = viofoCoord.second,
-                relativeBearingDeg = 210f,
-                locationHistory = createBreadcrumbs(viofoCoord, 11.5, -64, 210f),
-                motionTrend = RelativeMotionTrend.RECEDING,
-                savedMetadata = savedDeviceRepository.getDevice("9C:8E:99:A2:4B:11")
-            ),
-            DetectedRfTarget(
-                id = "C0:56:E3:7A:02:D4",
-                name = "HIKVISION IP SURVEILLANCE CCTV",
-                rawSsidOrBleName = "HIKVISION_DS2CD2043",
-                macAddress = "C0:56:E3:7A:02:D4",
-                vendor = "Hangzhou Hikvision Digital Tech",
-                category = RfCategory.CCTV_SURVEILLANCE,
-                rssi = -72,
-                estimatedDistanceMeters = 18.2,
-                frequencyMhz = 2437,
-                protocol = "Wi-Fi 802.11n",
-                threatLevel = "FIXED SURVEILLANCE OPTIC",
-                details = "Commercial optic security camera actively streaming.",
-                timestamp = now,
-                detectedLat = hikvisionCoord.first,
-                detectedLon = hikvisionCoord.second,
-                relativeBearingDeg = 315f,
-                locationHistory = createBreadcrumbs(hikvisionCoord, 18.2, -72, 315f),
-                motionTrend = RelativeMotionTrend.STATIONARY,
-                savedMetadata = savedDeviceRepository.getDevice("C0:56:E3:7A:02:D4")
-            ),
-            DetectedRfTarget(
-                id = "00:62:EC:3F:89:AB",
-                name = "AMAZON RING SMART DOORBELL / CAM",
-                rawSsidOrBleName = "Ring-Setup-89ab",
-                macAddress = "00:62:EC:3F:89:AB",
-                vendor = "Amazon Ring LLC",
-                category = RfCategory.CCTV_SURVEILLANCE,
-                rssi = -61,
-                estimatedDistanceMeters = 9.8,
-                frequencyMhz = 2462,
-                protocol = "Wi-Fi 802.11n",
-                threatLevel = "PERIMETER SURVEILLANCE",
-                details = "HD optic camera monitoring entry perimeter.",
-                timestamp = now,
-                detectedLat = ringCoord.first,
-                detectedLon = ringCoord.second,
-                relativeBearingDeg = 80f,
-                locationHistory = createBreadcrumbs(ringCoord, 9.8, -61, 80f),
+                detectedLat = testApCoord.first,
+                detectedLon = testApCoord.second,
+                relativeBearingDeg = 45f,
+                locationHistory = createBreadcrumbs(testApCoord, 15.0, -64, 45f),
                 motionTrend = RelativeMotionTrend.APPROACHING,
-                savedMetadata = savedDeviceRepository.getDevice("00:62:EC:3F:89:AB")
+                savedMetadata = savedDeviceRepository.getDevice("02:00:00:AA:BB:01")
             ),
             DetectedRfTarget(
-                id = "B4:FB:E4:11:80:55",
-                name = "MUNICIPAL ANPR / SPEED CAMERA",
-                rawSsidOrBleName = "ANPR_SURVEILLANCE_NODE_4",
-                macAddress = "B4:FB:E4:11:80:55",
-                vendor = "Highways & Traffic Enforcement",
-                category = RfCategory.CCTV_SURVEILLANCE,
-                rssi = -82,
-                estimatedDistanceMeters = 34.0,
-                frequencyMhz = 5745,
-                protocol = "Wi-Fi 802.11a/n",
-                threatLevel = "HIGHWAY ENFORCEMENT OPTIC",
-                details = "Automatic Number Plate Recognition / Speed Radar telemetry.",
+                id = "02:00:00:AA:BB:02",
+                name = "BLE TEST BEACON",
+                rawSsidOrBleName = "TEST-BEACON-02",
+                macAddress = "02:00:00:AA:BB:02",
+                vendor = "Test Beacon",
+                category = RfCategory.ACCESS_POINT,
+                rssi = -72,
+                estimatedDistanceMeters = 22.0,
+                frequencyMhz = 2402,
+                protocol = "BLE 5.0",
+                threatLevel = "SYNTHETIC SIGNAL",
+                details = "Simulated low-energy test signal.",
                 timestamp = now,
-                detectedLat = anprCoord.first,
-                detectedLon = anprCoord.second,
-                relativeBearingDeg = 5f,
-                locationHistory = createBreadcrumbs(anprCoord, 34.0, -82, 5f),
+                detectedLat = testBleCoord.first,
+                detectedLon = testBleCoord.second,
+                relativeBearingDeg = 190f,
+                locationHistory = createBreadcrumbs(testBleCoord, 22.0, -72, 190f),
                 motionTrend = RelativeMotionTrend.STATIONARY,
-                savedMetadata = savedDeviceRepository.getDevice("B4:FB:E4:11:80:55")
-            ),
-            DetectedRfTarget(
-                id = "60:60:1F:B1:33:09",
-                name = "DJI AERIAL DRONE (DIRECT REMOTE ID)",
-                rawSsidOrBleName = "DJI-Mini3Pro-RemoteID",
-                macAddress = "60:60:1F:B1:33:09",
-                vendor = "DJI Innovations",
-                category = RfCategory.DRONE_UAV,
-                rssi = -76,
-                estimatedDistanceMeters = 23.5,
-                frequencyMhz = 2412,
-                protocol = "BLE 5.0 Broadcast",
-                threatLevel = "AERIAL UAV IN AIRSPACE",
-                details = "Active airborne drone broadcasting FAA/CAA Remote ID.",
-                timestamp = now,
-                detectedLat = droneCoord.first,
-                detectedLon = droneCoord.second,
-                relativeBearingDeg = 175f,
-                locationHistory = createBreadcrumbs(droneCoord, 23.5, -76, 175f),
-                motionTrend = RelativeMotionTrend.RECEDING,
-                savedMetadata = savedDeviceRepository.getDevice("60:60:1F:B1:33:09")
+                savedMetadata = savedDeviceRepository.getDevice("02:00:00:AA:BB:02")
             )
         )
 
-        for (t in targets) {
+        for (t in simTargets) {
             targetMap[t.id] = t
         }
         syncTargetsToFlow()

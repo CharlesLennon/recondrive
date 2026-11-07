@@ -27,6 +27,8 @@ import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.graphics.drawscope.withTransform
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontFamily
@@ -35,25 +37,25 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.recondrive.app.map.OsmRoadSegment
 import com.recondrive.app.map.OsmRoadType
+import com.recondrive.app.map.OsmTileManager
 import com.recondrive.app.map.UkBoundingBox
 import com.recondrive.app.map.UkOsmDataEngine
-import com.recondrive.app.scanner.DetectedRfTarget
-import com.recondrive.app.scanner.RelativeMotionTrend
-import com.recondrive.app.scanner.RfCategory
-import com.recondrive.app.scanner.TacticalRfScannerManager
+import com.recondrive.app.scanner.*
 import com.recondrive.app.ui.theme.*
 import kotlin.math.*
 
 /**
  * Tactical SIGINT RF Spectrum & Live Wardrive Scanner Screen.
- * Features an expansive interactive live radar map showing real OpenStreetMap road networks,
- * illuminated street corridors, 360° sweeping phosphor radar beam, device location history
- * (all motion relative to host vehicle), saved targets with custom number plates, door numbers,
- * group tags, and background scanning with pause controls.
+ * Features an expansive interactive live radar map showing real OpenStreetMap raster tiles,
+ * road vectors, course-up map rotation relative to device heading, ultra close-up zooms (max 50m: 10m/20m/35m/50m),
+ * CSI & Beamforming Human Presence Sensing, device location history (breadcrumbs),
+ * saved targets with custom number plates, door numbers, group tags, and background scanning with pause controls.
  */
 @Composable
 fun TacticalScannerScreen(
     scannerManager: TacticalRfScannerManager = com.recondrive.app.ReconApplication.instance.rfScannerManager,
+    csiSensingEngine: TacticalCsiSensingEngine = com.recondrive.app.ReconApplication.instance.csiSensingEngine,
+    osmTileManager: OsmTileManager = com.recondrive.app.ReconApplication.instance.osmTileManager,
     currentLat: Double = 50.8555,
     currentLon: Double = -0.2449,
     currentHeading: Float = 0f,
@@ -65,6 +67,8 @@ fun TacticalScannerScreen(
     val isScanning by scannerManager.isScanning.collectAsState()
     val isScannerPaused by scannerManager.isScannerPaused.collectAsState()
     val isSimulation by scannerManager.isSimulationEnabled.collectAsState()
+    val csiSnapshot by csiSensingEngine.snapshot.collectAsState()
+    val tileRevision by osmTileManager.revision.collectAsState()
 
     var selectedFilterCategory by remember { mutableStateOf<RfCategory?>(null) } // null = ALL
     var filterSavedOnly by remember { mutableStateOf(false) }
@@ -76,17 +80,17 @@ fun TacticalScannerScreen(
     var cameraLon by remember { mutableDoubleStateOf(currentLon) }
     var isFollowingVehicle by remember { mutableStateOf(true) }
 
-    // Range selection: 50m, 100m, 250m, 500m
-    var selectedRangeMeters by remember { mutableFloatStateOf(100f) }
+    // Range selection: Ultra close-up zoom (10m, 20m, 35m, 50m max)
+    var selectedRangeMeters by remember { mutableFloatStateOf(20f) }
 
-    // Derive zoom level from range in meters
+    // Derive zoom level from range in meters (Ultra close-up zooms for driveway/curbside inspection)
     val zoom = remember(selectedRangeMeters) {
         when (selectedRangeMeters) {
-            50f -> 18.2f
-            100f -> 17.2f
-            250f -> 16.0f
-            500f -> 14.8f
-            else -> 17.2f
+            10f -> 20.0f
+            20f -> 19.2f
+            35f -> 18.5f
+            50f -> 17.8f
+            else -> 19.2f
         }
     }
 
@@ -322,10 +326,129 @@ fun TacticalScannerScreen(
             )
         }
 
-        Spacer(modifier = Modifier.height(6.dp))
+        Spacer(modifier = Modifier.height(4.dp))
 
         // =====================================================================
-        // 3. HERO LIVE SCANNER MAP WITH REAL ROADS, RADAR & RELATIVE HISTORY
+        // 2B. CSI & BEAMFORMING BIOMETRIC SENSING (HUMAN PRESENCE DETECTION)
+        // =====================================================================
+        val bioColor = when (csiSnapshot.presenceState) {
+            HumanPresenceState.ACTIVE_HUMAN_TRANSIT -> ReconAmber
+            HumanPresenceState.RESPIRATION_MICRO_MOTION -> ReconGreen
+            HumanPresenceState.VACANT -> Color(0xFF1E3A4C)
+        }
+
+        Surface(
+            color = TacticalSurface,
+            shape = RoundedCornerShape(8.dp),
+            border = androidx.compose.foundation.BorderStroke(1.dp, bioColor.copy(alpha = 0.7f)),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Column(modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(5.dp),
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(18.dp)
+                                .clip(CircleShape)
+                                .background(bioColor.copy(alpha = 0.18f))
+                                .border(1.dp, bioColor.copy(alpha = 0.7f), CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = when (csiSnapshot.presenceState) {
+                                    HumanPresenceState.ACTIVE_HUMAN_TRANSIT -> Icons.Default.DirectionsWalk
+                                    HumanPresenceState.RESPIRATION_MICRO_MOTION -> Icons.Default.Air
+                                    HumanPresenceState.VACANT -> Icons.Default.PersonOutline
+                                },
+                                contentDescription = null,
+                                tint = if (csiSnapshot.presenceState == HumanPresenceState.VACANT) TextSecondary else bioColor,
+                                modifier = Modifier.size(11.dp)
+                            )
+                        }
+
+                        Column {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Text(
+                                    text = "CSI & BFI BIOMETRIC SENSING",
+                                    color = ReconCyan,
+                                    fontSize = 8.5.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    fontFamily = FontFamily.Monospace
+                                )
+                                Text(
+                                    text = "• ${csiSnapshot.perturbationIndexPercent}% PERTURBATION",
+                                    color = bioColor,
+                                    fontSize = 8.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    fontFamily = FontFamily.Monospace
+                                )
+                            }
+                            Text(
+                                text = csiSnapshot.statusSummary,
+                                color = if (csiSnapshot.presenceState == HumanPresenceState.VACANT) TextSecondary else bioColor,
+                                fontSize = 8.sp,
+                                fontFamily = FontFamily.Monospace
+                            )
+                        }
+                    }
+
+                    // Calibrate noise floor button
+                    Surface(
+                        color = TacticalObsidian,
+                        shape = RoundedCornerShape(4.dp),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, TacticalBorder),
+                        modifier = Modifier.clickable { csiSensingEngine.calibrateNoiseFloor() }
+                    ) {
+                        Text(
+                            text = "CALIBRATE",
+                            color = TextSecondary,
+                            fontSize = 7.5.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.Monospace,
+                            modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
+                        )
+                    }
+                }
+
+                // Live Multi-Path Perturbation Waveform Canvas (Subcarrier ripple)
+                Spacer(modifier = Modifier.height(3.dp))
+                Canvas(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(16.dp)
+                        .clip(RoundedCornerShape(3.dp))
+                        .background(TacticalObsidian)
+                ) {
+                    val samples = csiSnapshot.waveformSamples
+                    if (samples.size >= 2) {
+                        val stepX = size.width / (samples.size - 1)
+                        val midY = size.height / 2f
+                        val path = Path()
+
+                        for ((idx, sample) in samples.withIndex()) {
+                            val x = idx * stepX
+                            val y = midY - (sample * (midY * 0.85f))
+                            if (idx == 0) path.moveTo(x, y) else path.lineTo(x, y)
+                        }
+
+                        drawPath(path = path, color = bioColor, style = Stroke(width = 1.4f))
+                    }
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(4.dp))
+
+        // =====================================================================
+        // 3. HERO LIVE SCANNER MAP WITH REAL OSM TILES & COURSE-UP ROTATION
         // =====================================================================
         Box(
             modifier = Modifier
@@ -346,6 +469,9 @@ fun TacticalScannerScreen(
                 speedMph = speedMph,
                 rangeMeters = selectedRangeMeters,
                 targets = filteredTargets,
+                csiSnapshot = csiSnapshot,
+                osmTileManager = osmTileManager,
+                tileRevision = tileRevision,
                 selectedTargetId = selectedTargetId,
                 onSelectTarget = { target ->
                     selectedTargetId = target.id
@@ -386,7 +512,7 @@ fun TacticalScannerScreen(
                         )
                     }
                     Text(
-                        text = "${"%.4f".format(cameraLat)}°N, ${"%.4f".format(abs(cameraLon))}°W",
+                        text = "HDG: ${deviceHeading.roundToInt()}° • ${"%.4f".format(cameraLat)}°N, ${"%.4f".format(abs(cameraLon))}°W",
                         color = TextSecondary,
                         fontSize = 8.sp,
                         fontFamily = FontFamily.Monospace
@@ -394,7 +520,7 @@ fun TacticalScannerScreen(
                 }
             }
 
-            // Top-Right Quick Range Selector & Controls
+            // Top-Right Quick Range Selector (10m, 20m, 35m, 50m max)
             Row(
                 modifier = Modifier
                     .align(Alignment.TopEnd)
@@ -402,8 +528,7 @@ fun TacticalScannerScreen(
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Range Chips
-                listOf(50f, 100f, 250f, 500f).forEach { r ->
+                listOf(10f, 20f, 35f, 50f).forEach { r ->
                     val isSelected = selectedRangeMeters == r
                     Surface(
                         color = if (isSelected) ReconCyan.copy(alpha = 0.25f) else TacticalObsidian.copy(alpha = 0.85f),
@@ -559,7 +684,6 @@ fun TacticalScannerScreen(
                             editingTarget = target
                         },
                         onPinToMap = {
-                            // Accurate relative target coordinates anchored to current host position
                             val pinLat = target.detectedLat ?: run {
                                 val bRad = Math.toRadians(target.relativeBearingDeg.toDouble())
                                 currentLat + (target.estimatedDistanceMeters * cos(bRad)) / 111320.0
@@ -621,9 +745,9 @@ private fun TelemetryThreatBadge(
 
 /**
  * Live Scanner Road Map Canvas.
- * Combines real OpenStreetMap road vectors, animated 360° sweeping phosphor radar beam,
- * vehicle heading reticle, and plotted vehicles / CCTV cameras directly on the streets,
- * with relative location history breadcrumb trails.
+ * Combines real OpenStreetMap raster tiles, high-resolution street vectors,
+ * course-up map rotation relative to device heading, animated 360° sweeping radar beam,
+ * CSI biological human presence ripples, and detected target blips.
  */
 @Composable
 private fun LiveScannerRoadMapCanvas(
@@ -637,6 +761,9 @@ private fun LiveScannerRoadMapCanvas(
     speedMph: Int,
     rangeMeters: Float,
     targets: List<DetectedRfTarget>,
+    csiSnapshot: CsiSensingSnapshot,
+    osmTileManager: OsmTileManager,
+    tileRevision: Int,
     selectedTargetId: String?,
     onSelectTarget: (DetectedRfTarget) -> Unit,
     onPanCamera: (deltaLat: Double, deltaLon: Double) -> Unit
@@ -662,22 +789,49 @@ private fun LiveScannerRoadMapCanvas(
         label = "pulse_scale"
     )
 
+    // Real-time Tactical ColorFilter applied to OpenStreetMap tiles
+    val tileColorFilter = remember {
+        androidx.compose.ui.graphics.ColorFilter.colorMatrix(
+            androidx.compose.ui.graphics.ColorMatrix(
+                floatArrayOf(
+                    -0.75f, 0f, 0f, 0f, 165f,
+                    0f, -0.75f, 0f, 0f, 175f,
+                    0f, 0f, -0.65f, 0f, 195f,
+                    0f, 0f, 0f, 0.88f, 0f
+                )
+            )
+        )
+    }
+
     Canvas(
         modifier = Modifier
             .fillMaxSize()
             .pointerInput(Unit) {
                 detectDragGestures { _, dragAmount ->
                     val scale = 256.0 * 2.0.pow(zoom.toDouble())
-                    val deltaLon = -(dragAmount.x / scale) * 360.0
-                    val deltaLat = (dragAmount.y / scale) * 180.0
+                    val rotRad = Math.toRadians(deviceHeading.toDouble())
+                    // Rotate drag vector according to device heading
+                    val unrotX = dragAmount.x * cos(rotRad) - dragAmount.y * sin(rotRad)
+                    val unrotY = dragAmount.x * sin(rotRad) + dragAmount.y * cos(rotRad)
+
+                    val deltaLon = -(unrotX / scale) * 360.0
+                    val deltaLat = (unrotY / scale) * 180.0
                     onPanCamera(deltaLat, deltaLon)
                 }
             }
-            .pointerInput(targets, cameraLat, cameraLon, zoom) {
+            .pointerInput(targets, cameraLat, cameraLon, zoom, deviceHeading) {
                 detectTapGestures { tapOffset ->
                     val scale = 256.0 * 2.0.pow(zoom.toDouble())
                     val cx = (cameraLon + 180.0) / 360.0 * scale
                     val cy = (1.0 - ln(tan(Math.toRadians(cameraLat)) + 1.0 / cos(Math.toRadians(cameraLat))) / Math.PI) / 2.0 * scale
+                    val centerPt = Offset(size.width / 2f, size.height / 2f)
+
+                    // Un-rotate tap around center to test against un-rotated target coordinates
+                    val rotRad = Math.toRadians(deviceHeading.toDouble())
+                    val dx = tapOffset.x - centerPt.x
+                    val dy = tapOffset.y - centerPt.y
+                    val unrotX = centerPt.x + (dx * cos(rotRad) - dy * sin(rotRad)).toFloat()
+                    val unrotY = centerPt.y + (dx * sin(rotRad) + dy * cos(rotRad)).toFloat()
 
                     for (target in targets) {
                         val tLat = target.detectedLat ?: run {
@@ -695,8 +849,8 @@ private fun LiveScannerRoadMapCanvas(
                         val screenX = (tx - cx + size.width / 2.0).toFloat()
                         val screenY = (ty - cy + size.height / 2.0).toFloat()
 
-                        val distToTap = hypot(tapOffset.x - screenX, tapOffset.y - screenY)
-                        if (distToTap < 45f) { // Tap radius
+                        val distToTap = hypot(unrotX - screenX, unrotY - screenY)
+                        if (distToTap < 45f) {
                             onSelectTarget(target)
                             return@detectTapGestures
                         }
@@ -704,10 +858,12 @@ private fun LiveScannerRoadMapCanvas(
                 }
             }
     ) {
+        @Suppress("UNUSED_VARIABLE")
+        val rev = tileRevision
+
         val width = size.width
         val height = size.height
 
-        // Mercator projection scale & camera center
         val scale = 256.0 * 2.0.pow(zoom.toDouble())
         val cx = (cameraLon + 180.0) / 360.0 * scale
         val cy = (1.0 - ln(tan(Math.toRadians(cameraLat)) + 1.0 / cos(Math.toRadians(cameraLat))) / Math.PI) / 2.0 * scale
@@ -721,9 +877,9 @@ private fun LiveScannerRoadMapCanvas(
             )
         }
 
-        // Viewport bounding box
-        val latSpan = (height / scale) * 180.0
-        val lonSpan = (width / scale) * 360.0
+        // Expanded view bounds to account for canvas rotation
+        val latSpan = (height / scale) * 180.0 * 1.5
+        val lonSpan = (width / scale) * 360.0 * 1.5
         val viewBounds = UkBoundingBox(
             minLat = cameraLat - latSpan / 2.0,
             maxLat = cameraLat + latSpan / 2.0,
@@ -731,112 +887,330 @@ private fun LiveScannerRoadMapCanvas(
             maxLon = cameraLon + lonSpan / 2.0
         )
 
-        // ---------------------------------------------------------------------
-        // A. BACKGROUND TACTICAL GRID
-        // ---------------------------------------------------------------------
-        drawRect(color = TacticalObsidian)
-
-        val gridSpacing = 40.dp.toPx()
-        var gx = 0f
-        while (gx < width) {
-            drawLine(
-                color = Color(0xFF13222E),
-                start = Offset(gx, 0f),
-                end = Offset(gx, height),
-                strokeWidth = 1f
-            )
-            gx += gridSpacing
-        }
-        var gy = 0f
-        while (gy < height) {
-            drawLine(
-                color = Color(0xFF13222E),
-                start = Offset(0f, gy),
-                end = Offset(width, gy),
-                strokeWidth = 1f
-            )
-            gy += gridSpacing
-        }
-
-        // ---------------------------------------------------------------------
-        // B. REAL OPENSTREETMAP ROAD NETWORK (Local Streets & Arterials)
-        // ---------------------------------------------------------------------
-        val localStreets = UkOsmDataEngine.getLocalStreetGridForBounds(viewBounds, zoom)
-        for (road in localStreets) {
-            val path = Path()
-            var started = false
-            for (pt in road.points) {
-                val sc = project(pt.first, pt.second)
-                if (!started) {
-                    path.moveTo(sc.x, sc.y)
-                    started = true
-                } else {
-                    path.lineTo(sc.x, sc.y)
-                }
-            }
-
-            if (road.type == OsmRoadType.SECONDARY) {
-                drawPath(
-                    path = path,
-                    color = Color(0xFF07121A),
-                    style = Stroke(width = 5.0f, cap = StrokeCap.Round)
-                )
-                drawPath(
-                    path = path,
-                    color = Color(0xFF2C566C),
-                    style = Stroke(width = 2.8f, cap = StrokeCap.Round)
-                )
-            } else {
-                drawPath(
-                    path = path,
-                    color = Color(0xFF050E14),
-                    style = Stroke(width = 3.6f, cap = StrokeCap.Round)
-                )
-                drawPath(
-                    path = path,
-                    color = Color(0xFF1B3648),
-                    style = Stroke(width = 1.8f, cap = StrokeCap.Round)
-                )
-            }
-        }
-
-        // Major Arterials & Motorways
-        for (road in UkOsmDataEngine.MAJOR_ROADS) {
-            val path = Path()
-            var started = false
-            for (pt in road.points) {
-                val sc = project(pt.first, pt.second)
-                if (!started) {
-                    path.moveTo(sc.x, sc.y)
-                    started = true
-                } else {
-                    path.lineTo(sc.x, sc.y)
-                }
-            }
-
-            drawPath(
-                path = path,
-                color = Color.Black,
-                style = Stroke(width = 8.0f, cap = StrokeCap.Round)
-            )
-            drawPath(
-                path = path,
-                color = ReconCyan.copy(alpha = 0.35f),
-                style = Stroke(width = 5.5f, cap = StrokeCap.Round)
-            )
-            drawPath(
-                path = path,
-                color = ReconCyan.copy(alpha = 0.85f),
-                style = Stroke(width = 3.2f, cap = StrokeCap.Round)
-            )
-        }
-
-        // ---------------------------------------------------------------------
-        // C. TACTICAL RADAR SCOPE OVERLAY (Range Rings, Reticles, Cardinals)
-        // ---------------------------------------------------------------------
         val vehiclePos = project(currentLat, currentLon)
         val maxScopeRadius = min(width, height) * 0.44f
 
+        // ---------------------------------------------------------------------
+        // A. BACKGROUND TACTICAL BASE
+        // ---------------------------------------------------------------------
+        drawRect(color = TacticalObsidian)
+
+        // =====================================================================
+        // B. ROTATE RELATIVE TO DEVICE HEADING (COURSE-UP / HEADS-UP MODE)
+        // =====================================================================
+        withTransform({
+            rotate(degrees = -deviceHeading, pivot = vehiclePos)
+        }) {
+            // -----------------------------------------------------------------
+            // 1. DRAW ACTUAL OPENSTREETMAP RASTER TILES
+            // -----------------------------------------------------------------
+            val tileZ = zoom.toInt().coerceIn(1, 18)
+            val n = 1 shl tileZ
+            val tileScale = 2.0.pow((zoom - tileZ).toDouble())
+            val tileSizeOnScreen = (256.0 * tileScale).toFloat()
+
+            val cameraLatRad = Math.toRadians(cameraLat.coerceIn(-85.0511, 85.0511))
+            val cameraTileX = (cameraLon + 180.0) / 360.0 * n
+            val cameraTileY = (1.0 - ln(tan(cameraLatRad) + 1.0 / cos(cameraLatRad)) / PI) / 2.0 * n
+
+            val halfTilesW = (width / (2.0 * tileSizeOnScreen)) * 1.6
+            val halfTilesH = (height / (2.0 * tileSizeOnScreen)) * 1.6
+
+            val minTx = (floor(cameraTileX - halfTilesW).toInt()).coerceIn(0, n - 1)
+            val maxTx = (ceil(cameraTileX + halfTilesW).toInt()).coerceIn(0, n - 1)
+            val minTy = (floor(cameraTileY - halfTilesH).toInt()).coerceIn(0, n - 1)
+            val maxTy = (ceil(cameraTileY + halfTilesH).toInt()).coerceIn(0, n - 1)
+
+            for (tx in minTx..maxTx) {
+                for (ty in minTy..maxTy) {
+                    val tileBmp = osmTileManager.getTile(tileZ, tx, ty, "tactical_obsidian")
+                    if (tileBmp != null) {
+                        val sX = (width / 2f) + ((tx - cameraTileX) * tileSizeOnScreen).toFloat()
+                        val sY = (height / 2f) + ((ty - cameraTileY) * tileSizeOnScreen).toFloat()
+
+                        drawImage(
+                            image = tileBmp,
+                            dstOffset = androidx.compose.ui.unit.IntOffset(sX.toInt(), sY.toInt()),
+                            dstSize = androidx.compose.ui.unit.IntSize(
+                                ceil(tileSizeOnScreen).toInt() + 1,
+                                ceil(tileSizeOnScreen).toInt() + 1
+                            ),
+                            colorFilter = tileColorFilter
+                        )
+                    }
+                }
+            }
+
+            // -----------------------------------------------------------------
+            // 2. DRAW HIGH-RESOLUTION STREET VECTORS OVER TILES
+            // -----------------------------------------------------------------
+            val localStreets = UkOsmDataEngine.getLocalStreetGridForBounds(viewBounds, zoom)
+            for (road in localStreets) {
+                val path = Path()
+                var started = false
+                for (pt in road.points) {
+                    val sc = project(pt.first, pt.second)
+                    if (!started) {
+                        path.moveTo(sc.x, sc.y)
+                        started = true
+                    } else {
+                        path.lineTo(sc.x, sc.y)
+                    }
+                }
+
+                if (road.type == OsmRoadType.SECONDARY) {
+                    drawPath(
+                        path = path,
+                        color = Color(0xFF07121A).copy(alpha = 0.75f),
+                        style = Stroke(width = 6.0f, cap = StrokeCap.Round)
+                    )
+                    drawPath(
+                        path = path,
+                        color = Color(0xFF2C566C).copy(alpha = 0.90f),
+                        style = Stroke(width = 3.2f, cap = StrokeCap.Round)
+                    )
+                } else {
+                    drawPath(
+                        path = path,
+                        color = Color(0xFF050E14).copy(alpha = 0.65f),
+                        style = Stroke(width = 4.0f, cap = StrokeCap.Round)
+                    )
+                    drawPath(
+                        path = path,
+                        color = Color(0xFF1B3648).copy(alpha = 0.85f),
+                        style = Stroke(width = 2.0f, cap = StrokeCap.Round)
+                    )
+                }
+            }
+
+            // Major Arterials & Motorways
+            for (road in UkOsmDataEngine.MAJOR_ROADS) {
+                val path = Path()
+                var started = false
+                for (pt in road.points) {
+                    val sc = project(pt.first, pt.second)
+                    if (!started) {
+                        path.moveTo(sc.x, sc.y)
+                        started = true
+                    } else {
+                        path.lineTo(sc.x, sc.y)
+                    }
+                }
+
+                drawPath(path = path, color = Color.Black, style = Stroke(width = 9.0f, cap = StrokeCap.Round))
+                drawPath(path = path, color = ReconCyan.copy(alpha = 0.40f), style = Stroke(width = 6.5f, cap = StrokeCap.Round))
+                drawPath(path = path, color = ReconCyan.copy(alpha = 0.90f), style = Stroke(width = 3.8f, cap = StrokeCap.Round))
+            }
+
+            // -----------------------------------------------------------------
+            // 3. CSI BIOMETRIC FRESNEL WAVE RIPPLES (HUMAN PRESENCE FIELD)
+            // -----------------------------------------------------------------
+            if (csiSnapshot.presenceState != HumanPresenceState.VACANT) {
+                val fresnelColor = if (csiSnapshot.presenceState == HumanPresenceState.ACTIVE_HUMAN_TRANSIT) ReconAmber else ReconGreen
+                val bioRadius = maxScopeRadius * 0.28f * pulseScale
+                drawCircle(
+                    color = fresnelColor.copy(alpha = 0.22f),
+                    radius = bioRadius,
+                    center = vehiclePos,
+                    style = Stroke(width = 1.5f, pathEffect = PathEffect.dashPathEffect(floatArrayOf(4f, 4f)))
+                )
+            }
+
+            // -----------------------------------------------------------------
+            // 4. ANIMATED 360° SWEEPING RADAR BEAM & PHOSPHOR ILLUMINATION
+            // -----------------------------------------------------------------
+            val sweepRad = sweepAngle * (Math.PI.toFloat() / 180f)
+            val beamEndX = vehiclePos.x + maxScopeRadius * cos(sweepRad)
+            val beamEndY = vehiclePos.y + maxScopeRadius * sin(sweepRad)
+
+            val trailPath = Path().apply {
+                moveTo(vehiclePos.x, vehiclePos.y)
+                val trailSpan = 35f
+                var a = sweepAngle - trailSpan
+                while (a <= sweepAngle) {
+                    val rRad = a * (Math.PI.toFloat() / 180f)
+                    val tx = vehiclePos.x + maxScopeRadius * cos(rRad)
+                    val ty = vehiclePos.y + maxScopeRadius * sin(rRad)
+                    lineTo(tx, ty)
+                    a += 3f
+                }
+                close()
+            }
+            drawPath(
+                path = trailPath,
+                brush = Brush.radialGradient(
+                    colors = listOf(ReconGreen.copy(alpha = 0.20f), ReconGreen.copy(alpha = 0.02f), Color.Transparent),
+                    center = vehiclePos,
+                    radius = maxScopeRadius
+                )
+            )
+
+            drawLine(color = ReconGreen, start = vehiclePos, end = Offset(beamEndX, beamEndY), strokeWidth = 2.0f)
+            drawCircle(color = ReconGreen, radius = 3.5f, center = Offset(beamEndX, beamEndY))
+
+            // -----------------------------------------------------------------
+            // 5. DETECTED TARGET BLIPS & RELATIVE MOTION HISTORY (BREADCRUMBS)
+            // -----------------------------------------------------------------
+            for (target in targets) {
+                val tLat = target.detectedLat ?: run {
+                    val bRad = Math.toRadians(target.relativeBearingDeg.toDouble())
+                    currentLat + (target.estimatedDistanceMeters * cos(bRad)) / 111320.0
+                }
+                val tLon = target.detectedLon ?: run {
+                    val bRad = Math.toRadians(target.relativeBearingDeg.toDouble())
+                    currentLon + (target.estimatedDistanceMeters * sin(bRad)) / (111320.0 * cos(Math.toRadians(currentLat)).coerceAtLeast(0.1))
+                }
+
+                val blipPos = project(tLat, tLon)
+
+                val isSaved = target.savedMetadata != null
+                val categoryColor = when {
+                    isSaved -> ReconAmber
+                    target.category == RfCategory.VEHICLE -> ReconCyan
+                    target.category == RfCategory.CCTV_SURVEILLANCE -> Color(0xFFFF5252)
+                    target.category == RfCategory.DRONE_UAV -> Color(0xFFBA68C8)
+                    else -> Color(0xFF64B5F6)
+                }
+
+                val dx = blipPos.x - vehiclePos.x
+                val dy = blipPos.y - vehiclePos.y
+                var targetAngle = atan2(dy, dx) * (180f / Math.PI.toFloat())
+                if (targetAngle < 0f) targetAngle += 360f
+
+                val angleDiff = abs((sweepAngle - targetAngle + 360f) % 360f)
+                val isSwept = angleDiff < 32f
+                val isSelected = target.id == selectedTargetId
+
+                // Relative Location History Breadcrumbs
+                if (target.locationHistory.size >= 2 && (isSelected || isSwept)) {
+                    val historyPath = Path()
+                    var hStarted = false
+                    for ((idx, breadcrumb) in target.locationHistory.withIndex()) {
+                        val hPos = project(breadcrumb.targetLat, breadcrumb.targetLon)
+                        if (!hStarted) {
+                            historyPath.moveTo(hPos.x, hPos.y)
+                            hStarted = true
+                        } else {
+                            historyPath.lineTo(hPos.x, hPos.y)
+                        }
+
+                        val alpha = (0.3f + 0.6f * (idx.toFloat() / target.locationHistory.size)).coerceIn(0.2f, 0.9f)
+                        drawCircle(
+                            color = categoryColor.copy(alpha = alpha),
+                            radius = 2.5f,
+                            center = hPos
+                        )
+                    }
+
+                    drawPath(
+                        path = historyPath,
+                        color = categoryColor.copy(alpha = 0.5f),
+                        style = Stroke(width = 1.4f, pathEffect = PathEffect.dashPathEffect(floatArrayOf(5f, 5f)))
+                    )
+                }
+
+                // Target Blip Outer Glow
+                if (isSwept || isSelected) {
+                    drawCircle(
+                        color = categoryColor.copy(alpha = if (isSelected) 0.55f else 0.40f),
+                        radius = if (isSelected) 14f else 11f,
+                        center = blipPos
+                    )
+                    drawCircle(
+                        color = categoryColor.copy(alpha = 0.85f),
+                        radius = if (isSelected) 10f else 7.5f,
+                        center = blipPos,
+                        style = Stroke(width = 1.8f)
+                    )
+                }
+
+                // Target Core Marker Dot
+                drawCircle(color = categoryColor, radius = if (isSelected) 5.5f else 4.0f, center = blipPos)
+
+                if (isSaved) {
+                    drawCircle(color = ReconAmber, radius = 2.0f, center = blipPos)
+                }
+
+                // Selected crosshairs bracket
+                if (isSelected) {
+                    val bracketSize = 12f
+                    drawLine(color = ReconAmber, start = Offset(blipPos.x - bracketSize, blipPos.y), end = Offset(blipPos.x + bracketSize, blipPos.y), strokeWidth = 1.5f)
+                    drawLine(color = ReconAmber, start = Offset(blipPos.x, blipPos.y - bracketSize), end = Offset(blipPos.x, blipPos.y + bracketSize), strokeWidth = 1.5f)
+                }
+
+                // Tactical Callout Tag (Counter-rotated so text remains upright)
+                if (isSwept || isSelected || zoom >= 18.2f) {
+                    val tagPaint = android.graphics.Paint().apply {
+                        color = android.graphics.Color.WHITE
+                        textSize = 20f
+                        typeface = android.graphics.Typeface.MONOSPACE
+                        isFakeBoldText = true
+                    }
+                    val subPaint = android.graphics.Paint().apply {
+                        color = when {
+                            isSaved -> android.graphics.Color.parseColor("#FFD54F")
+                            target.category == RfCategory.VEHICLE -> android.graphics.Color.parseColor("#00E5FF")
+                            target.category == RfCategory.CCTV_SURVEILLANCE -> android.graphics.Color.parseColor("#FF5252")
+                            target.category == RfCategory.DRONE_UAV -> android.graphics.Color.parseColor("#BA68C8")
+                            else -> android.graphics.Color.parseColor("#64B5F6")
+                        }
+                        textSize = 17f
+                        typeface = android.graphics.Typeface.MONOSPACE
+                    }
+
+                    val motionStr = when (target.motionTrend) {
+                        RelativeMotionTrend.APPROACHING -> "▲ CLOSING"
+                        RelativeMotionTrend.RECEDING -> "▼ RECEDING"
+                        RelativeMotionTrend.STATIONARY -> "• TRACKING"
+                    }
+
+                    val savedPlate = target.savedMetadata?.numberPlate
+                    val titlePrefix = when {
+                        !savedPlate.isNullOrBlank() -> "[$savedPlate] "
+                        isSaved -> "⭐ "
+                        target.category == RfCategory.VEHICLE -> "🚗 "
+                        target.category == RfCategory.CCTV_SURVEILLANCE -> "📷 "
+                        target.category == RfCategory.DRONE_UAV -> "🛸 "
+                        else -> "📡 "
+                    }
+                    val tagTitle = "$titlePrefix${target.displayName}"
+                    val doorStr = if (!target.savedMetadata?.doorNumberOrAddress.isNullOrBlank()) " • ${target.savedMetadata?.doorNumberOrAddress}" else ""
+                    val tagSub = "${target.rssi}dBm • ~${target.estimatedDistanceMeters.toInt()}m • $motionStr$doorStr"
+
+                    drawContext.canvas.nativeCanvas.apply {
+                        save()
+                        // Counter-rotate text so driver reads it horizontally
+                        rotate(deviceHeading, blipPos.x, blipPos.y)
+
+                        val boxX = blipPos.x + 12f
+                        val boxY = blipPos.y - 18f
+                        val bgPaint = android.graphics.Paint().apply { color = android.graphics.Color.argb(225, 10, 16, 22) }
+                        val borderPaint = android.graphics.Paint().apply {
+                            color = subPaint.color
+                            style = android.graphics.Paint.Style.STROKE
+                            strokeWidth = 2f
+                        }
+
+                        val titleWidth = tagPaint.measureText(tagTitle)
+                        val subWidth = subPaint.measureText(tagSub)
+                        val boxWidth = max(titleWidth, subWidth) + 16f
+                        val boxHeight = 44f
+
+                        val rect = android.graphics.RectF(boxX, boxY - 20f, boxX + boxWidth, boxY + boxHeight - 20f)
+                        drawRoundRect(rect, 6f, 6f, bgPaint)
+                        drawRoundRect(rect, 6f, 6f, borderPaint)
+
+                        drawText(tagTitle, boxX + 8f, boxY, tagPaint)
+                        drawText(tagSub, boxX + 8f, boxY + 20f, subPaint)
+                        restore()
+                    }
+                }
+            }
+        } // End of withTransform (rotated map)
+
+        // ---------------------------------------------------------------------
+        // C. TACTICAL RADAR RETICLE (Fixed Heads-Up Reference Frame)
+        // ---------------------------------------------------------------------
         val dashEffect = PathEffect.dashPathEffect(floatArrayOf(6f, 6f), 0f)
         val ringRatios = listOf(0.25f, 0.50f, 0.75f, 1.0f)
         for (ratio in ringRatios) {
@@ -849,6 +1223,7 @@ private fun LiveScannerRoadMapCanvas(
             )
         }
 
+        // Fixed Crosshairs (Forward/Aft, Port/Starboard)
         drawLine(
             color = Color(0xFF1E3A4C).copy(alpha = 0.45f),
             start = Offset(vehiclePos.x - maxScopeRadius, vehiclePos.y),
@@ -864,247 +1239,31 @@ private fun LiveScannerRoadMapCanvas(
             pathEffect = dashEffect
         )
 
-        // Cardinal Direction labels along radar ring
+        // Rotating Cardinal Direction Labels (N rotates with device heading)
         val cardinalPaint = android.graphics.Paint().apply {
-            color = android.graphics.Color.argb(190, 0, 229, 255)
-            textSize = 24f
+            color = android.graphics.Color.argb(200, 0, 229, 255)
+            textSize = 22f
             typeface = android.graphics.Typeface.MONOSPACE
             textAlign = android.graphics.Paint.Align.CENTER
-        }
-        drawContext.canvas.nativeCanvas.apply {
-            drawText("N", vehiclePos.x, vehiclePos.y - maxScopeRadius - 6f, cardinalPaint)
-            drawText("S", vehiclePos.x, vehiclePos.y + maxScopeRadius + 22f, cardinalPaint)
-            drawText("E", vehiclePos.x + maxScopeRadius + 14f, vehiclePos.y + 8f, cardinalPaint)
-            drawText("W", vehiclePos.x - maxScopeRadius - 14f, vehiclePos.y + 8f, cardinalPaint)
+            isFakeBoldText = true
         }
 
-        // ---------------------------------------------------------------------
-        // D. ANIMATED 360° SWEEPING RADAR BEAM & PHOSPHOR ILLUMINATION
-        // ---------------------------------------------------------------------
-        val sweepRad = sweepAngle * (Math.PI.toFloat() / 180f)
-        val beamEndX = vehiclePos.x + maxScopeRadius * cos(sweepRad)
-        val beamEndY = vehiclePos.y + maxScopeRadius * sin(sweepRad)
-
-        val trailPath = Path().apply {
-            moveTo(vehiclePos.x, vehiclePos.y)
-            val trailSpan = 35f
-            var a = sweepAngle - trailSpan
-            while (a <= sweepAngle) {
-                val rRad = a * (Math.PI.toFloat() / 180f)
-                val tx = vehiclePos.x + maxScopeRadius * cos(rRad)
-                val ty = vehiclePos.y + maxScopeRadius * sin(rRad)
-                lineTo(tx, ty)
-                a += 3f
-            }
-            close()
-        }
-        drawPath(
-            path = trailPath,
-            brush = Brush.radialGradient(
-                colors = listOf(ReconGreen.copy(alpha = 0.22f), ReconGreen.copy(alpha = 0.03f), Color.Transparent),
-                center = vehiclePos,
-                radius = maxScopeRadius
-            )
-        )
-
-        drawLine(
-            color = ReconGreen,
-            start = vehiclePos,
-            end = Offset(beamEndX, beamEndY),
-            strokeWidth = 2.0f
-        )
-        drawCircle(
-            color = ReconGreen,
-            radius = 3.5f,
-            center = Offset(beamEndX, beamEndY)
-        )
-
-        // ---------------------------------------------------------------------
-        // E. DETECTED TARGET BLIPS & RELATIVE MOTION HISTORY (BREADCRUMBS)
-        // ---------------------------------------------------------------------
-        for (target in targets) {
-            val tLat = target.detectedLat ?: run {
-                val bRad = Math.toRadians(target.relativeBearingDeg.toDouble())
-                currentLat + (target.estimatedDistanceMeters * cos(bRad)) / 111320.0
-            }
-            val tLon = target.detectedLon ?: run {
-                val bRad = Math.toRadians(target.relativeBearingDeg.toDouble())
-                currentLon + (target.estimatedDistanceMeters * sin(bRad)) / (111320.0 * cos(Math.toRadians(currentLat)).coerceAtLeast(0.1))
-            }
-
-            val blipPos = project(tLat, tLon)
-
-            if (blipPos.x < -40 || blipPos.x > width + 40 || blipPos.y < -40 || blipPos.y > height + 40) {
-                continue
-            }
-
-            val isSaved = target.savedMetadata != null
-            val categoryColor = when {
-                isSaved -> ReconAmber
-                target.category == RfCategory.VEHICLE -> ReconCyan
-                target.category == RfCategory.CCTV_SURVEILLANCE -> Color(0xFFFF5252)
-                target.category == RfCategory.DRONE_UAV -> Color(0xFFBA68C8)
-                else -> Color(0xFF64B5F6)
-            }
-
-            // Radar illumination detection
-            val dx = blipPos.x - vehiclePos.x
-            val dy = blipPos.y - vehiclePos.y
-            var targetAngle = atan2(dy, dx) * (180f / Math.PI.toFloat())
-            if (targetAngle < 0f) targetAngle += 360f
-
-            val angleDiff = abs((sweepAngle - targetAngle + 360f) % 360f)
-            val isSwept = angleDiff < 32f
-            val isSelected = target.id == selectedTargetId
-
-            // -----------------------------------------------------------------
-            // RELATIVE LOCATION HISTORY BREADCRUMBS (Motion relative to host)
-            // -----------------------------------------------------------------
-            if (target.locationHistory.size >= 2 && (isSelected || isSwept)) {
-                val historyPath = Path()
-                var hStarted = false
-                for ((idx, breadcrumb) in target.locationHistory.withIndex()) {
-                    val hPos = project(breadcrumb.targetLat, breadcrumb.targetLon)
-                    if (!hStarted) {
-                        historyPath.moveTo(hPos.x, hPos.y)
-                        hStarted = true
-                    } else {
-                        historyPath.lineTo(hPos.x, hPos.y)
-                    }
-
-                    val alpha = (0.3f + 0.6f * (idx.toFloat() / target.locationHistory.size)).coerceIn(0.2f, 0.9f)
-                    drawCircle(
-                        color = categoryColor.copy(alpha = alpha),
-                        radius = 2.5f,
-                        center = hPos
-                    )
-                }
-
-                drawPath(
-                    path = historyPath,
-                    color = categoryColor.copy(alpha = 0.5f),
-                    style = Stroke(width = 1.4f, pathEffect = PathEffect.dashPathEffect(floatArrayOf(5f, 5f)))
-                )
-            }
-
-            // Target Blip Outer Glow
-            if (isSwept || isSelected) {
-                drawCircle(
-                    color = categoryColor.copy(alpha = if (isSelected) 0.55f else 0.40f),
-                    radius = if (isSelected) 14f else 11f,
-                    center = blipPos
-                )
-                drawCircle(
-                    color = categoryColor.copy(alpha = 0.85f),
-                    radius = if (isSelected) 10f else 7.5f,
-                    center = blipPos,
-                    style = Stroke(width = 1.8f)
-                )
-            }
-
-            // Target Core Marker Dot
-            drawCircle(
-                color = categoryColor,
-                radius = if (isSelected) 5.5f else 4.0f,
-                center = blipPos
-            )
-
-            // Star icon if saved
-            if (isSaved) {
-                drawCircle(
-                    color = ReconAmber,
-                    radius = 2.0f,
-                    center = blipPos
-                )
-            }
-
-            // Selected crosshairs bracket
-            if (isSelected) {
-                val bracketSize = 12f
-                drawLine(
-                    color = ReconAmber,
-                    start = Offset(blipPos.x - bracketSize, blipPos.y),
-                    end = Offset(blipPos.x + bracketSize, blipPos.y),
-                    strokeWidth = 1.5f
-                )
-                drawLine(
-                    color = ReconAmber,
-                    start = Offset(blipPos.x, blipPos.y - bracketSize),
-                    end = Offset(blipPos.x, blipPos.y + bracketSize),
-                    strokeWidth = 1.5f
-                )
-            }
-
-            // Tactical Callout Tag (visible when swept, selected, or zoomed in)
-            if (isSwept || isSelected || zoom >= 17.5f) {
-                val tagPaint = android.graphics.Paint().apply {
-                    color = android.graphics.Color.WHITE
-                    textSize = 20f
-                    typeface = android.graphics.Typeface.MONOSPACE
-                    isFakeBoldText = true
-                }
-                val subPaint = android.graphics.Paint().apply {
-                    color = when {
-                        isSaved -> android.graphics.Color.parseColor("#FFD54F")
-                        target.category == RfCategory.VEHICLE -> android.graphics.Color.parseColor("#00E5FF")
-                        target.category == RfCategory.CCTV_SURVEILLANCE -> android.graphics.Color.parseColor("#FF5252")
-                        target.category == RfCategory.DRONE_UAV -> android.graphics.Color.parseColor("#BA68C8")
-                        else -> android.graphics.Color.parseColor("#64B5F6")
-                    }
-                    textSize = 17f
-                    typeface = android.graphics.Typeface.MONOSPACE
-                }
-
-                val motionStr = when (target.motionTrend) {
-                    RelativeMotionTrend.APPROACHING -> "▲ CLOSING"
-                    RelativeMotionTrend.RECEDING -> "▼ RECEDING"
-                    RelativeMotionTrend.STATIONARY -> "• TRACKING"
-                }
-
-                val savedPlate = target.savedMetadata?.numberPlate
-                val titlePrefix = when {
-                    !savedPlate.isNullOrBlank() -> "[$savedPlate] "
-                    isSaved -> "⭐ "
-                    target.category == RfCategory.VEHICLE -> "🚗 "
-                    target.category == RfCategory.CCTV_SURVEILLANCE -> "📷 "
-                    target.category == RfCategory.DRONE_UAV -> "🛸 "
-                    else -> "📡 "
-                }
-                val tagTitle = "$titlePrefix${target.displayName}"
-
-                val doorStr = if (!target.savedMetadata?.doorNumberOrAddress.isNullOrBlank()) " • ${target.savedMetadata?.doorNumberOrAddress}" else ""
-                val tagSub = "${target.rssi}dBm • ~${target.estimatedDistanceMeters.toInt()}m • $motionStr$doorStr"
-
-                drawContext.canvas.nativeCanvas.apply {
-                    val boxX = blipPos.x + 12f
-                    val boxY = blipPos.y - 18f
-                    val bgPaint = android.graphics.Paint().apply {
-                        color = android.graphics.Color.argb(225, 10, 16, 22)
-                    }
-                    val borderPaint = android.graphics.Paint().apply {
-                        color = subPaint.color
-                        style = android.graphics.Paint.Style.STROKE
-                        strokeWidth = 2f
-                    }
-
-                    val titleWidth = tagPaint.measureText(tagTitle)
-                    val subWidth = subPaint.measureText(tagSub)
-                    val boxWidth = max(titleWidth, subWidth) + 16f
-                    val boxHeight = 44f
-
-                    val rect = android.graphics.RectF(boxX, boxY - 20f, boxX + boxWidth, boxY + boxHeight - 20f)
-                    drawRoundRect(rect, 6f, 6f, bgPaint)
-                    drawRoundRect(rect, 6f, 6f, borderPaint)
-
-                    drawText(tagTitle, boxX + 8f, boxY, tagPaint)
-                    drawText(tagSub, boxX + 8f, boxY + 20f, subPaint)
-                }
-            }
+        fun drawCardinal(label: String, angleOffsetDeg: Float) {
+            val rad = Math.toRadians((angleOffsetDeg - deviceHeading - 90.0)).toFloat()
+            val cx = vehiclePos.x + (maxScopeRadius + 14f) * cos(rad)
+            val cy = vehiclePos.y + (maxScopeRadius + 14f) * sin(rad)
+            drawContext.canvas.nativeCanvas.drawText(label, cx, cy + 7f, cardinalPaint)
         }
 
+        drawCardinal("N", 0f)
+        drawCardinal("E", 90f)
+        drawCardinal("S", 180f)
+        drawCardinal("W", 270f)
+
         // ---------------------------------------------------------------------
-        // F. VEHICLE POSITION RETICLE & DUAL HEADING INDICATORS
+        // D. USER VEHICLE RETICLE (ALWAYS POINTING STRAIGHT UP!)
         // ---------------------------------------------------------------------
+        // Outer Pulsing Sonar Ring
         drawCircle(
             color = ReconCyan.copy(alpha = (1.6f - pulseScale).coerceIn(0f, 0.6f)),
             radius = 16f * pulseScale,
@@ -1112,41 +1271,42 @@ private fun LiveScannerRoadMapCanvas(
             style = Stroke(width = 1.5f)
         )
 
-        // Device Orientation Heading Line (Amber)
-        val devRad = Math.toRadians((deviceHeading - 90.0)).toFloat()
-        val devEndX = vehiclePos.x + 38f * cos(devRad)
-        val devEndY = vehiclePos.y + 38f * sin(devRad)
+        // Device Direction Pointer (Points straight UP in course-up mode)
+        val devArrowPath = Path().apply {
+            moveTo(vehiclePos.x, vehiclePos.y - 42f)
+            lineTo(vehiclePos.x - 7f, vehiclePos.y - 24f)
+            lineTo(vehiclePos.x + 7f, vehiclePos.y - 24f)
+            close()
+        }
+        drawPath(path = devArrowPath, color = ReconAmber)
         drawLine(
-            color = ReconAmber.copy(alpha = 0.85f),
+            color = ReconAmber,
             start = vehiclePos,
-            end = Offset(devEndX, devEndY),
+            end = Offset(vehiclePos.x, vehiclePos.y - 42f),
             strokeWidth = 2.0f
         )
 
-        // GPS Heading Direction Line (Cyan)
-        val gpsRad = Math.toRadians((currentHeading - 90.0)).toFloat()
-        val gpsEndX = vehiclePos.x + 48f * cos(gpsRad)
-        val gpsEndY = vehiclePos.y + 48f * sin(gpsRad)
+        // GPS Heading Deviation Pointer (Cyan line showing delta between travel direction and phone orientation)
+        val gpsDelta = currentHeading - deviceHeading
+        val gpsDeltaRad = Math.toRadians((gpsDelta - 90.0)).toFloat()
+        val gpsEndX = vehiclePos.x + 48f * cos(gpsDeltaRad)
+        val gpsEndY = vehiclePos.y + 48f * sin(gpsDeltaRad)
         drawLine(
             color = ReconCyan,
             start = vehiclePos,
             end = Offset(gpsEndX, gpsEndY),
             strokeWidth = 2.5f
         )
-        val arrowP1X = gpsEndX - 8f * cos(gpsRad - 0.4f)
-        val arrowP1Y = gpsEndY - 8f * sin(gpsRad - 0.4f)
-        val arrowP2X = gpsEndX - 8f * cos(gpsRad + 0.4f)
-        val arrowP2Y = gpsEndY - 8f * sin(gpsRad + 0.4f)
-        val arrowPath = Path().apply {
+        val gpsArrow = Path().apply {
             moveTo(gpsEndX, gpsEndY)
-            lineTo(arrowP1X, arrowP1Y)
-            lineTo(arrowP2X, arrowP2Y)
+            lineTo(gpsEndX - 7f * cos(gpsDeltaRad - 0.4f), gpsEndY - 7f * sin(gpsDeltaRad - 0.4f))
+            lineTo(gpsEndX - 7f * cos(gpsDeltaRad + 0.4f), gpsEndY - 7f * sin(gpsDeltaRad + 0.4f))
             close()
         }
-        drawPath(path = arrowPath, color = ReconCyan)
+        drawPath(path = gpsArrow, color = ReconCyan)
 
         // Vehicle Center Core Dot
-        drawCircle(color = ReconCyan, radius = 5f, center = vehiclePos)
+        drawCircle(color = ReconCyan, radius = 5.5f, center = vehiclePos)
         drawCircle(color = TacticalObsidian, radius = 2.5f, center = vehiclePos)
 
         if (speedMph > 0) {
