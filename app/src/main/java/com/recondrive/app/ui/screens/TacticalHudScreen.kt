@@ -46,12 +46,14 @@ fun TacticalHudScreen(
     savedDestinationRepository: SavedDestinationRepository = com.recondrive.app.ReconApplication.instance.savedDestinationRepository,
     currentSpeedKmh: Float = 48f,
     currentHeading: Float = 45f,
+    deviceHeading: Float = currentHeading,
     currentLat: Double = 51.5074,
     currentLon: Double = -0.1278,
     onSearchClick: () -> Unit = {},
     onOfflinePacksClick: () -> Unit = {},
     onToggleBackgroundRadar: () -> Unit = {},
-    onNavigateToDestination: (name: String, lat: Double, lon: Double) -> Unit = { _, _, _ -> }
+    onNavigateToDestination: (name: String, lat: Double, lon: Double) -> Unit = { _, _, _ -> },
+    onOpenTimeline: () -> Unit = {}
 ) {
     var showSkinDialog by remember { mutableStateOf(false) }
     var showUpdateDialog by remember { mutableStateOf(false) }
@@ -685,6 +687,17 @@ fun TacticalHudScreen(
                 Icon(imageVector = Icons.Default.Download, contentDescription = null, tint = Color(mapSkin.highwayColor), modifier = Modifier.size(16.dp))
                 Spacer(modifier = Modifier.width(6.dp))
                 Text(text = "OFFLINE MAPS", color = TextPrimary, fontSize = 11.sp, fontFamily = FontFamily.Monospace)
+            }
+
+            OutlinedButton(
+                onClick = onOpenTimeline,
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = ReconGreen),
+                shape = RoundedCornerShape(6.dp),
+                border = androidx.compose.foundation.BorderStroke(1.dp, ReconGreen.copy(alpha = 0.5f))
+            ) {
+                Icon(imageVector = Icons.Default.Timeline, contentDescription = null, tint = ReconGreen, modifier = Modifier.size(16.dp))
+                Spacer(modifier = Modifier.width(6.dp))
+                Text(text = "TIMELINE", color = ReconGreen, fontWeight = FontWeight.Bold, fontSize = 11.sp, fontFamily = FontFamily.Monospace)
             }
         }
     }

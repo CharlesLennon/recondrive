@@ -33,6 +33,7 @@ import com.recondrive.app.ReconApplication
 import com.recondrive.app.fog.ExplorationStats
 import com.recondrive.app.service.ExplorationTrackingService
 import com.recondrive.app.ui.screens.InteractiveMapScreen
+import com.recondrive.app.ui.screens.LocationTimelineSheet
 import com.recondrive.app.ui.screens.OfflineRegionsDialog
 import com.recondrive.app.ui.screens.SkinSelectorDialog
 import com.recondrive.app.ui.screens.TacticalHudScreen
@@ -119,10 +120,12 @@ class MainActivity : ComponentActivity() {
                 val stats by ReconApplication.instance.fogGridManager.stats.collectAsState()
                 val appUpdateState by ReconApplication.instance.updateManager.updateState.collectAsState()
                 val mapUpdateState by ReconApplication.instance.osmMapUpdateManager.mapUpdateState.collectAsState()
+                val deviceHeading by ReconApplication.instance.deviceOrientationManager.deviceHeading.collectAsState()
 
                 var selectedTab by remember { mutableIntStateOf(0) } // 0 = HUD, 1 = MAP
                 var showSkinsDialog by remember { mutableStateOf(false) }
                 var showOfflineDialog by remember { mutableStateOf(false) }
+                var showTimelineSheet by remember { mutableStateOf(false) }
                 var hasDismissedStartupSync by remember { mutableStateOf(false) }
                 var targetWaypoint by remember { mutableStateOf<Pair<Double, Double>?>(null) }
                 var targetWaypointName by remember { mutableStateOf<String?>(null) }
@@ -153,6 +156,22 @@ class MainActivity : ComponentActivity() {
                     OfflineRegionsDialog(
                         repository = ReconApplication.instance.offlineTileRepository,
                         onDismiss = { showOfflineDialog = false }
+                    )
+                }
+
+                if (showTimelineSheet) {
+                    LocationTimelineSheet(
+                        timelineManager = ReconApplication.instance.locationTimelineManager,
+                        currentSpeedKmh = currentSpeedKmh,
+                        currentGpsBearing = currentHeading,
+                        currentDeviceHeading = deviceHeading,
+                        onJumpToLocation = { jLat, jLon ->
+                            targetWaypoint = jLat to jLon
+                            targetWaypointName = "Timeline Fix"
+                            selectedTab = 1
+                            showTimelineSheet = false
+                        },
+                        onDismiss = { showTimelineSheet = false }
                     )
                 }
 
@@ -301,6 +320,7 @@ class MainActivity : ComponentActivity() {
                                     updateManager = ReconApplication.instance.updateManager,
                                     currentSpeedKmh = currentSpeedKmh,
                                     currentHeading = currentHeading,
+                                    deviceHeading = deviceHeading,
                                     currentLat = currentLat,
                                     currentLon = currentLon,
                                     onSearchClick = {
@@ -311,6 +331,9 @@ class MainActivity : ComponentActivity() {
                                     },
                                     onToggleBackgroundRadar = {
                                         toggleBackgroundRadar()
+                                    },
+                                    onOpenTimeline = {
+                                        showTimelineSheet = true
                                     },
                                     onNavigateToDestination = { name, destLat, destLon ->
                                         targetWaypoint = destLat to destLon
@@ -342,7 +365,10 @@ class MainActivity : ComponentActivity() {
                                         ).show()
                                     },
                                     onOpenSkins = { showSkinsDialog = true },
-                                    onOpenOfflinePacks = { showOfflineDialog = true }
+                                    onOpenOfflinePacks = { showOfflineDialog = true },
+                                    currentSpeedKmh = currentSpeedKmh,
+                                    deviceHeading = deviceHeading,
+                                    onOpenTimeline = { showTimelineSheet = true }
                                 )
                             }
                         }
@@ -440,10 +466,26 @@ class MainActivity : ComponentActivity() {
             currentHeading = location.bearing
         }
 
+        // Ingest into Location Timeline engine with active handset compass heading
+        ReconApplication.instance.locationTimelineManager.recordTelemetryPoint(
+            location = location,
+            deviceHeading = ReconApplication.instance.deviceOrientationManager.deviceHeading.value
+        )
+
         // Feed fog grid directly if background service is not currently active
         if (!ExplorationTrackingService.isRunning.value) {
             ReconApplication.instance.fogGridManager.processLocation(location)
         }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        ReconApplication.instance.deviceOrientationManager.startListening()
+    }
+
+    override fun onPause() {
+        super.onPause()
+        ReconApplication.instance.deviceOrientationManager.stopListening()
     }
 
     override fun onDestroy() {

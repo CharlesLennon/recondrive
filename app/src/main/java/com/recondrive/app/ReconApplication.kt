@@ -35,6 +35,12 @@ class ReconApplication : Application() {
     lateinit var savedDestinationRepository: com.recondrive.app.destinations.SavedDestinationRepository
         private set
 
+    lateinit var locationTimelineManager: com.recondrive.app.telemetry.LocationTimelineManager
+        private set
+
+    lateinit var deviceOrientationManager: com.recondrive.app.sensor.DeviceOrientationManager
+        private set
+
     override fun onCreate() {
         super.onCreate()
         
@@ -59,6 +65,8 @@ class ReconApplication : Application() {
         osmMapUpdateManager = com.recondrive.app.map.OsmMapUpdateManager(this, offlineTileRepository)
         fogGridManager = FogGridManager(this, fogPreferences)
         savedDestinationRepository = com.recondrive.app.destinations.SavedDestinationRepository(this)
+        locationTimelineManager = com.recondrive.app.telemetry.LocationTimelineManager(this)
+        deviceOrientationManager = com.recondrive.app.sensor.DeviceOrientationManager(this)
     }
 
     companion object {

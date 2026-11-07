@@ -57,7 +57,10 @@ fun InteractiveMapScreen(
     initialWaypointName: String? = null,
     onNavigateToWaypoint: (lat: Double, lon: Double) -> Unit = { _, _ -> },
     onOpenSkins: () -> Unit = {},
-    onOpenOfflinePacks: () -> Unit = {}
+    onOpenOfflinePacks: () -> Unit = {},
+    currentSpeedKmh: Float = 0f,
+    deviceHeading: Float = currentHeading,
+    onOpenTimeline: () -> Unit = {}
 ) {
     val mapSkin by skinManager.currentMapSkin.collectAsState()
     val fogSkin by skinManager.currentFogSkin.collectAsState()
@@ -746,8 +749,120 @@ fun InteractiveMapScreen(
             }
 
             // -----------------------------------------------------------------
-            // I. DRAW VEHICLE GPS CURSOR & HEADING CONE
+            // I. DRAW DUAL DIRECTION VECTORS (GPS Motion Vector vs Device Compass)
             // -----------------------------------------------------------------
+            val radGps = Math.toRadians((currentHeading - 90.0).toDouble())
+            val radDev = Math.toRadians((deviceHeading - 90.0).toDouble())
+
+            // Vector lengths dynamically scaled by vehicle speed (longer when driving fast, short probe when stationary)
+            val gpsVectorLen = (32f + currentSpeedKmh * 1.6f).coerceIn(32f, 220f)
+            val devVectorLen = (32f + currentSpeedKmh * 1.2f).coerceIn(32f, 180f)
+
+            val tipGpsX = vehicleScreenPos.x + gpsVectorLen * cos(radGps).toFloat()
+            val tipGpsY = vehicleScreenPos.y + gpsVectorLen * sin(radGps).toFloat()
+
+            val tipDevX = vehicleScreenPos.x + devVectorLen * cos(radDev).toFloat()
+            val tipDevY = vehicleScreenPos.y + devVectorLen * sin(radDev).toFloat()
+
+            // 1. Vector 1: GPS Motion Vector Line (Cyber Cyan #00E5FF)
+            val gpsVectorPaint = android.graphics.Paint().apply {
+                color = android.graphics.Color.parseColor("#00E5FF")
+                strokeWidth = 3.5f
+                style = android.graphics.Paint.Style.STROKE
+                isAntiAlias = true
+                strokeCap = android.graphics.Paint.Cap.ROUND
+            }
+            val gpsAuraPaint = android.graphics.Paint().apply {
+                color = android.graphics.Color.parseColor("#00E5FF")
+                alpha = 90
+                strokeWidth = 8f
+                style = android.graphics.Paint.Style.STROKE
+                isAntiAlias = true
+            }
+            nativeCanvas.drawLine(vehicleScreenPos.x, vehicleScreenPos.y, tipGpsX, tipGpsY, gpsAuraPaint)
+            nativeCanvas.drawLine(vehicleScreenPos.x, vehicleScreenPos.y, tipGpsX, tipGpsY, gpsVectorPaint)
+
+            // Tip Arrowhead for GPS Vector
+            val gpsTipPaint = android.graphics.Paint().apply {
+                color = android.graphics.Color.parseColor("#00E5FF")
+                style = android.graphics.Paint.Style.FILL
+                isAntiAlias = true
+            }
+            nativeCanvas.drawCircle(tipGpsX, tipGpsY, 4.5f, gpsTipPaint)
+
+            // 2. Vector 2: Handset Device Compass Azimuth Line (Tactical Amber #FF9100)
+            val devVectorPaint = android.graphics.Paint().apply {
+                color = android.graphics.Color.parseColor("#FF9100")
+                strokeWidth = 2.8f
+                style = android.graphics.Paint.Style.STROKE
+                isAntiAlias = true
+                strokeCap = android.graphics.Paint.Cap.ROUND
+                pathEffect = android.graphics.DashPathEffect(floatArrayOf(10f, 6f), 0f)
+            }
+            val devAuraPaint = android.graphics.Paint().apply {
+                color = android.graphics.Color.parseColor("#FF9100")
+                alpha = 80
+                strokeWidth = 7f
+                style = android.graphics.Paint.Style.STROKE
+                isAntiAlias = true
+            }
+            nativeCanvas.drawLine(vehicleScreenPos.x, vehicleScreenPos.y, tipDevX, tipDevY, devAuraPaint)
+            nativeCanvas.drawLine(vehicleScreenPos.x, vehicleScreenPos.y, tipDevX, tipDevY, devVectorPaint)
+
+            // Tip Diamond for Device Compass
+            val devTipPaint = android.graphics.Paint().apply {
+                color = android.graphics.Color.parseColor("#FF9100")
+                style = android.graphics.Paint.Style.FILL
+                isAntiAlias = true
+            }
+            val diamondPath = android.graphics.Path().apply {
+                moveTo(tipDevX, tipDevY - 5f)
+                lineTo(tipDevX + 5f, tipDevY)
+                lineTo(tipDevX, tipDevY + 5f)
+                lineTo(tipDevX - 5f, tipDevY)
+                close()
+            }
+            nativeCanvas.drawPath(diamondPath, devTipPaint)
+
+            // 3. Drift Angle Arc & Telemetry (if angular discrepancy > 6° and moving)
+            val driftDiff = ((currentHeading - deviceHeading + 540f) % 360f) - 180f
+            if (kotlin.math.abs(driftDiff) > 6f && currentSpeedKmh > 5f) {
+                val driftArcPaint = android.graphics.Paint().apply {
+                    color = android.graphics.Color.WHITE
+                    alpha = 140
+                    strokeWidth = 1.8f
+                    style = android.graphics.Paint.Style.STROKE
+                    isAntiAlias = true
+                    pathEffect = android.graphics.DashPathEffect(floatArrayOf(4f, 4f), 0f)
+                }
+                val arcRadius = 45f
+                val oval = android.graphics.RectF(
+                    vehicleScreenPos.x - arcRadius,
+                    vehicleScreenPos.y - arcRadius,
+                    vehicleScreenPos.x + arcRadius,
+                    vehicleScreenPos.y + arcRadius
+                )
+                val startAngle = (deviceHeading - 90f + 360f) % 360f
+                nativeCanvas.drawArc(oval, startAngle, driftDiff, false, driftArcPaint)
+            }
+
+            // Labels at tips if moving or zoomed in
+            if (currentSpeedKmh > 10f || zoom >= 13f) {
+                val vectorLabelPaint = android.graphics.Paint().apply {
+                    textSize = 18f
+                    typeface = android.graphics.Typeface.create(android.graphics.Typeface.MONOSPACE, android.graphics.Typeface.BOLD)
+                    isAntiAlias = true
+                    setShadowLayer(3f, 0f, 0f, android.graphics.Color.BLACK)
+                }
+
+                vectorLabelPaint.color = android.graphics.Color.parseColor("#00E5FF")
+                nativeCanvas.drawText("GPS %.0f°".format(currentHeading), tipGpsX + 8f, tipGpsY + 4f, vectorLabelPaint)
+
+                vectorLabelPaint.color = android.graphics.Color.parseColor("#FF9100")
+                nativeCanvas.drawText("DEV %.0f°".format(deviceHeading), tipDevX + 8f, tipDevY + 4f, vectorLabelPaint)
+            }
+
+            // 4. Vehicle GPS Cursor & Heading Cone Reticle
             drawCircle(color = Color(mapSkin.vehicleCursorColor).copy(alpha = 0.25f), radius = 24f, center = vehicleScreenPos)
             val cursorPath = Path().apply {
                 val headRad = Math.toRadians((currentHeading - 90.0).toDouble())
@@ -1013,6 +1128,19 @@ fun InteractiveMapScreen(
                 Icon(imageVector = Icons.Default.Palette, contentDescription = "Skins", modifier = Modifier.size(18.dp))
             }
 
+            // Location Timeline & Drift Vector Telemetry Sheet Shortcut
+            FloatingActionButton(
+                onClick = onOpenTimeline,
+                containerColor = TacticalSurface,
+                contentColor = ReconGreen,
+                shape = CircleShape,
+                modifier = Modifier
+                    .size(42.dp)
+                    .border(1.dp, ReconGreen.copy(alpha = 0.5f), CircleShape)
+            ) {
+                Icon(imageVector = Icons.Default.Timeline, contentDescription = "Location Timeline", modifier = Modifier.size(18.dp))
+            }
+
             // Zoom In (+)
             FloatingActionButton(
                 onClick = { zoom = (zoom + 1.0f).coerceAtMost(18.5f) },
@@ -1090,6 +1218,14 @@ fun InteractiveMapScreen(
                         color = if (isFollowingGps) ReconGreen else TextSecondary,
                         fontSize = 9.sp,
                         fontFamily = FontFamily.Monospace
+                    )
+                    val liveDrift = ((currentHeading - deviceHeading + 540f) % 360f) - 180f
+                    Text(
+                        text = "GPS: %.0f° • COMPASS: %.0f° • Δ %+.0f°".format(currentHeading, deviceHeading, liveDrift),
+                        color = if (abs(liveDrift) > 15f) ReconAmber else ReconCyan,
+                        fontSize = 9.sp,
+                        fontFamily = FontFamily.Monospace,
+                        fontWeight = FontWeight.Bold
                     )
                     Text(
                         text = if (isFogLayerActive) "FOG: ${fogRange}m @ ${(fogOpacity * 100).toInt()}% • v${com.recondrive.app.BuildConfig.VERSION_NAME}" else "FOG: SHROUD OFF • v${com.recondrive.app.BuildConfig.VERSION_NAME}",
