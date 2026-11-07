@@ -167,6 +167,13 @@ class ExplorationTrackingService : Service() {
         // Feed directly to Fog of War spatial persistence engine
         ReconApplication.instance.fogGridManager.processLocation(location)
 
+        // Feed location to RF Scanner for relative target anchoring and wardrive tracking
+        ReconApplication.instance.rfScannerManager.updateLastKnownLocation(
+            location.latitude,
+            location.longitude,
+            location.bearing
+        )
+
         // Refresh wake lock to ensure CPU remains alive while moving
         try {
             if (wakeLock?.isHeld == false) {

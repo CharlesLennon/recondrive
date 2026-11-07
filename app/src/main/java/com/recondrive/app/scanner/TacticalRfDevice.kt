@@ -11,6 +11,49 @@ enum class RfCategory {
 }
 
 /**
+ * Real-time motion trend of a target relative to host vehicle.
+ */
+enum class RelativeMotionTrend {
+    APPROACHING,     // Signal increasing / distance closing
+    RECEDING,        // Signal decreasing / target moving away
+    STATIONARY       // Distance steady / co-moving
+}
+
+/**
+ * Single observation breadcrumb of a target relative to host device location.
+ */
+data class DeviceBreadcrumb(
+    val timestamp: Long = System.currentTimeMillis(),
+    val hostLat: Double,
+    val hostLon: Double,
+    val relativeBearingDeg: Float,     // Relative angle (0° = straight ahead of host vehicle)
+    val distanceMeters: Double,
+    val rssi: Int,
+    val targetLat: Double,
+    val targetLon: Double
+)
+
+/**
+ * User-saved intelligence and custom annotations for a specific emitter/device.
+ */
+data class SavedRfDevice(
+    val id: String,                         // MAC Address or BSSID (Primary Key)
+    val originalName: String,               // Original detected name (e.g. "Tesla Model 3")
+    val customNickname: String = "",       // Custom user alias (e.g. "Neighbor's Blue Tesla")
+    val numberPlate: String = "",           // UK Vehicle registration mark (e.g. "LJ71 WXA")
+    val doorNumberOrAddress: String = "",   // Physical house / door number (e.g. "Door #42")
+    val notes: String = "",                 // User notes (e.g. "Parked in driveway facing street")
+    val group: String = "SURVEILLANCE",     // Group / Category (e.g. "KNOWN VEHICLES", "NEIGHBORS", "SURVEILLANCE", "WORK", "CUSTOM")
+    val alertSound: String = "SONAR_PING",  // "SONAR_PING", "TACTICAL_CHIRP", "RADAR_BEEP", "VOICE_ALERT", "SILENT"
+    val notifyOnDetection: Boolean = true,  // Trigger acoustic alert and notification when seen
+    val firstSeenTimestamp: Long = System.currentTimeMillis(),
+    val lastSeenTimestamp: Long = System.currentTimeMillis(),
+    val detectionCount: Int = 1,
+    val lastObservedLat: Double? = null,
+    val lastObservedLon: Double? = null
+)
+
+/**
  * A detected RF target identified via Wi-Fi 802.11 beacon frames or Bluetooth LE advertisement packets.
  */
 data class DetectedRfTarget(
@@ -28,8 +71,22 @@ data class DetectedRfTarget(
     val details: String = "",               // Descriptive intel notes
     val timestamp: Long = System.currentTimeMillis(),
     val detectedLat: Double? = null,
-    val detectedLon: Double? = null
+    val detectedLon: Double? = null,
+    val relativeBearingDeg: Float = 0f,     // Bearing relative to vehicle heading (0° = ahead)
+    val locationHistory: List<DeviceBreadcrumb> = emptyList(), // History trail of observations relative to host
+    val motionTrend: RelativeMotionTrend = RelativeMotionTrend.STATIONARY,
+    val savedMetadata: SavedRfDevice? = null // Saved notes, number plate, door number, group
 ) {
+    /**
+     * Display name taking into account custom user nickname or number plate if saved
+     */
+    val displayName: String
+        get() = when {
+            savedMetadata?.customNickname?.isNotBlank() == true -> savedMetadata.customNickname
+            savedMetadata?.numberPlate?.isNotBlank() == true -> "[${savedMetadata.numberPlate}] $name"
+            else -> name
+        }
+
     /**
      * Normalized signal strength percentage (0% to 100%)
      */

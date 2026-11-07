@@ -38,6 +38,7 @@ import com.recondrive.app.map.OsmRoadType
 import com.recondrive.app.map.UkBoundingBox
 import com.recondrive.app.map.UkOsmDataEngine
 import com.recondrive.app.scanner.DetectedRfTarget
+import com.recondrive.app.scanner.RelativeMotionTrend
 import com.recondrive.app.scanner.RfCategory
 import com.recondrive.app.scanner.TacticalRfScannerManager
 import com.recondrive.app.ui.theme.*
@@ -46,8 +47,9 @@ import kotlin.math.*
 /**
  * Tactical SIGINT RF Spectrum & Live Wardrive Scanner Screen.
  * Features an expansive interactive live radar map showing real OpenStreetMap road networks,
- * illuminated street corridors, 360° sweeping phosphor radar beam, and detected connected
- * vehicles (Tesla, Ford, Dashcams) and surveillance optics (Hikvision, Ring, ANPR) plotted on the streets.
+ * illuminated street corridors, 360° sweeping phosphor radar beam, device location history
+ * (all motion relative to host vehicle), saved targets with custom number plates, door numbers,
+ * group tags, and background scanning with pause controls.
  */
 @Composable
 fun TacticalScannerScreen(
@@ -61,10 +63,13 @@ fun TacticalScannerScreen(
 ) {
     val detectedTargets by scannerManager.detectedTargets.collectAsState()
     val isScanning by scannerManager.isScanning.collectAsState()
+    val isScannerPaused by scannerManager.isScannerPaused.collectAsState()
     val isSimulation by scannerManager.isSimulationEnabled.collectAsState()
 
-    var selectedFilter by remember { mutableStateOf<RfCategory?>(null) } // null = ALL
+    var selectedFilterCategory by remember { mutableStateOf<RfCategory?>(null) } // null = ALL
+    var filterSavedOnly by remember { mutableStateOf(false) }
     var selectedTargetId by remember { mutableStateOf<String?>(null) }
+    var editingTarget by remember { mutableStateOf<DetectedRfTarget?>(null) }
 
     // Map viewport state
     var cameraLat by remember { mutableDoubleStateOf(currentLat) }
@@ -85,9 +90,9 @@ fun TacticalScannerScreen(
         }
     }
 
-    // Sync current location with scanner manager and viewport
-    LaunchedEffect(currentLat, currentLon) {
-        scannerManager.updateLastKnownLocation(currentLat, currentLon)
+    // Sync user location with scanner manager and anchor targets relative to vehicle
+    LaunchedEffect(currentLat, currentLon, currentHeading) {
+        scannerManager.updateLastKnownLocation(currentLat, currentLon, currentHeading)
     }
 
     // Follow vehicle position when not manually panned
@@ -107,17 +112,28 @@ fun TacticalScannerScreen(
     val cctvCount = detectedTargets.count { it.category == RfCategory.CCTV_SURVEILLANCE }
     val droneCount = detectedTargets.count { it.category == RfCategory.DRONE_UAV }
     val wifiCount = detectedTargets.count { it.category == RfCategory.ACCESS_POINT }
+    val savedCount = detectedTargets.count { it.savedMetadata != null }
 
-    val filteredTargets = remember(detectedTargets, selectedFilter) {
-        if (selectedFilter == null) {
-            detectedTargets
-        } else {
-            detectedTargets.filter { it.category == selectedFilter }
+    val filteredTargets = remember(detectedTargets, selectedFilterCategory, filterSavedOnly) {
+        detectedTargets.filter { target ->
+            val matchCategory = selectedFilterCategory == null || target.category == selectedFilterCategory
+            val matchSaved = !filterSavedOnly || target.savedMetadata != null
+            matchCategory && matchSaved
         }
     }
 
     // Speed in MPH
     val speedMph = remember(currentSpeedKmh) { (currentSpeedKmh * 0.621371f).roundToInt() }
+
+    // Edit Intel Dialog
+    editingTarget?.let { targetToEdit ->
+        EditDeviceIntelDialog(
+            target = targetToEdit,
+            repository = scannerManager.savedDeviceRepository,
+            soundManager = scannerManager.soundManager,
+            onDismiss = { editingTarget = null }
+        )
+    }
 
     Column(
         modifier = Modifier
@@ -126,7 +142,7 @@ fun TacticalScannerScreen(
             .padding(horizontal = 12.dp, vertical = 6.dp)
     ) {
         // =====================================================================
-        // 1. TOP STATUS ROW (SIGINT Scanner Title & Live Sweep LED)
+        // 1. TOP STATUS ROW (SIGINT Scanner Title, Pause/Resume, Demo Toggle)
         // =====================================================================
         Row(
             modifier = Modifier
@@ -145,12 +161,42 @@ fun TacticalScannerScreen(
                     letterSpacing = 0.5.sp
                 )
                 Text(
-                    text = "SWEEPING 2.4GHz • 5.0GHz • BLUETOOTH LE",
-                    color = TextSecondary,
-                    fontSize = 9.sp,
+                    text = if (isScannerPaused) "SCANNER PAUSED (BACKGROUND IDLE)" else "24/7 BACKGROUND SPECTRUM ACTIVE • 2.4/5GHz • BLE",
+                    color = if (isScannerPaused) ReconAmber else TextSecondary,
+                    fontSize = 8.5.sp,
                     fontFamily = FontFamily.Monospace
                 )
             }
+
+            // Pause / Resume Toggle Button
+            Surface(
+                color = TacticalSurface,
+                shape = RoundedCornerShape(12.dp),
+                border = androidx.compose.foundation.BorderStroke(1.dp, if (isScannerPaused) ReconAmber else ReconGreen),
+                modifier = Modifier.clickable { scannerManager.togglePause() }
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(3.dp)
+                ) {
+                    Icon(
+                        imageVector = if (isScannerPaused) Icons.Default.PlayArrow else Icons.Default.Pause,
+                        contentDescription = if (isScannerPaused) "Resume" else "Pause",
+                        tint = if (isScannerPaused) ReconAmber else ReconGreen,
+                        modifier = Modifier.size(10.dp)
+                    )
+                    Text(
+                        text = if (isScannerPaused) "PAUSED" else "ACTIVE",
+                        color = if (isScannerPaused) ReconAmber else ReconGreen,
+                        fontSize = 8.5.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.width(5.dp))
 
             // Live / Demo Mode Toggle Pill
             Surface(
@@ -160,33 +206,33 @@ fun TacticalScannerScreen(
                 modifier = Modifier.clickable { scannerManager.toggleSimulation() }
             ) {
                 Row(
-                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                    modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
                     verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    horizontalArrangement = Arrangement.spacedBy(3.dp)
                 ) {
                     Box(
                         modifier = Modifier
-                            .size(6.dp)
+                            .size(5.dp)
                             .clip(CircleShape)
                             .background(if (isSimulation) ReconAmber else ReconGreen)
                     )
                     Text(
-                        text = if (isSimulation) "DEMO" else "LIVE RF",
+                        text = if (isSimulation) "DEMO" else "LIVE",
                         color = if (isSimulation) ReconAmber else ReconGreen,
-                        fontSize = 9.sp,
+                        fontSize = 8.5.sp,
                         fontWeight = FontWeight.Bold,
                         fontFamily = FontFamily.Monospace
                     )
                 }
             }
 
-            Spacer(modifier = Modifier.width(6.dp))
+            Spacer(modifier = Modifier.width(5.dp))
 
             // Rescan Sweep Button
             IconButton(
                 onClick = { scannerManager.triggerImmediateSweep(currentLat, currentLon) },
                 modifier = Modifier
-                    .size(30.dp)
+                    .size(28.dp)
                     .background(TacticalSurface, CircleShape)
                     .border(1.dp, TacticalBorder, CircleShape)
             ) {
@@ -194,7 +240,7 @@ fun TacticalScannerScreen(
                     imageVector = Icons.Default.Refresh,
                     contentDescription = "Sweep Spectrum",
                     tint = ReconCyan,
-                    modifier = Modifier.size(15.dp)
+                    modifier = Modifier.size(14.dp)
                 )
             }
         }
@@ -202,20 +248,21 @@ fun TacticalScannerScreen(
         Spacer(modifier = Modifier.height(4.dp))
 
         // =====================================================================
-        // 2. QUICK THREAT TELEMETRY PILLS (Cars, CCTV, Drone, Total)
+        // 2. QUICK THREAT TELEMETRY PILLS (Cars, CCTV, Drone, Saved)
         // =====================================================================
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
+            horizontalArrangement = Arrangement.spacedBy(5.dp)
         ) {
             TelemetryThreatBadge(
                 label = "CARS",
                 count = vehicleCount,
                 color = ReconCyan,
                 icon = Icons.Default.DirectionsCar,
-                selected = selectedFilter == RfCategory.VEHICLE,
+                selected = selectedFilterCategory == RfCategory.VEHICLE && !filterSavedOnly,
                 onClick = {
-                    selectedFilter = if (selectedFilter == RfCategory.VEHICLE) null else RfCategory.VEHICLE
+                    filterSavedOnly = false
+                    selectedFilterCategory = if (selectedFilterCategory == RfCategory.VEHICLE) null else RfCategory.VEHICLE
                 },
                 modifier = Modifier.weight(1f)
             )
@@ -225,22 +272,37 @@ fun TacticalScannerScreen(
                 count = cctvCount,
                 color = Color(0xFFFF5252),
                 icon = Icons.Default.Videocam,
-                selected = selectedFilter == RfCategory.CCTV_SURVEILLANCE,
+                selected = selectedFilterCategory == RfCategory.CCTV_SURVEILLANCE && !filterSavedOnly,
                 onClick = {
-                    selectedFilter = if (selectedFilter == RfCategory.CCTV_SURVEILLANCE) null else RfCategory.CCTV_SURVEILLANCE
+                    filterSavedOnly = false
+                    selectedFilterCategory = if (selectedFilterCategory == RfCategory.CCTV_SURVEILLANCE) null else RfCategory.CCTV_SURVEILLANCE
                 },
                 modifier = Modifier.weight(1f)
             )
 
-            if (droneCount > 0) {
+            if (savedCount > 0) {
+                TelemetryThreatBadge(
+                    label = "SAVED",
+                    count = savedCount,
+                    color = ReconAmber,
+                    icon = Icons.Default.Star,
+                    selected = filterSavedOnly,
+                    onClick = {
+                        filterSavedOnly = !filterSavedOnly
+                        selectedFilterCategory = null
+                    },
+                    modifier = Modifier.weight(1f)
+                )
+            } else if (droneCount > 0) {
                 TelemetryThreatBadge(
                     label = "DRONE",
                     count = droneCount,
                     color = Color(0xFFBA68C8),
                     icon = Icons.Default.Flight,
-                    selected = selectedFilter == RfCategory.DRONE_UAV,
+                    selected = selectedFilterCategory == RfCategory.DRONE_UAV && !filterSavedOnly,
                     onClick = {
-                        selectedFilter = if (selectedFilter == RfCategory.DRONE_UAV) null else RfCategory.DRONE_UAV
+                        filterSavedOnly = false
+                        selectedFilterCategory = if (selectedFilterCategory == RfCategory.DRONE_UAV) null else RfCategory.DRONE_UAV
                     },
                     modifier = Modifier.weight(1f)
                 )
@@ -251,8 +313,11 @@ fun TacticalScannerScreen(
                 count = detectedTargets.size,
                 color = ReconGreen,
                 icon = Icons.Default.Sensors,
-                selected = selectedFilter == null,
-                onClick = { selectedFilter = null },
+                selected = selectedFilterCategory == null && !filterSavedOnly,
+                onClick = {
+                    selectedFilterCategory = null
+                    filterSavedOnly = false
+                },
                 modifier = Modifier.weight(1f)
             )
         }
@@ -260,7 +325,7 @@ fun TacticalScannerScreen(
         Spacer(modifier = Modifier.height(6.dp))
 
         // =====================================================================
-        // 3. HERO LIVE SCANNER MAP WITH REAL ROADS & 360° RADAR SWEEP
+        // 3. HERO LIVE SCANNER MAP WITH REAL ROADS, RADAR & RELATIVE HISTORY
         // =====================================================================
         Box(
             modifier = Modifier
@@ -310,7 +375,7 @@ fun TacticalScannerScreen(
                             modifier = Modifier
                                 .size(5.dp)
                                 .clip(CircleShape)
-                                .background(ReconGreen)
+                                .background(if (isScannerPaused) ReconAmber else ReconGreen)
                         )
                         Text(
                             text = "RNG: ${selectedRangeMeters.toInt()}m • Z${"%.1f".format(zoom)}",
@@ -389,56 +454,71 @@ fun TacticalScannerScreen(
         Spacer(modifier = Modifier.height(6.dp))
 
         // =====================================================================
-        // 4. CATEGORY FILTER CHIPS
+        // 4. CATEGORY & SAVED FILTER CHIPS
         // =====================================================================
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(6.dp)
+            horizontalArrangement = Arrangement.spacedBy(5.dp)
         ) {
             FilterChipItem(
                 label = "ALL (${detectedTargets.size})",
-                selected = selectedFilter == null,
+                selected = selectedFilterCategory == null && !filterSavedOnly,
                 activeColor = ReconCyan,
-                onClick = { selectedFilter = null }
+                onClick = {
+                    selectedFilterCategory = null
+                    filterSavedOnly = false
+                }
+            )
+            FilterChipItem(
+                label = "⭐ SAVED ($savedCount)",
+                selected = filterSavedOnly,
+                activeColor = ReconAmber,
+                onClick = {
+                    filterSavedOnly = !filterSavedOnly
+                    selectedFilterCategory = null
+                }
             )
             FilterChipItem(
                 label = "🚗 CARS ($vehicleCount)",
-                selected = selectedFilter == RfCategory.VEHICLE,
+                selected = selectedFilterCategory == RfCategory.VEHICLE && !filterSavedOnly,
                 activeColor = ReconCyan,
-                onClick = { selectedFilter = RfCategory.VEHICLE }
+                onClick = {
+                    filterSavedOnly = false
+                    selectedFilterCategory = RfCategory.VEHICLE
+                }
             )
             FilterChipItem(
                 label = "📷 CCTV ($cctvCount)",
-                selected = selectedFilter == RfCategory.CCTV_SURVEILLANCE,
+                selected = selectedFilterCategory == RfCategory.CCTV_SURVEILLANCE && !filterSavedOnly,
                 activeColor = Color(0xFFFF5252),
-                onClick = { selectedFilter = RfCategory.CCTV_SURVEILLANCE }
+                onClick = {
+                    filterSavedOnly = false
+                    selectedFilterCategory = RfCategory.CCTV_SURVEILLANCE
+                }
             )
             if (droneCount > 0) {
                 FilterChipItem(
                     label = "🛸 DRONE ($droneCount)",
-                    selected = selectedFilter == RfCategory.DRONE_UAV,
+                    selected = selectedFilterCategory == RfCategory.DRONE_UAV && !filterSavedOnly,
                     activeColor = Color(0xFFBA68C8),
-                    onClick = { selectedFilter = RfCategory.DRONE_UAV }
+                    onClick = {
+                        filterSavedOnly = false
+                        selectedFilterCategory = RfCategory.DRONE_UAV
+                    }
                 )
             }
-            FilterChipItem(
-                label = "📡 WIFI ($wifiCount)",
-                selected = selectedFilter == RfCategory.ACCESS_POINT,
-                activeColor = TextSecondary,
-                onClick = { selectedFilter = RfCategory.ACCESS_POINT }
-            )
         }
 
         Spacer(modifier = Modifier.height(6.dp))
 
         // =====================================================================
-        // 5. HORIZONTAL TARGET CAROUSEL (Vehicles, CCTV, Drones)
+        // 5. HORIZONTAL TARGET CAROUSEL WITH INTEL & RELATIVE MOTION
         // =====================================================================
         if (filteredTargets.isEmpty()) {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(95.dp),
+                    .height(115.dp),
                 contentAlignment = Alignment.Center
             ) {
                 Text(
@@ -452,7 +532,7 @@ fun TacticalScannerScreen(
             LazyRow(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .height(105.dp),
+                    .height(118.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 contentPadding = PaddingValues(bottom = 2.dp)
             ) {
@@ -463,16 +543,32 @@ fun TacticalScannerScreen(
                         isSelected = isSelected,
                         onSelect = {
                             selectedTargetId = target.id
-                            val pinLat = target.detectedLat ?: (currentLat + 0.00015)
-                            val pinLon = target.detectedLon ?: (currentLon + 0.00015)
+                            val pinLat = target.detectedLat ?: run {
+                                val bRad = Math.toRadians(target.relativeBearingDeg.toDouble())
+                                currentLat + (target.estimatedDistanceMeters * cos(bRad)) / 111320.0
+                            }
+                            val pinLon = target.detectedLon ?: run {
+                                val bRad = Math.toRadians(target.relativeBearingDeg.toDouble())
+                                currentLon + (target.estimatedDistanceMeters * sin(bRad)) / (111320.0 * cos(Math.toRadians(currentLat)).coerceAtLeast(0.1))
+                            }
                             cameraLat = pinLat
                             cameraLon = pinLon
                             isFollowingVehicle = false
                         },
+                        onEditIntel = {
+                            editingTarget = target
+                        },
                         onPinToMap = {
-                            val pinLat = target.detectedLat ?: (currentLat + 0.00015)
-                            val pinLon = target.detectedLon ?: (currentLon + 0.00015)
-                            onNavigateToLocation(target.name, pinLat, pinLon)
+                            // Accurate relative target coordinates anchored to current host position
+                            val pinLat = target.detectedLat ?: run {
+                                val bRad = Math.toRadians(target.relativeBearingDeg.toDouble())
+                                currentLat + (target.estimatedDistanceMeters * cos(bRad)) / 111320.0
+                            }
+                            val pinLon = target.detectedLon ?: run {
+                                val bRad = Math.toRadians(target.relativeBearingDeg.toDouble())
+                                currentLon + (target.estimatedDistanceMeters * sin(bRad)) / (111320.0 * cos(Math.toRadians(currentLat)).coerceAtLeast(0.1))
+                            }
+                            onNavigateToLocation(target.displayName, pinLat, pinLon)
                         }
                     )
                 }
@@ -509,7 +605,7 @@ private fun TelemetryThreatBadge(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(3.dp)
             ) {
-                Icon(imageVector = icon, contentDescription = null, tint = color, modifier = Modifier.size(13.dp))
+                Icon(imageVector = icon, contentDescription = null, tint = color, modifier = Modifier.size(12.dp))
                 Text(text = label, color = TextSecondary, fontSize = 8.sp, fontFamily = FontFamily.Monospace)
             }
             Text(
@@ -526,7 +622,8 @@ private fun TelemetryThreatBadge(
 /**
  * Live Scanner Road Map Canvas.
  * Combines real OpenStreetMap road vectors, animated 360° sweeping phosphor radar beam,
- * vehicle heading reticle, and plotted vehicles / CCTV cameras directly on the streets.
+ * vehicle heading reticle, and plotted vehicles / CCTV cameras directly on the streets,
+ * with relative location history breadcrumb trails.
  */
 @Composable
 private fun LiveScannerRoadMapCanvas(
@@ -584,14 +681,12 @@ private fun LiveScannerRoadMapCanvas(
 
                     for (target in targets) {
                         val tLat = target.detectedLat ?: run {
-                            val angleRad = (abs(target.id.hashCode() % 360)) * (Math.PI / 180.0)
-                            val dist = target.estimatedDistanceMeters.coerceIn(5.0, 450.0)
-                            currentLat + (dist * cos(angleRad)) / 111320.0
+                            val bRad = Math.toRadians(target.relativeBearingDeg.toDouble())
+                            currentLat + (target.estimatedDistanceMeters * cos(bRad)) / 111320.0
                         }
                         val tLon = target.detectedLon ?: run {
-                            val angleRad = (abs(target.id.hashCode() % 360)) * (Math.PI / 180.0)
-                            val dist = target.estimatedDistanceMeters.coerceIn(5.0, 450.0)
-                            currentLon + (dist * sin(angleRad)) / (111320.0 * cos(Math.toRadians(currentLat)).coerceAtLeast(0.1))
+                            val bRad = Math.toRadians(target.relativeBearingDeg.toDouble())
+                            currentLon + (target.estimatedDistanceMeters * sin(bRad)) / (111320.0 * cos(Math.toRadians(currentLat)).coerceAtLeast(0.1))
                         }
 
                         val tx = (tLon + 180.0) / 360.0 * scale
@@ -641,7 +736,6 @@ private fun LiveScannerRoadMapCanvas(
         // ---------------------------------------------------------------------
         drawRect(color = TacticalObsidian)
 
-        // Subtle tactical square grid overlay
         val gridSpacing = 40.dp.toPx()
         var gx = 0f
         while (gx < width) {
@@ -682,26 +776,22 @@ private fun LiveScannerRoadMapCanvas(
             }
 
             if (road.type == OsmRoadType.SECONDARY) {
-                // Secondary road casing
                 drawPath(
                     path = path,
                     color = Color(0xFF07121A),
                     style = Stroke(width = 5.0f, cap = StrokeCap.Round)
                 )
-                // Secondary road core line
                 drawPath(
                     path = path,
                     color = Color(0xFF2C566C),
                     style = Stroke(width = 2.8f, cap = StrokeCap.Round)
                 )
             } else {
-                // Local residential street casing
                 drawPath(
                     path = path,
                     color = Color(0xFF050E14),
                     style = Stroke(width = 3.6f, cap = StrokeCap.Round)
                 )
-                // Local residential street core line
                 drawPath(
                     path = path,
                     color = Color(0xFF1B3648),
@@ -710,7 +800,7 @@ private fun LiveScannerRoadMapCanvas(
             }
         }
 
-        // Major Arterials & Motorways intersecting view
+        // Major Arterials & Motorways
         for (road in UkOsmDataEngine.MAJOR_ROADS) {
             val path = Path()
             var started = false
@@ -724,19 +814,16 @@ private fun LiveScannerRoadMapCanvas(
                 }
             }
 
-            // Motorway / Primary dual-carriageway casing
             drawPath(
                 path = path,
                 color = Color.Black,
                 style = Stroke(width = 8.0f, cap = StrokeCap.Round)
             )
-            // Cyber glow
             drawPath(
                 path = path,
                 color = ReconCyan.copy(alpha = 0.35f),
                 style = Stroke(width = 5.5f, cap = StrokeCap.Round)
             )
-            // Corridor core line
             drawPath(
                 path = path,
                 color = ReconCyan.copy(alpha = 0.85f),
@@ -750,7 +837,6 @@ private fun LiveScannerRoadMapCanvas(
         val vehiclePos = project(currentLat, currentLon)
         val maxScopeRadius = min(width, height) * 0.44f
 
-        // Concentric distance rings
         val dashEffect = PathEffect.dashPathEffect(floatArrayOf(6f, 6f), 0f)
         val ringRatios = listOf(0.25f, 0.50f, 0.75f, 1.0f)
         for (ratio in ringRatios) {
@@ -763,7 +849,6 @@ private fun LiveScannerRoadMapCanvas(
             )
         }
 
-        // Crosshairs through vehicle position
         drawLine(
             color = Color(0xFF1E3A4C).copy(alpha = 0.45f),
             start = Offset(vehiclePos.x - maxScopeRadius, vehiclePos.y),
@@ -800,10 +885,9 @@ private fun LiveScannerRoadMapCanvas(
         val beamEndX = vehiclePos.x + maxScopeRadius * cos(sweepRad)
         val beamEndY = vehiclePos.y + maxScopeRadius * sin(sweepRad)
 
-        // Trailing Phosphor Glow Wedge behind radar beam
         val trailPath = Path().apply {
             moveTo(vehiclePos.x, vehiclePos.y)
-            val trailSpan = 35f // 35 degrees trailing arc
+            val trailSpan = 35f
             var a = sweepAngle - trailSpan
             while (a <= sweepAngle) {
                 val rRad = a * (Math.PI.toFloat() / 180f)
@@ -823,14 +907,12 @@ private fun LiveScannerRoadMapCanvas(
             )
         )
 
-        // Sharp Leading Beam Line
         drawLine(
             color = ReconGreen,
             start = vehiclePos,
             end = Offset(beamEndX, beamEndY),
             strokeWidth = 2.0f
         )
-        // Leading beam tip dot
         drawCircle(
             color = ReconGreen,
             radius = 3.5f,
@@ -838,36 +920,34 @@ private fun LiveScannerRoadMapCanvas(
         )
 
         // ---------------------------------------------------------------------
-        // E. DETECTED TARGET BLIPS PLOTTED DIRECTLY ON THE ROADS
+        // E. DETECTED TARGET BLIPS & RELATIVE MOTION HISTORY (BREADCRUMBS)
         // ---------------------------------------------------------------------
         for (target in targets) {
-            // Target coordinates: use detected coordinates or project near vehicle based on distance and hash angle
             val tLat = target.detectedLat ?: run {
-                val angleRad = (abs(target.id.hashCode() % 360)) * (Math.PI / 180.0)
-                val dist = target.estimatedDistanceMeters.coerceIn(5.0, 450.0)
-                currentLat + (dist * cos(angleRad)) / 111320.0
+                val bRad = Math.toRadians(target.relativeBearingDeg.toDouble())
+                currentLat + (target.estimatedDistanceMeters * cos(bRad)) / 111320.0
             }
             val tLon = target.detectedLon ?: run {
-                val angleRad = (abs(target.id.hashCode() % 360)) * (Math.PI / 180.0)
-                val dist = target.estimatedDistanceMeters.coerceIn(5.0, 450.0)
-                currentLon + (dist * sin(angleRad)) / (111320.0 * cos(Math.toRadians(currentLat)).coerceAtLeast(0.1))
+                val bRad = Math.toRadians(target.relativeBearingDeg.toDouble())
+                currentLon + (target.estimatedDistanceMeters * sin(bRad)) / (111320.0 * cos(Math.toRadians(currentLat)).coerceAtLeast(0.1))
             }
 
             val blipPos = project(tLat, tLon)
 
-            // Check if within visible bounds
             if (blipPos.x < -40 || blipPos.x > width + 40 || blipPos.y < -40 || blipPos.y > height + 40) {
                 continue
             }
 
-            val categoryColor = when (target.category) {
-                RfCategory.VEHICLE -> ReconCyan
-                RfCategory.CCTV_SURVEILLANCE -> Color(0xFFFF5252)
-                RfCategory.DRONE_UAV -> Color(0xFFBA68C8)
-                RfCategory.ACCESS_POINT -> Color(0xFF64B5F6)
+            val isSaved = target.savedMetadata != null
+            val categoryColor = when {
+                isSaved -> ReconAmber
+                target.category == RfCategory.VEHICLE -> ReconCyan
+                target.category == RfCategory.CCTV_SURVEILLANCE -> Color(0xFFFF5252)
+                target.category == RfCategory.DRONE_UAV -> Color(0xFFBA68C8)
+                else -> Color(0xFF64B5F6)
             }
 
-            // Radar illumination detection (angle difference between sweep beam and target polar angle)
+            // Radar illumination detection
             val dx = blipPos.x - vehiclePos.x
             val dy = blipPos.y - vehiclePos.y
             var targetAngle = atan2(dy, dx) * (180f / Math.PI.toFloat())
@@ -876,6 +956,36 @@ private fun LiveScannerRoadMapCanvas(
             val angleDiff = abs((sweepAngle - targetAngle + 360f) % 360f)
             val isSwept = angleDiff < 32f
             val isSelected = target.id == selectedTargetId
+
+            // -----------------------------------------------------------------
+            // RELATIVE LOCATION HISTORY BREADCRUMBS (Motion relative to host)
+            // -----------------------------------------------------------------
+            if (target.locationHistory.size >= 2 && (isSelected || isSwept)) {
+                val historyPath = Path()
+                var hStarted = false
+                for ((idx, breadcrumb) in target.locationHistory.withIndex()) {
+                    val hPos = project(breadcrumb.targetLat, breadcrumb.targetLon)
+                    if (!hStarted) {
+                        historyPath.moveTo(hPos.x, hPos.y)
+                        hStarted = true
+                    } else {
+                        historyPath.lineTo(hPos.x, hPos.y)
+                    }
+
+                    val alpha = (0.3f + 0.6f * (idx.toFloat() / target.locationHistory.size)).coerceIn(0.2f, 0.9f)
+                    drawCircle(
+                        color = categoryColor.copy(alpha = alpha),
+                        radius = 2.5f,
+                        center = hPos
+                    )
+                }
+
+                drawPath(
+                    path = historyPath,
+                    color = categoryColor.copy(alpha = 0.5f),
+                    style = Stroke(width = 1.4f, pathEffect = PathEffect.dashPathEffect(floatArrayOf(5f, 5f)))
+                )
+            }
 
             // Target Blip Outer Glow
             if (isSwept || isSelected) {
@@ -898,6 +1008,15 @@ private fun LiveScannerRoadMapCanvas(
                 radius = if (isSelected) 5.5f else 4.0f,
                 center = blipPos
             )
+
+            // Star icon if saved
+            if (isSaved) {
+                drawCircle(
+                    color = ReconAmber,
+                    radius = 2.0f,
+                    center = blipPos
+                )
+            }
 
             // Selected crosshairs bracket
             if (isSelected) {
@@ -925,29 +1044,42 @@ private fun LiveScannerRoadMapCanvas(
                     isFakeBoldText = true
                 }
                 val subPaint = android.graphics.Paint().apply {
-                    color = when (target.category) {
-                        RfCategory.VEHICLE -> android.graphics.Color.parseColor("#00E5FF")
-                        RfCategory.CCTV_SURVEILLANCE -> android.graphics.Color.parseColor("#FF5252")
-                        RfCategory.DRONE_UAV -> android.graphics.Color.parseColor("#BA68C8")
-                        RfCategory.ACCESS_POINT -> android.graphics.Color.parseColor("#64B5F6")
+                    color = when {
+                        isSaved -> android.graphics.Color.parseColor("#FFD54F")
+                        target.category == RfCategory.VEHICLE -> android.graphics.Color.parseColor("#00E5FF")
+                        target.category == RfCategory.CCTV_SURVEILLANCE -> android.graphics.Color.parseColor("#FF5252")
+                        target.category == RfCategory.DRONE_UAV -> android.graphics.Color.parseColor("#BA68C8")
+                        else -> android.graphics.Color.parseColor("#64B5F6")
                     }
                     textSize = 17f
                     typeface = android.graphics.Typeface.MONOSPACE
                 }
 
-                val tagTitle = when (target.category) {
-                    RfCategory.VEHICLE -> "🚗 ${target.name}"
-                    RfCategory.CCTV_SURVEILLANCE -> "📷 ${target.name}"
-                    RfCategory.DRONE_UAV -> "🛸 ${target.name}"
-                    RfCategory.ACCESS_POINT -> "📡 ${target.name}"
+                val motionStr = when (target.motionTrend) {
+                    RelativeMotionTrend.APPROACHING -> "▲ CLOSING"
+                    RelativeMotionTrend.RECEDING -> "▼ RECEDING"
+                    RelativeMotionTrend.STATIONARY -> "• TRACKING"
                 }
-                val tagSub = "${target.rssi}dBm • ~${target.estimatedDistanceMeters.toInt()}m • ${target.vendor}"
+
+                val savedPlate = target.savedMetadata?.numberPlate
+                val titlePrefix = when {
+                    !savedPlate.isNullOrBlank() -> "[$savedPlate] "
+                    isSaved -> "⭐ "
+                    target.category == RfCategory.VEHICLE -> "🚗 "
+                    target.category == RfCategory.CCTV_SURVEILLANCE -> "📷 "
+                    target.category == RfCategory.DRONE_UAV -> "🛸 "
+                    else -> "📡 "
+                }
+                val tagTitle = "$titlePrefix${target.displayName}"
+
+                val doorStr = if (!target.savedMetadata?.doorNumberOrAddress.isNullOrBlank()) " • ${target.savedMetadata?.doorNumberOrAddress}" else ""
+                val tagSub = "${target.rssi}dBm • ~${target.estimatedDistanceMeters.toInt()}m • $motionStr$doorStr"
 
                 drawContext.canvas.nativeCanvas.apply {
                     val boxX = blipPos.x + 12f
                     val boxY = blipPos.y - 18f
                     val bgPaint = android.graphics.Paint().apply {
-                        color = android.graphics.Color.argb(220, 10, 16, 22)
+                        color = android.graphics.Color.argb(225, 10, 16, 22)
                     }
                     val borderPaint = android.graphics.Paint().apply {
                         color = subPaint.color
@@ -960,12 +1092,10 @@ private fun LiveScannerRoadMapCanvas(
                     val boxWidth = max(titleWidth, subWidth) + 16f
                     val boxHeight = 44f
 
-                    // Draw background box
                     val rect = android.graphics.RectF(boxX, boxY - 20f, boxX + boxWidth, boxY + boxHeight - 20f)
                     drawRoundRect(rect, 6f, 6f, bgPaint)
                     drawRoundRect(rect, 6f, 6f, borderPaint)
 
-                    // Text lines
                     drawText(tagTitle, boxX + 8f, boxY, tagPaint)
                     drawText(tagSub, boxX + 8f, boxY + 20f, subPaint)
                 }
@@ -975,7 +1105,6 @@ private fun LiveScannerRoadMapCanvas(
         // ---------------------------------------------------------------------
         // F. VEHICLE POSITION RETICLE & DUAL HEADING INDICATORS
         // ---------------------------------------------------------------------
-        // Pulsing Sonar Ring
         drawCircle(
             color = ReconCyan.copy(alpha = (1.6f - pulseScale).coerceIn(0f, 0.6f)),
             radius = 16f * pulseScale,
@@ -1004,7 +1133,6 @@ private fun LiveScannerRoadMapCanvas(
             end = Offset(gpsEndX, gpsEndY),
             strokeWidth = 2.5f
         )
-        // Arrowhead on GPS direction
         val arrowP1X = gpsEndX - 8f * cos(gpsRad - 0.4f)
         val arrowP1Y = gpsEndY - 8f * sin(gpsRad - 0.4f)
         val arrowP2X = gpsEndX - 8f * cos(gpsRad + 0.4f)
@@ -1021,7 +1149,6 @@ private fun LiveScannerRoadMapCanvas(
         drawCircle(color = ReconCyan, radius = 5f, center = vehiclePos)
         drawCircle(color = TacticalObsidian, radius = 2.5f, center = vehiclePos)
 
-        // Speed tag below vehicle if moving
         if (speedMph > 0) {
             val speedPaint = android.graphics.Paint().apply {
                 color = android.graphics.Color.parseColor("#00E5FF")
@@ -1063,32 +1190,42 @@ private fun FilterChipItem(
 }
 
 /**
- * Horizontal Card for Detected Target Carousel (Vehicles, CCTV, IoT)
+ * Horizontal Card for Detected Target Carousel (Vehicles, CCTV, IoT, Saved Intel)
  */
 @Composable
 private fun RfTargetHorizontalCard(
     target: DetectedRfTarget,
     isSelected: Boolean,
     onSelect: () -> Unit,
+    onEditIntel: () -> Unit,
     onPinToMap: () -> Unit
 ) {
-    val categoryColor = when (target.category) {
-        RfCategory.VEHICLE -> ReconCyan
-        RfCategory.CCTV_SURVEILLANCE -> Color(0xFFFF5252)
-        RfCategory.DRONE_UAV -> Color(0xFFBA68C8)
-        RfCategory.ACCESS_POINT -> TextSecondary
+    val isSaved = target.savedMetadata != null
+    val categoryColor = when {
+        isSaved -> ReconAmber
+        target.category == RfCategory.VEHICLE -> ReconCyan
+        target.category == RfCategory.CCTV_SURVEILLANCE -> Color(0xFFFF5252)
+        target.category == RfCategory.DRONE_UAV -> Color(0xFFBA68C8)
+        else -> TextSecondary
     }
 
-    val iconVector = when (target.category) {
-        RfCategory.VEHICLE -> Icons.Default.DirectionsCar
-        RfCategory.CCTV_SURVEILLANCE -> Icons.Default.Videocam
-        RfCategory.DRONE_UAV -> Icons.Default.Flight
-        RfCategory.ACCESS_POINT -> Icons.Default.Wifi
+    val iconVector = when {
+        isSaved -> Icons.Default.Star
+        target.category == RfCategory.VEHICLE -> Icons.Default.DirectionsCar
+        target.category == RfCategory.CCTV_SURVEILLANCE -> Icons.Default.Videocam
+        target.category == RfCategory.DRONE_UAV -> Icons.Default.Flight
+        else -> Icons.Default.Wifi
+    }
+
+    val motionTrendStr = when (target.motionTrend) {
+        RelativeMotionTrend.APPROACHING -> "▲ CLOSING"
+        RelativeMotionTrend.RECEDING -> "▼ RECEDING"
+        RelativeMotionTrend.STATIONARY -> "• STEADY"
     }
 
     Card(
         modifier = Modifier
-            .width(260.dp)
+            .width(280.dp)
             .fillMaxHeight()
             .clickable { onSelect() },
         colors = CardDefaults.cardColors(containerColor = if (isSelected) TacticalBorder.copy(alpha = 0.4f) else TacticalSurface),
@@ -1104,7 +1241,7 @@ private fun RfTargetHorizontalCard(
                 .padding(8.dp),
             verticalArrangement = Arrangement.SpaceBetween
         ) {
-            // Top Row: Icon, Name, and RSSI badge
+            // Top Row: Category Icon, Name / Number Plate, and RSSI badge
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
@@ -1123,16 +1260,39 @@ private fun RfTargetHorizontalCard(
                 Spacer(modifier = Modifier.width(6.dp))
 
                 Column(modifier = Modifier.weight(1f)) {
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        target.savedMetadata?.numberPlate?.takeIf { it.isNotBlank() }?.let { plate ->
+                            Surface(
+                                color = ReconAmber.copy(alpha = 0.2f),
+                                shape = RoundedCornerShape(3.dp),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, ReconAmber)
+                            ) {
+                                Text(
+                                    text = plate,
+                                    color = ReconAmber,
+                                    fontSize = 8.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    fontFamily = FontFamily.Monospace,
+                                    modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                                )
+                            }
+                        }
+
+                        Text(
+                            text = target.displayName,
+                            color = TextPrimary,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.Monospace,
+                            maxLines = 1,
+                            modifier = Modifier.weight(1f, fill = false)
+                        )
+                    }
+
+                    val subDetails = target.savedMetadata?.doorNumberOrAddress?.takeIf { it.isNotBlank() }
+                        ?: "${target.vendor} • ${target.protocol}"
                     Text(
-                        text = target.name,
-                        color = TextPrimary,
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Bold,
-                        fontFamily = FontFamily.Monospace,
-                        maxLines = 1
-                    )
-                    Text(
-                        text = "${target.vendor} • ${target.protocol}",
+                        text = subDetails,
                         color = TextSecondary,
                         fontSize = 8.sp,
                         fontFamily = FontFamily.Monospace,
@@ -1142,7 +1302,6 @@ private fun RfTargetHorizontalCard(
 
                 Spacer(modifier = Modifier.width(4.dp))
 
-                // Signal indicator
                 Column(horizontalAlignment = Alignment.End) {
                     SignalStrengthBars(bars = target.signalBars, color = categoryColor)
                     Text(
@@ -1154,7 +1313,7 @@ private fun RfTargetHorizontalCard(
                 }
             }
 
-            // Bottom Row: MAC address, distance, and Pin button
+            // Bottom Row: Distance, Relative Motion, INTEL button, and PIN button
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically,
@@ -1162,27 +1321,53 @@ private fun RfTargetHorizontalCard(
             ) {
                 Column {
                     Text(
-                        text = "~${"%.0f".format(target.estimatedDistanceMeters)}m AWAY • ${target.macAddress}",
+                        text = "~${"%.0f".format(target.estimatedDistanceMeters)}m • $motionTrendStr",
                         color = categoryColor,
                         fontSize = 8.sp,
                         fontWeight = FontWeight.Bold,
                         fontFamily = FontFamily.Monospace
                     )
+                    Text(
+                        text = target.macAddress,
+                        color = TextSecondary.copy(alpha = 0.7f),
+                        fontSize = 7.5.sp,
+                        fontFamily = FontFamily.Monospace
+                    )
                 }
 
-                Surface(
-                    color = categoryColor.copy(alpha = 0.15f),
-                    shape = RoundedCornerShape(4.dp),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, categoryColor.copy(alpha = 0.6f)),
-                    modifier = Modifier.clickable { onPinToMap() }
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(3.dp)
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    // Edit Intel Button (Number plate, Door #, Group, Custom Sound)
+                    Surface(
+                        color = ReconCyan.copy(alpha = 0.15f),
+                        shape = RoundedCornerShape(4.dp),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, ReconCyan.copy(alpha = 0.6f)),
+                        modifier = Modifier.clickable { onEditIntel() }
                     ) {
-                        Icon(imageVector = Icons.Default.Place, contentDescription = null, tint = categoryColor, modifier = Modifier.size(10.dp))
-                        Text(text = "PIN", color = categoryColor, fontSize = 8.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
+                        Row(
+                            modifier = Modifier.padding(horizontal = 5.dp, vertical = 3.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(2.dp)
+                        ) {
+                            Icon(imageVector = Icons.Default.EditNote, contentDescription = "Intel", tint = ReconCyan, modifier = Modifier.size(10.dp))
+                            Text(text = "INTEL", color = ReconCyan, fontSize = 8.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
+                        }
+                    }
+
+                    // Pin To Map Button
+                    Surface(
+                        color = categoryColor.copy(alpha = 0.15f),
+                        shape = RoundedCornerShape(4.dp),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, categoryColor.copy(alpha = 0.6f)),
+                        modifier = Modifier.clickable { onPinToMap() }
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(2.dp)
+                        ) {
+                            Icon(imageVector = Icons.Default.Place, contentDescription = null, tint = categoryColor, modifier = Modifier.size(10.dp))
+                            Text(text = "PIN", color = categoryColor, fontSize = 8.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
+                        }
                     }
                 }
             }

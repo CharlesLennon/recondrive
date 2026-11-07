@@ -96,6 +96,9 @@ fun InteractiveMapScreen(
             if (initialWaypointName != null) {
                 waypointName = initialWaypointName
             }
+            if (zoom < 16.0f) {
+                zoom = 16.8f
+            }
             isFollowingGps = false
         }
     }

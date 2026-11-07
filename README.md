@@ -1,7 +1,7 @@
 # 🛰️ ReconDrive: Tactical OSM & Android Auto Exploration Navigator
 
 [![GitHub Release](https://img.shields.io/github/v/release/CharlesLennon/recondrive?color=cyan&label=Latest%20Release)](https://github.com/CharlesLennon/recondrive/releases/latest)
-[![Download APK](https://img.shields.io/badge/Download-APK%20(v1.0.18)-brightgreen?logo=android)](https://github.com/CharlesLennon/recondrive/releases/download/v1.0.18/recondrive-v1.0.18.apk)
+[![Download APK](https://img.shields.io/badge/Download-APK%20(v1.0.19)-brightgreen?logo=android)](https://github.com/CharlesLennon/recondrive/releases/download/v1.0.19/recondrive-v1.0.19.apk)
 [![Build Android APK](https://github.com/CharlesLennon/recondrive/actions/workflows/build-apk.yml/badge.svg)](https://github.com/CharlesLennon/recondrive/actions/workflows/build-apk.yml)
 [![Android](https://img.shields.io/badge/Platform-Android%20%7C%20Android%20Auto-green.svg)](https://developer.android.com/training/cars/apps)
 [![Kotlin](https://img.shields.io/badge/Language-Kotlin%201.9.23-blue.svg)](https://kotlinlang.org/)
@@ -39,14 +39,14 @@ Mobile portrait dashboard engineered to fit completely on-screen with **zero ver
 
 ---
 
-### 3. SIGINT RF Spectrum & Wardrive Scanner (Hero Road Network & Tactical Radar)
+### 3. SIGINT RF Spectrum & Wardrive Scanner (WiFi Radar, Intel Tracking & Saved Devices)
 Dedicated RF reconnaissance tab inspired by cybersecurity wardriving tools:
 - **Expansive Live Scanner Road Map**: Full interactive tactical map rendering real OpenStreetMap road networks, illuminated street corridors, and intersection nodes.
-- **Vehicle Emitter Detection**: Uses Wi-Fi SSIDs, BLE beacons, and MAC OUIs to detect nearby connected cars (Tesla, Ford SYNC, GM OnStar, BMW, Mercedes MBUX, VAG MMI) and in-vehicle dashcams (VIOFO, BlackVue, Nextbase, 70mai, Garmin) plotted directly on the streets.
-- **Surveillance Optic Auditing**: Sniffs out commercial IP CCTV cameras (Hikvision, Dahua), smart doorbells (Ring, Google Nest, Eufy, Arlo), and municipal ANPR / speed enforcement cameras.
-- **Drone / UAV Identification**: Intercepts FAA/CAA Direct Remote ID broadcasts from airborne drones (DJI, Mavic, Parrot).
-- **360° Sweeping Phosphor Radar**: Rotating radar beam illuminating street segments and target blips with dynamic phosphor bloom, quick range selector chips (50m, 100m, 250m, 500m), and interactive vehicle re-centering.
-- **Pin to Map & Horizontal Carousel**: Swipeable bottom intel carousel with one-tap navigation to lock onto any detected target coordinate!
+- **WiFi Radar Relative Motion Tracking**: Tracks device observations relative to the host vehicle's location over time, displaying motion breadcrumbs and velocity vectors (`▲ CLOSING IN`, `▼ RECEDING`, `• STEADY`).
+- **Saved Devices & Custom Intel**: Save detected emitters, assign custom aliases, vehicle registration number plates (e.g. `LJ71 WXA`), physical door/house numbers (e.g. `Door #42`), and tactical group tags (`KNOWN VEHICLES`, `NEIGHBORS`, `SURVEILLANCE`, `WORK`, `CUSTOM`).
+- **Custom Notification Audio Cues**: Configure procedural audio alerts (`Sonar Ping`, `Tactical Chirp`, `Radar Beep`, `Voice Alert`, `Silent`) with audio preview, playing automatically whenever a saved emitter appears in wardrive range.
+- **24/7 Background Wardrive Scanner**: Runs persistently alongside the fog tracking service with an instant `ACTIVE` / `PAUSED` toggle in the scanner HUD.
+- **Accurate Curbside Pinning**: Pinning a target directly drops the navigation waypoint right on the user's local street (within 8m–35m of the vehicle), resolving across-town offsets.
 
 ---
 
