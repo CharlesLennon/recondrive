@@ -1313,7 +1313,7 @@ class TacticalRfScannerManager(
 
         targetMap[targetId] = target
         syncTargetsToFlow()
-        soundManager.playBeep()
+        soundManager.playRadarBeep()
     }
 
     private fun syncTargetsToFlow() {

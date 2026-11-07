@@ -74,11 +74,12 @@ class TacticalNfcManager(private val context: Context) {
         }
 
         @Suppress("DEPRECATION")
-        val rawTag: Tag? = intent.getParcelableExtra(NfcAdapter.EXTRA_TAG) ?: return null
-        val uidBytes = rawTag.id ?: ByteArray(0)
+        val rawTag: Tag? = intent.getParcelableExtra(NfcAdapter.EXTRA_TAG)
+        val tag = rawTag ?: return null
+        val uidBytes = tag.id ?: ByteArray(0)
         val uidHex = uidBytes.joinToString(":") { "%02X".format(it) }
 
-        val techList = rawTag.techList.map { it.substringAfterLast(".") }
+        val techList = tag.techList.map { it.substringAfterLast(".") }
         var isCarKey = false
         var tagCategory = "GENERIC 13.56 MHz RFID"
         var payloadSummary: String? = null
@@ -86,7 +87,7 @@ class TacticalNfcManager(private val context: Context) {
         // 1. Check for Vehicle Keycard Signatures
         // Tesla Key Card uses ISO-DEP (ISO 14443-4) smartcard with JCOP / NXP tech stack
         if (techList.contains("IsoDep")) {
-            val isoDep = IsoDep.get(rawTag)
+            val isoDep = IsoDep.get(tag)
             val historicalBytes = isoDep?.historicalBytes
             val hiHex = historicalBytes?.joinToString("") { "%02X".format(it) } ?: ""
 

@@ -2,15 +2,19 @@ package com.recondrive.app.ui
 
 import android.Manifest
 import android.annotation.SuppressLint
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.location.Location
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Looper
+import android.provider.Settings
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -25,6 +29,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
@@ -58,10 +63,66 @@ class MainActivity : ComponentActivity() {
     private var currentHeading by mutableFloatStateOf(0f)
     private var currentLat by mutableDoubleStateOf(51.5074)
     private var currentLon by mutableDoubleStateOf(-0.1278)
+    private var missingPermissions by mutableStateOf<List<String>>(emptyList())
+
+    private fun auditMissingPermissions(): List<String> {
+        val list = mutableListOf(
+            Manifest.permission.ACCESS_FINE_LOCATION,
+            Manifest.permission.ACCESS_COARSE_LOCATION,
+            Manifest.permission.RECORD_AUDIO,
+            Manifest.permission.CAMERA
+        )
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            list.add(Manifest.permission.POST_NOTIFICATIONS)
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            list.add(Manifest.permission.BLUETOOTH_SCAN)
+            list.add(Manifest.permission.BLUETOOTH_CONNECT)
+        }
+        val missing = list.filter {
+            ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
+        }
+        missingPermissions = missing
+        return missing
+    }
+
+    private fun requestMissingPermissions() {
+        val missing = auditMissingPermissions()
+        if (missing.isNotEmpty()) {
+            permissionLauncher.launch(missing.toTypedArray())
+        }
+    }
+
+    private fun openAppSettings() {
+        try {
+            val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                data = Uri.fromParts("package", packageName, null)
+            }
+            startActivity(intent)
+        } catch (e: Exception) {
+            Timber.w(e, "Failed to open app settings")
+        }
+    }
+
+    private fun getMissingPermissionSummary(perms: List<String>): String {
+        return perms.map { perm ->
+            when (perm) {
+                Manifest.permission.ACCESS_FINE_LOCATION,
+                Manifest.permission.ACCESS_COARSE_LOCATION -> "Location"
+                Manifest.permission.RECORD_AUDIO -> "Mic (Siren)"
+                Manifest.permission.CAMERA -> "Camera (NIR)"
+                Manifest.permission.BLUETOOTH_SCAN,
+                Manifest.permission.BLUETOOTH_CONNECT -> "Bluetooth"
+                Manifest.permission.POST_NOTIFICATIONS -> "Notifications"
+                else -> perm.substringAfterLast(".")
+            }
+        }.distinct().joinToString(" • ")
+    }
 
     private val permissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { permissions ->
+        auditMissingPermissions()
         val fineGranted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] ?: false
         val coarseGranted = permissions[Manifest.permission.ACCESS_COARSE_LOCATION] ?: false
 
@@ -106,6 +167,7 @@ class MainActivity : ComponentActivity() {
             }
         }
 
+        auditMissingPermissions()
         checkAndRequestPermissions()
 
         // Coordinated Startup Network & Updates Check (App Releases & UK OSM Data)
@@ -354,8 +416,99 @@ class MainActivity : ComponentActivity() {
                         }
                     }
                 ) { paddingValues ->
-                    Box(modifier = Modifier.padding(paddingValues)) {
-                        when (selectedTab) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .padding(paddingValues)
+                    ) {
+                        // =====================================================
+                        // TACTICAL PERMISSIONS MISSING WARNING BANNER
+                        // =====================================================
+                        if (missingPermissions.isNotEmpty()) {
+                            Surface(
+                                color = Color(0xFFD50000).copy(alpha = 0.22f),
+                                shape = RoundedCornerShape(8.dp),
+                                border = BorderStroke(1.dp, Color(0xFFFF5252).copy(alpha = 0.85f)),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 8.dp, vertical = 4.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 10.dp, vertical = 6.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                        modifier = Modifier.weight(1f)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Warning,
+                                            contentDescription = null,
+                                            tint = Color(0xFFFF5252),
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                        Column {
+                                            Text(
+                                                text = "PERMISSIONS REQUIRED (${missingPermissions.size} MISSING)",
+                                                color = Color(0xFFFF5252),
+                                                fontSize = 9.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                fontFamily = FontFamily.Monospace
+                                            )
+                                            Text(
+                                                text = getMissingPermissionSummary(missingPermissions),
+                                                color = Color.White.copy(alpha = 0.85f),
+                                                fontSize = 7.5.sp,
+                                                fontFamily = FontFamily.Monospace,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                        }
+                                    }
+
+                                    Row(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
+                                        Surface(
+                                            color = ReconCyan.copy(alpha = 0.25f),
+                                            shape = RoundedCornerShape(4.dp),
+                                            border = BorderStroke(1.dp, ReconCyan),
+                                            modifier = Modifier.clickable { requestMissingPermissions() }
+                                        ) {
+                                            Text(
+                                                text = "GRANT",
+                                                color = ReconCyan,
+                                                fontSize = 8.5.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                fontFamily = FontFamily.Monospace,
+                                                modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp)
+                                            )
+                                        }
+
+                                        Surface(
+                                            color = TacticalSurface,
+                                            shape = RoundedCornerShape(4.dp),
+                                            border = BorderStroke(1.dp, TextSecondary),
+                                            modifier = Modifier.clickable { openAppSettings() }
+                                        ) {
+                                            Text(
+                                                text = "SETTINGS",
+                                                color = TextSecondary,
+                                                fontSize = 8.5.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                fontFamily = FontFamily.Monospace,
+                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        Box(modifier = Modifier.weight(1f)) {
+                            when (selectedTab) {
                             0 -> {
                                 TacticalHudScreen(
                                     stats = stats,
@@ -440,6 +593,7 @@ class MainActivity : ComponentActivity() {
                     }
                 }
             }
+        }
         }
     }
 
@@ -556,16 +710,16 @@ class MainActivity : ComponentActivity() {
 
     override fun onNewIntent(intent: Intent?) {
         super.onNewIntent(intent)
-        intent?.let {
-            val scanned = ReconApplication.instance.rfScannerManager.nfcManager.processIntent(it)
-            if (scanned?.isVehicleKey == true) {
-                Toast.makeText(this, "🔑 VEHICLE NFC KEY DETECTED: ${scanned.tagType}", Toast.LENGTH_SHORT).show()
-            }
+        val nfcIntent = intent ?: return
+        val scanned = ReconApplication.instance.rfScannerManager.nfcManager.processIntent(nfcIntent)
+        if (scanned?.isVehicleKey == true) {
+            Toast.makeText(this, "🔑 VEHICLE NFC KEY DETECTED: ${scanned.tagType}", Toast.LENGTH_SHORT).show()
         }
     }
 
     override fun onResume() {
         super.onResume()
+        auditMissingPermissions()
         ReconApplication.instance.deviceOrientationManager.startListening()
     }
 
