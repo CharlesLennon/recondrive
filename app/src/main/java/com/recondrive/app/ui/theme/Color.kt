@@ -8,6 +8,7 @@ val TacticalBorder = Color(0xFF21262D)
 val ReconCyan = Color(0xFF00E5FF)
 val ReconGreen = Color(0xFF00E676)
 val TacticalAmber = Color(0xFFFFD600)
+val ReconAmber = TacticalAmber
 val AlertRed = Color(0xFFFF1744)
 val RadarGrid = Color(0xFF16222F)
 val TextPrimary = Color(0xFFF0F6FC)
