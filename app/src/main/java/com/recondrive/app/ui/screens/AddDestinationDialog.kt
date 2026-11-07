@@ -102,7 +102,7 @@ fun AddDestinationDialog(
                 OutlinedTextField(
                     value = name,
                     onValueChange = { name = it },
-                    label = { Text("Location Name (e.g. Home, Work, Gym)", fontSize = 11.sp, fontFamily = FontFamily.Monospace) },
+                    label = { Text("Location Name", fontSize = 11.sp, fontFamily = FontFamily.Monospace) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                     colors = OutlinedTextFieldDefaults.colors(
@@ -119,7 +119,7 @@ fun AddDestinationDialog(
                 OutlinedTextField(
                     value = personName,
                     onValueChange = { personName = it },
-                    label = { Text("Person / Group (Optional, e.g. Annabell)", fontSize = 11.sp, fontFamily = FontFamily.Monospace) },
+                    label = { Text("Person / Group Name (Optional)", fontSize = 11.sp, fontFamily = FontFamily.Monospace) },
                     singleLine = true,
                     modifier = Modifier.fillMaxWidth(),
                     colors = OutlinedTextFieldDefaults.colors(

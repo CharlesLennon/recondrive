@@ -62,8 +62,8 @@ fun TacticalHudScreen(
     var addDialogPersonName by remember { mutableStateOf<String?>(null) }
     var isListeningVoice by remember { mutableStateOf(false) }
 
-    // Expanded contacts state for stacked cards (e.g. "Annabell")
-    val expandedContacts = remember { mutableStateMapOf<String, Boolean>("Annabell" to true) }
+    // Expanded contacts state for stacked cards
+    val expandedContacts = remember { mutableStateMapOf<String, Boolean>() }
 
     val mapSkin by skinManager.currentMapSkin.collectAsState()
     val fogSkin by skinManager.currentFogSkin.collectAsState()
@@ -398,7 +398,7 @@ fun TacticalHudScreen(
         Spacer(modifier = Modifier.height(16.dp))
 
         // =====================================================================
-        // 4. SAVED DESTINATIONS & STACKED CARDS (Sub-lists, e.g. Annabell)
+        // 4. SAVED DESTINATIONS & STACKED CARDS (User-Defined Sub-lists)
         // =====================================================================
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -431,10 +431,52 @@ fun TacticalHudScreen(
         // Group destinations:
         // Top-level standalone destinations (personName == null)
         val standaloneDestinations = destinations.filter { it.personName.isNullOrBlank() }
-        // Grouped by Person (personName != null, e.g. "Annabell")
+        // Grouped by Person (personName != null)
         val personGroups = destinations.filterNot { it.personName.isNullOrBlank() }.groupBy { it.personName!! }
 
-        // A. Render Top-Level Standalone Cards (Home, Work, etc.)
+        if (standaloneDestinations.isEmpty() && personGroups.isEmpty()) {
+            Surface(
+                color = TacticalSurface,
+                shape = RoundedCornerShape(8.dp),
+                border = androidx.compose.foundation.BorderStroke(1.dp, TacticalBorder),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable {
+                        addDialogPersonName = null
+                        showAddDialog = true
+                    }
+            ) {
+                Column(
+                    modifier = Modifier.padding(18.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.AddLocationAlt,
+                        contentDescription = null,
+                        tint = Color(mapSkin.highwayColor),
+                        modifier = Modifier.size(28.dp)
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = "NO SAVED DESTINATIONS YET",
+                        color = TextPrimary,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace
+                    )
+                    Spacer(modifier = Modifier.height(3.dp))
+                    Text(
+                        text = "Tap here or '+ ADD' to register your places or contacts.",
+                        color = TextSecondary,
+                        fontSize = 10.sp,
+                        fontFamily = FontFamily.Monospace
+                    )
+                }
+            }
+            Spacer(modifier = Modifier.height(8.dp))
+        }
+
+        // A. Render Top-Level Standalone Cards
         for (dest in standaloneDestinations) {
             DestinationCard(
                 destination = dest,
@@ -451,7 +493,7 @@ fun TacticalHudScreen(
             Spacer(modifier = Modifier.height(8.dp))
         }
 
-        // B. Render Stacked Cards (Grouped by Person, e.g. Annabell)
+        // B. Render Stacked Cards (Grouped by Person / Contact)
         for ((person, places) in personGroups) {
             val isExpanded = expandedContacts[person] ?: false
             StackedPersonCard(
@@ -809,9 +851,9 @@ private fun DestinationCard(
 }
 
 /**
- * Stacked Cards for People / Sub-lists (e.g. "Annabell")
+ * Stacked Cards for People / Contact Sub-lists
  * Displays visual multi-card stacked layer behind the card.
- * Expands on tap to reveal all places belonging to that person (Home, Work, etc.)
+ * Expands on tap to reveal all places belonging to that person.
  */
 @Composable
 private fun StackedPersonCard(

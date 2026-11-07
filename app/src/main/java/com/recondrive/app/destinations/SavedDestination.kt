@@ -4,16 +4,16 @@ import org.json.JSONObject
 
 /**
  * Tactical Saved Destination / Location
- * Supports standalone locations (Home, Work) as well as sub-lists grouped by Person (e.g. Annabell).
- * Displays photos when available, with graceful icon-only fallback.
+ * Supports standalone user-saved locations as well as sub-lists grouped by Person/Contact.
+ * Displays user-added photos when available, with graceful icon-only fallback.
  */
 data class SavedDestination(
     val id: String = java.util.UUID.randomUUID().toString(),
-    val name: String,                    // e.g. "Home", "Work", "Design Studio", "Penthouse"
-    val addressOrSubtext: String = "",   // e.g. "18 Brunswick Square, Hove"
+    val name: String,
+    val addressOrSubtext: String = "",
     val lat: Double,
     val lon: Double,
-    val personName: String? = null,      // e.g. "Annabell" (null if top-level personal saved place)
+    val personName: String? = null,
     val photoUri: String? = null,        // Content URI, file path, or web URL (only shown if present)
     val iconType: String = "PIN",        // "HOME", "WORK", "STAR", "HEART", "PIN", "COFFEE", "GYM", "AIRPORT"
     val orderIndex: Int = 0

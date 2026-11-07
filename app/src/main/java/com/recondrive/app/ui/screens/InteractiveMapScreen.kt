@@ -1018,47 +1018,39 @@ fun InteractiveMapScreen(
 
             Spacer(modifier = Modifier.height(6.dp))
 
-            // Quick Jump UK City Chips (Google Maps-style horizontal scroll)
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
-            ) {
-                val cityPresets = listOf(
-                    "🏛️ London" to (51.5074 to -0.1278),
-                    "🏖️ Brighton" to (50.8225 to -0.1372),
-                    "🐝 Manchester" to (53.4808 to -2.2426),
-                    "🏭 Birmingham" to (52.4862 to -1.8904),
-                    "🏰 Edinburgh" to (55.9533 to -3.1883),
-                    "🐉 Cardiff" to (51.4816 to -3.1791),
-                    "⚓ Belfast" to (54.5973 to -5.9301),
-                    "🚢 Liverpool" to (53.4084 to -2.9916),
-                    "🌉 Bristol" to (51.4545 to -2.5879),
-                    "⛰️ Highlands" to (56.8198 to -5.1052),
-                    "🏖️ Cornwall" to (50.1186 to -5.5372)
-                )
-
-                for ((label, coords) in cityPresets) {
-                    Surface(
-                        color = TacticalSurface,
-                        shape = RoundedCornerShape(16.dp),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, TacticalBorder),
-                        modifier = Modifier.clickable {
-                            cameraLat = coords.first
-                            cameraLon = coords.second
-                            zoom = 13.5f
-                            isFollowingGps = false
+            // Quick Jump Chips: Dynamically populated from User's Saved Destinations (Zero Hardcoded Places)
+            val userSavedDestinations by com.recondrive.app.ReconApplication.instance.savedDestinationRepository.destinations.collectAsState()
+            if (userSavedDestinations.isNotEmpty()) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    for (dest in userSavedDestinations) {
+                        Surface(
+                            color = TacticalSurface,
+                            shape = RoundedCornerShape(16.dp),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, TacticalBorder),
+                            modifier = Modifier.clickable {
+                                cameraLat = dest.lat
+                                cameraLon = dest.lon
+                                zoom = 14.5f
+                                isFollowingGps = false
+                                selectedWaypoint = dest.lat to dest.lon
+                                waypointName = dest.name
+                            }
+                        ) {
+                            val label = if (!dest.personName.isNullOrBlank()) "${dest.personName}: ${dest.name}" else dest.name
+                            Text(
+                                text = "📍 $label",
+                                color = TextPrimary,
+                                fontSize = 10.sp,
+                                fontFamily = FontFamily.Monospace,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                            )
                         }
-                    ) {
-                        Text(
-                            text = label,
-                            color = TextPrimary,
-                            fontSize = 10.sp,
-                            fontFamily = FontFamily.Monospace,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
-                        )
                     }
                 }
             }

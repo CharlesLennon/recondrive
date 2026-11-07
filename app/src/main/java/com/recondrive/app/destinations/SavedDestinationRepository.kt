@@ -26,9 +26,7 @@ class SavedDestinationRepository(context: Context) {
     private fun loadDestinations() {
         val raw = prefs.getString(KEY_DESTINATIONS, null)
         if (raw.isNullOrEmpty()) {
-            val defaults = createDefaultDestinations()
-            _destinations.value = defaults
-            saveToDisk(defaults)
+            _destinations.value = emptyList()
         } else {
             try {
                 val array = JSONArray(raw)
@@ -36,12 +34,19 @@ class SavedDestinationRepository(context: Context) {
                 for (i in 0 until array.length()) {
                     list.add(SavedDestination.fromJson(array.getJSONObject(i)))
                 }
-                _destinations.value = list
+                // Purge any legacy dummy records from older test builds
+                val sanitized = list.filterNot {
+                    it.id.startsWith("def_") ||
+                    it.id.startsWith("annabell_") ||
+                    it.personName.equals("Annabell", ignoreCase = true)
+                }
+                _destinations.value = sanitized
+                if (sanitized.size != list.size) {
+                    saveToDisk(sanitized)
+                }
             } catch (e: Exception) {
-                Timber.e(e, "Failed to parse saved destinations, restoring defaults")
-                val defaults = createDefaultDestinations()
-                _destinations.value = defaults
-                saveToDisk(defaults)
+                Timber.e(e, "Failed to parse saved destinations")
+                _destinations.value = emptyList()
             }
         }
     }
@@ -74,52 +79,6 @@ class SavedDestinationRepository(context: Context) {
         val updated = _destinations.value.filterNot { it.personName.equals(personName, ignoreCase = true) }
         _destinations.value = updated
         saveToDisk(updated)
-    }
-
-    private fun createDefaultDestinations(): List<SavedDestination> {
-        return listOf(
-            SavedDestination(
-                id = "def_home",
-                name = "Home",
-                addressOrSubtext = "Brighton Seafront // Sector 7",
-                lat = 50.8225,
-                lon = -0.1372,
-                personName = null,
-                iconType = "HOME",
-                orderIndex = 0
-            ),
-            SavedDestination(
-                id = "def_work",
-                name = "Work // Innovation HQ",
-                addressOrSubtext = "Falmer Science Park, Brighton",
-                lat = 50.8650,
-                lon = -0.0870,
-                personName = null,
-                iconType = "WORK",
-                orderIndex = 1
-            ),
-            // Stacked Sub-list: Annabell
-            SavedDestination(
-                id = "annabell_home",
-                name = "Home",
-                addressOrSubtext = "18 Brunswick Square, Hove",
-                lat = 50.8248,
-                lon = -0.1580,
-                personName = "Annabell",
-                iconType = "HOME",
-                orderIndex = 0
-            ),
-            SavedDestination(
-                id = "annabell_work",
-                name = "Design Studio",
-                addressOrSubtext = "Kemp Town Creative Quarter",
-                lat = 50.8190,
-                lon = -0.1230,
-                personName = "Annabell",
-                iconType = "WORK",
-                orderIndex = 1
-            )
-        )
     }
 
     companion object {
