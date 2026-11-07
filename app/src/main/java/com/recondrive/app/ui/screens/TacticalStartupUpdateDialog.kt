@@ -44,11 +44,21 @@ fun TacticalStartupUpdateDialog(
 
     val hasAppUpdate = appUpdateState is UpdateState.UpdateAvailable ||
             appUpdateState is UpdateState.Downloading ||
-            appUpdateState is UpdateState.ReadyToInstall
+            appUpdateState is UpdateState.ReadyToInstall ||
+            appUpdateState is UpdateState.Installing
 
     val hasMapUpdate = mapUpdateState is MapUpdateState.UpdateAvailable ||
             mapUpdateState is MapUpdateState.Downloading ||
             mapUpdateState is MapUpdateState.Completed
+
+    // Automatically dismiss dialog when app update enters full-screen download/install mode
+    LaunchedEffect(appUpdateState) {
+        if (appUpdateState is UpdateState.Downloading ||
+            appUpdateState is UpdateState.ReadyToInstall ||
+            appUpdateState is UpdateState.Installing) {
+            onDismiss()
+        }
+    }
 
     // If both updates are no longer pending or both were skipped, auto-dismiss
     if (!hasAppUpdate && !hasMapUpdate) {
@@ -329,6 +339,7 @@ fun TacticalStartupUpdateDialog(
                                             is UpdateState.UpdateAvailable -> s.release.tagName
                                             is UpdateState.Downloading -> "DL ${s.progressPercent}%"
                                             is UpdateState.ReadyToInstall -> "READY"
+                                            is UpdateState.Installing -> "INSTALLING"
                                             else -> "NEW BUILD"
                                         },
                                         color = ReconAmber,
@@ -345,6 +356,7 @@ fun TacticalStartupUpdateDialog(
                             val release = when (val s = appUpdateState) {
                                 is UpdateState.UpdateAvailable -> s.release
                                 is UpdateState.ReadyToInstall -> s.release
+                                is UpdateState.Installing -> s.release
                                 else -> null
                             }
 

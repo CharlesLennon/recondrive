@@ -32,8 +32,14 @@ sealed interface UpdateState {
         val progressPercent: Int,
         val bytesDownloaded: Long,
         val totalBytes: Long,
-        val fileName: String
+        val fileName: String,
+        val release: ReleaseInfo? = null
     ) : UpdateState
     data class ReadyToInstall(val apkFile: java.io.File, val release: ReleaseInfo) : UpdateState
+    data class Installing(
+        val apkFile: java.io.File,
+        val release: ReleaseInfo,
+        val stage: String = "Committing PackageInstaller Session..."
+    ) : UpdateState
     data class Error(val message: String, val lastAttemptTime: Long = System.currentTimeMillis()) : UpdateState
 }

@@ -38,6 +38,10 @@ class AppUpdateManager(private val context: Context) {
     private val _updateState = MutableStateFlow<UpdateState>(UpdateState.Idle)
     val updateState: StateFlow<UpdateState> = _updateState.asStateFlow()
 
+    var cachedRelease: ReleaseInfo? = null
+        private set
+    private var downloadJob: kotlinx.coroutines.Job? = null
+
     val skippedVersion: String?
         get() = prefs.getString(KEY_SKIPPED_APP_VERSION, null)
 
@@ -101,6 +105,7 @@ class AppUpdateManager(private val context: Context) {
                     _updateState.value = UpdateState.Error("No valid releases or APK assets found on GitHub.")
                     return@launch
                 }
+                cachedRelease = releaseInfo
 
                 val isSkipped = !isManual && releaseInfo.tagName == skippedVersion
                 if (releaseInfo.isNewerThanCurrent && !isSkipped) {
@@ -129,12 +134,29 @@ class AppUpdateManager(private val context: Context) {
     }
 
     /**
+     * Cancels an ongoing APK download and resets state to Idle.
+     */
+    fun cancelDownload() {
+        downloadJob?.cancel()
+        downloadJob = null
+        _updateState.value = UpdateState.Idle
+    }
+
+    /**
+     * Reports an installation failure (e.g. signature mismatch from pre-v1.0.12 build).
+     */
+    fun reportInstallFailure(errorMessage: String) {
+        _updateState.value = UpdateState.Error(errorMessage)
+    }
+
+    /**
      * Streams the APK binary from GitHub Release assets to local storage with progress reporting.
      */
     fun downloadAndInstall(release: ReleaseInfo, onAutoInstall: Boolean = true) {
         if (_updateState.value is UpdateState.Downloading) return
+        cachedRelease = release
 
-        scope.launch {
+        downloadJob = scope.launch {
             try {
                 // Use internal cache directory to avoid SD card/scoped storage mounting or path-mapping issues
                 val targetDir = File(context.cacheDir, "updates").apply { mkdirs() }
@@ -155,7 +177,8 @@ class AppUpdateManager(private val context: Context) {
                             progressPercent = progress,
                             bytesDownloaded = downloaded,
                             totalBytes = total,
-                            fileName = release.apkFileName
+                            fileName = release.apkFileName,
+                            release = release
                         )
                     }
                 }
@@ -174,36 +197,59 @@ class AppUpdateManager(private val context: Context) {
                 _updateState.value = UpdateState.ReadyToInstall(targetFile, release)
 
                 if (onAutoInstall) {
-                    installApk(targetFile)
+                    installApk(targetFile, release)
                 }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                Timber.i("APK Download cancelled by user")
+                _updateState.value = UpdateState.Idle
             } catch (e: Exception) {
                 Timber.e(e, "APK Download failed")
                 _updateState.value = UpdateState.Error(
                     "Download failed: ${e.localizedMessage ?: "Network error"}"
                 )
+            } finally {
+                downloadJob = null
             }
         }
     }
 
     /**
-     * Triggers the Android system package installer via FileProvider.
-     */
-    /**
      * Triggers the Android system package installer.
      * Uses modern PackageInstaller.Session streaming API as primary engine,
      * with FileProvider ACTION_VIEW as fallback.
      */
-    fun installApk(apkFile: File) {
+    fun installApk(apkFile: File, release: ReleaseInfo? = null) {
+        val rel = release
+            ?: (_updateState.value as? UpdateState.ReadyToInstall)?.release
+            ?: (_updateState.value as? UpdateState.Installing)?.release
+            ?: (_updateState.value as? UpdateState.Downloading)?.release
+            ?: cachedRelease
+
         try {
             if (!apkFile.exists() || apkFile.length() == 0L) {
                 _updateState.value = UpdateState.Error("APK file not found or corrupted.")
                 return
             }
 
+            if (rel != null) {
+                _updateState.value = UpdateState.Installing(
+                    apkFile = apkFile,
+                    release = rel,
+                    stage = "Verifying package installation permissions..."
+                )
+            }
+
             // Android 8.0+ Unknown sources permission check
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 if (!context.packageManager.canRequestPackageInstalls()) {
                     Timber.w("REQUEST_INSTALL_PACKAGES not granted. Prompting user settings.")
+                    if (rel != null) {
+                        _updateState.value = UpdateState.Installing(
+                            apkFile = apkFile,
+                            release = rel,
+                            stage = "Please enable 'Install unknown apps' permission in Android Settings to continue..."
+                        )
+                    }
                     val settingsIntent = Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES).apply {
                         data = Uri.parse("package:${context.packageName}")
                         flags = Intent.FLAG_ACTIVITY_NEW_TASK
@@ -216,16 +262,38 @@ class AppUpdateManager(private val context: Context) {
             // Ensure world-readable permissions on Linux filesystem level
             apkFile.setReadable(true, false)
 
+            if (rel != null) {
+                _updateState.value = UpdateState.Installing(
+                    apkFile = apkFile,
+                    release = rel,
+                    stage = "Committing PackageInstaller session..."
+                )
+            }
+
             // Primary Engine: Modern Android PackageInstaller.Session (streams APK binary directly to installer)
             try {
                 Timber.i("Launching PackageInstaller.Session for ${apkFile.name}")
                 installViaPackageInstallerSession(apkFile)
+                if (rel != null) {
+                    _updateState.value = UpdateState.Installing(
+                        apkFile = apkFile,
+                        release = rel,
+                        stage = "Android PackageInstaller session active. Awaiting OS confirmation prompt..."
+                    )
+                }
                 return
             } catch (e: Exception) {
                 Timber.w(e, "PackageInstaller.Session failed, falling back to FileProvider ACTION_VIEW")
             }
 
             // Fallback Engine: FileProvider ACTION_VIEW Intent
+            if (rel != null) {
+                _updateState.value = UpdateState.Installing(
+                    apkFile = apkFile,
+                    release = rel,
+                    stage = "Launching system package installer via FileProvider..."
+                )
+            }
             installViaFileProvider(apkFile)
 
         } catch (e: Exception) {

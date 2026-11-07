@@ -37,6 +37,13 @@ class AppUpdateInstallReceiver : BroadcastReceiver() {
             }
             PackageInstaller.STATUS_FAILURE_INCOMPATIBLE -> {
                 Timber.e("Package installation failed: INCOMPATIBLE. Prior build had differing certificate or ABI. $message")
+                try {
+                    com.recondrive.app.ReconApplication.instance.updateManager.reportInstallFailure(
+                        "Signature mismatch (INSTALL_FAILED_UPDATE_INCOMPATIBLE). The installed app was built before the permanent signing key was added in v1.0.12. Please uninstall the old version once to install signed updates."
+                    )
+                } catch (t: Throwable) {
+                    Timber.w(t, "Could not notify updateManager")
+                }
             }
             else -> {
                 Timber.e("Package installation session completed with status $status: $message")

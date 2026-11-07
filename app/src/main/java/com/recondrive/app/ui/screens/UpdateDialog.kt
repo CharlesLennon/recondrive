@@ -32,6 +32,15 @@ fun UpdateDialog(
     val updateState by updateManager.updateState.collectAsState()
     val scrollState = rememberScrollState()
 
+    // Automatically dismiss dialog when downloading or installing so FullScreenUpdateOverlay takes over
+    LaunchedEffect(updateState) {
+        if (updateState is UpdateState.Downloading ||
+            updateState is UpdateState.ReadyToInstall ||
+            updateState is UpdateState.Installing) {
+            onDismiss()
+        }
+    }
+
     Dialog(onDismissRequest = onDismiss) {
         Surface(
             modifier = Modifier
@@ -167,6 +176,10 @@ fun UpdateDialog(
                                 updateManager.openReleaseWebPage(state.release.htmlUrl)
                             }
                         )
+                    }
+
+                    is UpdateState.Installing -> {
+                        // Handled by FullScreenUpdateOverlay
                     }
 
                     is UpdateState.UpToDate -> {

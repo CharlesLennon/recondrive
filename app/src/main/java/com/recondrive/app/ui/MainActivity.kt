@@ -32,6 +32,7 @@ import com.google.android.gms.location.*
 import com.recondrive.app.ReconApplication
 import com.recondrive.app.fog.ExplorationStats
 import com.recondrive.app.service.ExplorationTrackingService
+import com.recondrive.app.ui.screens.FullScreenUpdateOverlay
 import com.recondrive.app.ui.screens.InteractiveMapScreen
 import com.recondrive.app.ui.screens.LocationTimelineSheet
 import com.recondrive.app.ui.screens.OfflineRegionsDialog
@@ -130,8 +131,21 @@ class MainActivity : ComponentActivity() {
                 var targetWaypoint by remember { mutableStateOf<Pair<Double, Double>?>(null) }
                 var targetWaypointName by remember { mutableStateOf<String?>(null) }
 
+                // Full-Screen Tactical Update Overlay when downloading, ready to install, or installing
+                val isFullScreenUpdateActive = appUpdateState is com.recondrive.app.update.UpdateState.Downloading ||
+                    appUpdateState is com.recondrive.app.update.UpdateState.ReadyToInstall ||
+                    appUpdateState is com.recondrive.app.update.UpdateState.Installing
+
+                if (isFullScreenUpdateActive) {
+                    FullScreenUpdateOverlay(
+                        updateManager = ReconApplication.instance.updateManager,
+                        updateState = appUpdateState,
+                        onDismiss = { ReconApplication.instance.updateManager.resetState() }
+                    )
+                }
+
                 // Check if either an app update or map update is available and not yet dismissed
-                val isStartupSyncAvailable = !hasDismissedStartupSync && (
+                val isStartupSyncAvailable = !isFullScreenUpdateActive && !hasDismissedStartupSync && (
                     appUpdateState is com.recondrive.app.update.UpdateState.UpdateAvailable ||
                     mapUpdateState is com.recondrive.app.map.MapUpdateState.UpdateAvailable
                 )
