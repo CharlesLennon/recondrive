@@ -32,6 +32,9 @@ class ReconApplication : Application() {
     lateinit var osmTileManager: com.recondrive.app.map.OsmTileManager
         private set
 
+    lateinit var savedDestinationRepository: com.recondrive.app.destinations.SavedDestinationRepository
+        private set
+
     override fun onCreate() {
         super.onCreate()
         
@@ -55,6 +58,7 @@ class ReconApplication : Application() {
         osmTileManager = com.recondrive.app.map.OsmTileManager(this)
         osmMapUpdateManager = com.recondrive.app.map.OsmMapUpdateManager(this, offlineTileRepository)
         fogGridManager = FogGridManager(this, fogPreferences)
+        savedDestinationRepository = com.recondrive.app.destinations.SavedDestinationRepository(this)
     }
 
     companion object {

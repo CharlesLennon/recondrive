@@ -12,8 +12,8 @@ android {
         applicationId = "com.recondrive.app"
         minSdk = 26
         targetSdk = 34
-        versionCode = 7
-        versionName = "1.0.7-tactical"
+        versionCode = 8
+        versionName = "1.0.8-tactical"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
@@ -91,6 +91,7 @@ dependencies {
     implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.material:material-icons-extended")
+    implementation("io.coil-kt:coil-compose:2.6.0")
 
     // MapLibre Native SDK for Android (Offline Vector Tiles & OpenGL Surface Rendering)
     implementation("org.maplibre.gl:android-sdk:11.0.0")

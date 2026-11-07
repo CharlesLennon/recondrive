@@ -157,121 +157,248 @@ def generate_screenshot_01():
 
 
 # ==============================================================================
-# 2. SCREENSHOT 02: HANDSET TACTICAL HUD (800 x 1400)
+# 2. SCREENSHOT 02: HANDSET TACTICAL HUD & J.A.R.V.I.S. AI COCKPIT (800 x 1600)
 # ==============================================================================
 
 def generate_screenshot_02():
-    print("Generating Screenshot 02: Handset Jetpack Compose Tactical HUD...")
-    W, H = 800, 1400
-    img = Image.new('RGB', (W, H), '#0A0D12')
+    print("Generating Screenshot 02: Handset Tactical HUD & J.A.R.V.I.S. AI Cockpit...")
+    W, H = 800, 1600
+    img = Image.new('RGB', (W, H), '#070A0F')
     draw = ImageDraw.Draw(img)
 
-    # Status Bar
+    font_jarvis_title = ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf', 24)
+    font_contact_name = ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf', 16)
+    font_place_name = ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf', 14)
+
+    # 1. Status Bar
     draw.text((24, 16), "15:42", fill='#F0F6FC', font=FONT_HEAD)
-    draw.text((W - 120, 16), "5G  100%", fill='#8B949E', font=FONT_MONO_SM)
+    draw.text((W - 140, 16), "5G  ●●● 100%", fill='#8B949E', font=FONT_MONO_SM)
 
-    # Header Row
-    draw.text((24, 60), "RECON // TACTICAL RADAR", fill='#00E5FF', font=FONT_HEAD)
-    draw.text((24, 82), "GRID: 51.5074°N, 0.1278°W", fill='#8B949E', font=FONT_MONO_SM)
+    # 2. Header Row
+    draw.text((24, 52), "RECON // J.A.R.V.I.S. HUD", fill='#00E5FF', font=FONT_HEAD)
+    draw.text((24, 74), "GRID: 50.8555°N, 0.2449°W  •  SUSSEX, UK", fill='#8B949E', font=FONT_MONO_SM)
 
-    # Skins Button
-    draw.rounded_rectangle([(W - 210, 56), (W - 126, 92)], radius=4, fill='#121721', outline='#00E5FF', width=1)
-    draw.text((W - 192, 68), "SKINS", fill='#00E5FF', font=FONT_MONO_SM)
+    # Status Badges
+    draw.rounded_rectangle([(W - 250, 50), (W - 150, 82)], radius=4, fill='#0D1B1E', outline='#00E5FF', width=1)
+    draw.text((W - 240, 60), "● AI ONLINE", fill='#00E5FF', font=FONT_MONO_XS)
 
-    # Auto Linked Badge
-    draw.rounded_rectangle([(W - 116, 56), (W - 24, 92)], radius=4, fill='#121721', outline='#00E676', width=1)
-    draw.text((W - 104, 68), "AUTO LINK", fill='#00E676', font=FONT_MONO_SM)
+    draw.rounded_rectangle([(W - 140, 50), (W - 84, 82)], radius=4, fill='#121721', outline='#21262D', width=1)
+    draw.text((W - 130, 60), "SKINS", fill='#8B949E', font=FONT_MONO_XS)
 
-    # Speed & Heading Card
-    draw.rounded_rectangle([(24, 114), (W - 24, 250)], radius=8, fill='#121721', outline='#21262D', width=1)
+    draw.rounded_rectangle([(W - 74, 50), (W - 24, 82)], radius=4, fill='#121721', outline='#00E676', width=1)
+    draw.text((W - 68, 60), "v1.0.8", fill='#00E676', font=FONT_MONO_XS)
+
+    # =========================================================================
+    # 3. J.A.R.V.I.S. HERO AI ASSISTANT CARD ("Where to, sir?")
+    # =========================================================================
+    jarvis_y = 98
+    jarvis_h = 195
+    draw.rounded_rectangle([(24, jarvis_y), (W - 24, jarvis_y + jarvis_h)], radius=12, fill='#0B111B', outline='#00E5FF', width=2)
+
+    # Holographic Arc Reactor (Concentric glowing rings)
+    arc_cx = 78
+    arc_cy = jarvis_y + 80
+    for r in (42, 34, 26, 18, 10):
+        alpha_col = '#004A59' if r > 30 else ('#009BB5' if r > 18 else '#00E5FF')
+        draw.ellipse([(arc_cx - r, arc_cy - r), (arc_cx + r, arc_cy + r)], outline=alpha_col, width=2)
+    # Arc Reactor Core Center
+    draw.ellipse([(arc_cx - 6, arc_cy - 6), (arc_cx + 6, arc_cy + 6)], fill='#FFFFFF')
+    # Radial energy ticks
+    for angle in range(0, 360, 45):
+        rad = math.radians(angle)
+        x1 = arc_cx + 26 * math.cos(rad)
+        y1 = arc_cy + 26 * math.sin(rad)
+        x2 = arc_cx + 34 * math.cos(rad)
+        y2 = arc_cy + 34 * math.sin(rad)
+        draw.line([(x1, y1), (x2, y2)], fill='#00E5FF', width=2)
+
+    # Arc Reactor Status Tag
+    draw.text((arc_cx - 24, jarvis_y + 140), "ARC MK-85", fill='#00E5FF', font=FONT_MONO_XS)
+
+    # Assistant Prompt Text
+    draw.text((140, jarvis_y + 24), "J.A.R.V.I.S. INTELLIGENCE CORE // ACTIVE", fill='#00E5FF', font=FONT_MONO_SM)
+    draw.text((140, jarvis_y + 48), "Where to, sir?", fill='#FFFFFF', font=font_jarvis_title)
+    draw.text((140, jarvis_y + 84), "Select a waypoint below or initiate voice command protocol", fill='#8B949E', font=FONT_TEXT)
+
+    # Hero Action Buttons
+    # Voice Button
+    draw.rounded_rectangle([(140, jarvis_y + 120), (330, jarvis_y + 165)], radius=6, fill='#101F2D', outline='#00E5FF', width=1)
+    draw.text((160, jarvis_y + 134), "🎙️  VOICE ENGAGE", fill='#00E5FF', font=FONT_HEAD)
+
+    # Add Destination Button
+    draw.rounded_rectangle([(345, jarvis_y + 120), (510, jarvis_y + 165)], radius=6, fill='#00E5FF')
+    draw.text((370, jarvis_y + 134), "+ ADD PLACE", fill='#0A0D12', font=FONT_HEAD)
+
+    # Full Map Quick Launch
+    draw.rounded_rectangle([(525, jarvis_y + 120), (W - 40, jarvis_y + 165)], radius=6, fill='#121721', outline='#21262D', width=1)
+    draw.text((550, jarvis_y + 134), "🗺️  MAP TAB", fill='#8B949E', font=FONT_HEAD)
+
+    # =========================================================================
+    # 4. SAVED DESTINATIONS SECTION (STANDALONE CARDS)
+    # =========================================================================
+    sec1_y = jarvis_y + jarvis_h + 16
+    draw.text((26, sec1_y), "SAVED DESTINATIONS", fill='#00E5FF', font=FONT_HEAD)
+    draw.text((200, sec1_y + 2), "•  Direct target waypoints", fill='#8B949E', font=FONT_MONO_SM)
+
+    # Card 1: HOME (With Photo Thumbnail added!)
+    card1_y = sec1_y + 24
+    draw.rounded_rectangle([(24, card1_y), (W - 24, card1_y + 88)], radius=8, fill='#111622', outline='#21262D', width=1)
+
+    # Photo Thumbnail (Simulating user-added photo)
+    draw.rounded_rectangle([(38, card1_y + 12), (102, card1_y + 76)], radius=6, fill='#192A3E', outline='#00E5FF', width=2)
+    # Mini photo content: Modern house / driveway silhouette
+    draw.polygon([(70, card1_y + 26), (48, card1_y + 44), (92, card1_y + 44)], fill='#00E5FF')
+    draw.rectangle([(54, card1_y + 44), (86, card1_y + 68)], fill='#0D1926')
+    draw.rectangle([(64, card1_y + 54), (76, card1_y + 68)], fill='#00E5FF')
+
+    # Card 1 Text
+    draw.text((118, card1_y + 16), "Home", fill='#FFFFFF', font=font_place_name)
+    draw.text((170, card1_y + 18), "•  RESIDENCE", fill='#8B949E', font=FONT_MONO_XS)
+    draw.text((118, card1_y + 40), "42 Elm Grove, Brighton, Sussex", fill='#8B949E', font=FONT_TEXT)
+    draw.text((118, card1_y + 60), "14.2 km SW  •  50.8312°N, 0.1278°W", fill='#00E676', font=FONT_MONO_SM)
+
+    # Engage Button
+    draw.rounded_rectangle([(W - 130, card1_y + 24), (W - 38, card1_y + 64)], radius=6, fill='#00E5FF')
+    draw.text((W - 110, card1_y + 36), "ENGAGE", fill='#0A0D12', font=FONT_HEAD)
+
+    # Card 2: WORK (No Photo added -> Strictly renders icon fallback badge!)
+    card2_y = card1_y + 98
+    draw.rounded_rectangle([(24, card2_y), (W - 24, card2_y + 88)], radius=8, fill='#111622', outline='#21262D', width=1)
+
+    # Icon Fallback Badge (honoring the user rule: "only show photo if one has been added")
+    draw.rounded_rectangle([(38, card2_y + 12), (102, card2_y + 76)], radius=6, fill='#17212F', outline='#303E54', width=1)
+    draw.text((58, card2_y + 32), "💼", fill='#FFD600', font=font_place_name)
+
+    # Card 2 Text
+    draw.text((118, card2_y + 16), "Work", fill='#FFFFFF', font=font_place_name)
+    draw.text((165, card2_y + 18), "•  CORPORATE HQ", fill='#8B949E', font=FONT_MONO_XS)
+    draw.text((118, card2_y + 40), "Gatwick Aviation Campus, Perimeter Road", fill='#8B949E', font=FONT_TEXT)
+    draw.text((118, card2_y + 60), "28.6 km N  •  51.1537°N, 0.1821°W", fill='#00E676', font=FONT_MONO_SM)
+
+    # Engage Button
+    draw.rounded_rectangle([(W - 130, card2_y + 24), (W - 38, card2_y + 64)], radius=6, fill='#00E5FF')
+    draw.text((W - 110, card2_y + 36), "ENGAGE", fill='#0A0D12', font=FONT_HEAD)
+
+    # =========================================================================
+    # 5. PERSON SUB-LISTS (STACKED CARDS) - e.g. "👤 Annabell"
+    # =========================================================================
+    sec2_y = card2_y + 104
+    draw.text((26, sec2_y), "TACTICAL CONTACTS & WAYPOINT CLUSTERS", fill='#00E5FF', font=FONT_HEAD)
+    draw.text((360, sec2_y + 2), "•  Stacked sub-lists", fill='#8B949E', font=FONT_MONO_SM)
+
+    # Annabell's Stacked Card Container (with physical card layering shadow)
+    stack_y = sec2_y + 26
     
-    # Speed (Left Half Centered)
-    sp_val = "48"
-    sp_w = draw.textlength(sp_val, font=FONT_MONO_XL)
-    left_mid = 24 + (W - 48) * 0.25
-    draw.text((left_mid - sp_w / 2, 134), sp_val, fill='#00E5FF', font=FONT_MONO_XL)
-    lbl_sp = "KM/H  (30 MPH)"
-    lbl_sp_w = draw.textlength(lbl_sp, font=FONT_MONO_SM)
-    draw.text((left_mid - lbl_sp_w / 2, 204), lbl_sp, fill='#8B949E', font=FONT_MONO_SM)
-
-    # Divider Line
-    draw.line([(W / 2, 130), (W / 2, 234)], fill='#21262D', width=1)
-
-    # Heading (Right Half Centered)
-    hd_val = "45°"
-    hd_w = draw.textlength(hd_val, font=FONT_MONO_XL)
-    right_mid = 24 + (W - 48) * 0.75
-    draw.text((right_mid - hd_w / 2, 134), hd_val, fill='#FFD600', font=FONT_MONO_XL)
-    lbl_hd = "HEADING // NE"
-    lbl_hd_w = draw.textlength(lbl_hd, font=FONT_MONO_SM)
-    draw.text((right_mid - lbl_hd_w / 2, 204), lbl_hd, fill='#8B949E', font=FONT_MONO_SM)
-
-    # Radar Map Canvas (Central Box)
-    box_y = 274
-    box_h = 560
-    draw.rounded_rectangle([(24, box_y), (W - 24, box_y + box_h)], radius=8, fill='#070A0F', outline='#00E5FF', width=1)
+    # Layer 2 (Bottom card shadow offset)
+    draw.rounded_rectangle([(36, stack_y + 12), (W - 36, stack_y + 242)], radius=12, fill='#0A0D12', outline='#16202E', width=1)
+    # Layer 1 (Middle card shadow offset)
+    draw.rounded_rectangle([(30, stack_y + 6), (W - 30, stack_y + 236)], radius=12, fill='#0E1420', outline='#212E40', width=1)
     
-    rcx = W / 2.0
-    rcy = box_y + box_h / 2.0
-    for r in (80, 160, 240, 320):
-        draw.ellipse([(rcx - r, rcy - r), (rcx + r, rcy + r)], outline='#16222F', width=1)
-    draw.line([(rcx - 24, rcy), (rcx + 24, rcy)], fill='#16222F', width=1)
-    draw.line([(rcx, rcy - 24), (rcx, rcy + 24)], fill='#16222F', width=1)
+    # Front Layer Card
+    draw.rounded_rectangle([(24, stack_y), (W - 24, stack_y + 230)], radius=12, fill='#121A28', outline='#00E5FF', width=2)
 
-    # Explored road trail
-    draw.line([(rcx - 160, rcy + 140), (rcx - 80, rcy + 70), (rcx, rcy), (rcx + 100, rcy - 80), (rcx + 210, rcy - 120)], fill='#00E676', width=8)
+    # Person Header Bar
+    # Contact Avatar Circle
+    draw.ellipse([(40, stack_y + 14), (80, stack_y + 54)], fill='#1F2D40', outline='#00E5FF', width=1)
+    draw.text((52, stack_y + 22), "👤", fill='#00E5FF', font=font_place_name)
 
-    # Cleared Fog Reticle
-    draw.ellipse([(rcx - 140, rcy - 140), (rcx + 140, rcy + 140)], outline='#00E5FF', width=3)
+    # Contact Name & Badge
+    draw.text((94, stack_y + 16), "Annabell", fill='#FFFFFF', font=font_contact_name)
+    draw.rounded_rectangle([(180, stack_y + 16), (360, stack_y + 40)], radius=4, fill='#1E2E44')
+    draw.text((190, stack_y + 22), "2 SAVED PLACES • EXPANDED ▼", fill='#00E5FF', font=FONT_MONO_XS)
+
+    # Add sub-destination button
+    draw.rounded_rectangle([(W - 130, stack_y + 14), (W - 40, stack_y + 44)], radius=4, fill='#182333', outline='#303E54', width=1)
+    draw.text((W - 116, stack_y + 22), "+ ADD", fill='#00E5FF', font=FONT_MONO_SM)
+
+    # Divider line
+    draw.line([(40, stack_y + 58), (W - 40, stack_y + 58)], fill='#212E40', width=1)
+
+    # Annabell Sub-Destination 1: Home (With user-added photo thumbnail!)
+    sub1_y = stack_y + 68
+    draw.rounded_rectangle([(38, sub1_y), (W - 38, sub1_y + 72)], radius=6, fill='#172130', outline='#26354A', width=1)
     
-    # Vehicle Cursor
-    draw.polygon([(rcx + 12, rcy - 12), (rcx - 6, rcy - 2), (rcx - 2, rcy + 2), (rcx - 12, rcy + 12)], fill='#00E5FF')
+    # Photo Thumbnail
+    draw.rounded_rectangle([(48, sub1_y + 8), (104, sub1_y + 64)], radius=4, fill='#203248', outline='#FF4081', width=1)
+    draw.polygon([(76, sub1_y + 18), (56, sub1_y + 36), (96, sub1_y + 36)], fill='#FF80AB')
+    draw.rectangle([(62, sub1_y + 36), (90, sub1_y + 58)], fill='#121C28')
 
-    draw.text((40, box_y + 16), "SURVEILLANCE BEAM: 180M  •  OPACITY: 95%", fill='#00E5FF', font=FONT_MONO_SM)
-    draw.text((40, box_y + box_h - 28), "MAP: [Tactical Obsidian]  |  FOG: [Tactical Radar]", fill='#8B949E', font=FONT_MONO_SM)
+    draw.text((116, sub1_y + 12), "Home", fill='#FFFFFF', font=font_place_name)
+    draw.text((116, sub1_y + 32), "19 King's Road, Hove, East Sussex", fill='#8B949E', font=FONT_TEXT)
+    draw.text((116, sub1_y + 50), "8.4 km E  •  50.8242°N, 0.1558°W", fill='#00E676', font=FONT_MONO_SM)
 
-    # Exploration Intel Card
-    card2_y = box_y + box_h + 24
-    card2_h = 190
-    draw.rounded_rectangle([(24, card2_y), (W - 24, card2_y + card2_h)], radius=8, fill='#121721', outline='#21262D', width=1)
-    draw.text((44, card2_y + 18), "EXPLORATION INTEL", fill='#8B949E', font=FONT_MONO_SM)
-    draw.text((W - 180, card2_y + 18), "TACTICAL VANGUARD", fill='#FFD600', font=FONT_MONO_SM)
+    draw.rounded_rectangle([(W - 128, sub1_y + 18), (W - 50, sub1_y + 54)], radius=4, fill='#00E5FF')
+    draw.text((W - 114, sub1_y + 28), "ENGAGE", fill='#0A0D12', font=FONT_HEAD)
 
-    draw.text((44, card2_y + 54), "5.42 km²", fill='#F0F6FC', font=FONT_MONO_LG)
-    draw.text((44, card2_y + 104), "Territory Uncovered", fill='#8B949E', font=FONT_TEXT)
+    # Annabell Sub-Destination 2: Design Studio (No photo -> Icon badge fallback!)
+    sub2_y = sub1_y + 80
+    draw.rounded_rectangle([(38, sub2_y), (W - 38, sub2_y + 72)], radius=6, fill='#172130', outline='#26354A', width=1)
 
-    draw.text((W - 240, card2_y + 54), "4.15 km", fill='#00E676', font=FONT_MONO_LG)
-    draw.text((W - 240, card2_y + 104), "Uncharted Streak", fill='#8B949E', font=FONT_TEXT)
+    # Icon Fallback Badge
+    draw.rounded_rectangle([(48, sub2_y + 8), (104, sub2_y + 64)], radius=4, fill='#1C2638', outline='#303E54', width=1)
+    draw.text((66, sub2_y + 26), "🎨", fill='#00E5FF', font=font_place_name)
 
-    draw.line([(44, card2_y + 134), (W - 44, card2_y + 134)], fill='#21262D', width=1)
-    draw.text((44, card2_y + 150), "Discovered Cells: 8,672  •  Next Rank at 25.0 km²", fill='#00E5FF', font=FONT_MONO_SM)
+    draw.text((116, sub2_y + 12), "Design Studio", fill='#FFFFFF', font=font_place_name)
+    draw.text((116, sub2_y + 32), "North Laine Creative Hub, Gloucester Rd, Brighton", fill='#8B949E', font=FONT_TEXT)
+    draw.text((116, sub2_y + 50), "11.7 km NE  •  50.8279°N, 0.1389°W", fill='#00E676', font=FONT_MONO_SM)
 
-    # Middle Action Buttons
-    act_y = card2_y + card2_h + 20
-    btn_w = (W - 60) // 2
+    draw.rounded_rectangle([(W - 128, sub2_y + 18), (W - 50, sub2_y + 54)], radius=4, fill='#00E5FF')
+    draw.text((W - 114, sub2_y + 28), "ENGAGE", fill='#0A0D12', font=FONT_HEAD)
+
+    # =========================================================================
+    # 6. REAL-TIME SPEED & HEADING TELEMETRY
+    # =========================================================================
+    tel_y = stack_y + 242
+    draw.rounded_rectangle([(24, tel_y), (W - 24, tel_y + 104)], radius=8, fill='#101622', outline='#21262D', width=1)
+
+    # Speed
+    draw.text((90, tel_y + 18), "48", fill='#00E5FF', font=FONT_MONO_XL)
+    draw.text((70, tel_y + 78), "KM/H  (30 MPH)", fill='#8B949E', font=FONT_MONO_SM)
+
+    # Divider
+    draw.line([(W / 2, tel_y + 14), (W / 2, tel_y + 90)], fill='#21262D', width=1)
+
+    # Heading
+    draw.text((W / 2 + 70, tel_y + 18), "45°", fill='#FFD600', font=FONT_MONO_XL)
+    draw.text((W / 2 + 54, tel_y + 78), "HEADING // NE (BEARING)", fill='#8B949E', font=FONT_MONO_SM)
+
+    # =========================================================================
+    # 7. EXPLORATION INTEL & RADAR RECON
+    # =========================================================================
+    radar_y = tel_y + 116
+    draw.rounded_rectangle([(24, radar_y), (W - 24, radar_y + 140)], radius=8, fill='#0B1017', outline='#00E5FF', width=1)
     
-    # Left Button: ENGAGE ROUTE
-    draw.rounded_rectangle([(24, act_y), (24 + btn_w, act_y + 58)], radius=8, fill='#00E5FF')
-    txt_engage = "ENGAGE ROUTE"
-    te_w = draw.textlength(txt_engage, font=FONT_HEAD)
-    draw.text((24 + (btn_w - te_w) / 2, act_y + 22), txt_engage, fill='#0A0D12', font=FONT_HEAD)
+    # Left mini radar
+    r_cx, r_cy = 84, radar_y + 70
+    for rr in (48, 32, 16):
+        draw.ellipse([(r_cx - rr, r_cy - rr), (r_cx + rr, r_cy + rr)], outline='#162534', width=1)
+    draw.line([(r_cx - 50, r_cy), (r_cx + 50, r_cy)], fill='#162534', width=1)
+    draw.line([(r_cx, r_cy - 50), (r_cx, r_cy + 50)], fill='#162534', width=1)
+    # Cleared area & vehicle cursor
+    draw.ellipse([(r_cx - 24, r_cy - 24), (r_cx + 24, r_cy + 24)], outline='#00E5FF', width=2)
+    draw.polygon([(r_cx + 8, r_cy - 8), (r_cx - 4, r_cy - 2), (r_cx - 2, r_cy + 2), (r_cx - 8, r_cy + 8)], fill='#00E5FF')
 
-    # Right Button: OFFLINE MAPS
-    draw.rounded_rectangle([(36 + btn_w, act_y), (W - 24, act_y + 58)], radius=8, fill='#121721', outline='#21262D', width=1)
-    txt_maps = "OFFLINE MAPS"
-    tm_w = draw.textlength(txt_maps, font=FONT_HEAD)
-    draw.text((36 + btn_w + (btn_w - tm_w) / 2, act_y + 22), txt_maps, fill='#F0F6FC', font=FONT_HEAD)
+    # Exploration Intel Numbers
+    draw.text((150, radar_y + 16), "TACTICAL EXPLORATION INTEL  •  RADAR SCANNING 24/7", fill='#00E5FF', font=FONT_MONO_SM)
+    draw.text((150, radar_y + 44), "5.42 km²", fill='#FFFFFF', font=FONT_MONO_LG)
+    draw.text((150, radar_y + 88), "Territory Uncovered", fill='#8B949E', font=FONT_TEXT)
 
-    # Bottom Android Navigation Bar (Tabs: HUD, ROUTE, SKINS, INTEL)
+    draw.text((W - 220, radar_y + 44), "4.15 km", fill='#00E676', font=FONT_MONO_LG)
+    draw.text((W - 220, radar_y + 88), "Uncharted Streak", fill='#8B949E', font=FONT_TEXT)
+    draw.text((150, radar_y + 114), "Surveillance Beam: 50m Default  •  Opacity: 50%", fill='#8B949E', font=FONT_MONO_XS)
+
+    # =========================================================================
+    # 8. BOTTOM NAVIGATION BAR
+    # =========================================================================
     nav_y = H - 90
     draw.rectangle([(0, nav_y), (W, H)], fill='#0D1117')
     draw.line([(0, nav_y), (W, nav_y)], fill='#21262D', width=1)
-    
+
     tabs = [
         ("HUD", "#00E5FF", True),
-        ("ROUTE", "#8B949E", False),
+        ("MAP", "#8B949E", False),
         ("SKINS", "#8B949E", False),
-        ("INTEL", "#8B949E", False),
+        ("OFFLINE", "#8B949E", False),
     ]
     tab_step = W / len(tabs)
     for i, (tname, tcol, is_active) in enumerate(tabs):

@@ -122,6 +122,8 @@ class MainActivity : ComponentActivity() {
                 var showSkinsDialog by remember { mutableStateOf(false) }
                 var showOfflineDialog by remember { mutableStateOf(false) }
                 var hasDismissedStartupSync by remember { mutableStateOf(false) }
+                var targetWaypoint by remember { mutableStateOf<Pair<Double, Double>?>(null) }
+                var targetWaypointName by remember { mutableStateOf<String?>(null) }
 
                 // Check if either an app update or map update is available and not yet dismissed
                 val isStartupSyncAvailable = !hasDismissedStartupSync && (
@@ -263,6 +265,16 @@ class MainActivity : ComponentActivity() {
                                     },
                                     onToggleBackgroundRadar = {
                                         toggleBackgroundRadar()
+                                    },
+                                    onNavigateToDestination = { name, destLat, destLon ->
+                                        targetWaypoint = destLat to destLon
+                                        targetWaypointName = name
+                                        selectedTab = 1
+                                        Toast.makeText(
+                                            this@MainActivity,
+                                            "Target locked: $name. Opening Tactical Map...",
+                                            Toast.LENGTH_SHORT
+                                        ).show()
                                     }
                                 )
                             }
@@ -274,6 +286,8 @@ class MainActivity : ComponentActivity() {
                                     skinManager = ReconApplication.instance.skinManager,
                                     offlineTileRepository = ReconApplication.instance.offlineTileRepository,
                                     fogPreferences = ReconApplication.instance.fogPreferences,
+                                    initialWaypoint = targetWaypoint,
+                                    initialWaypointName = targetWaypointName,
                                     onNavigateToWaypoint = { wpLat, wpLon ->
                                         Toast.makeText(
                                             this@MainActivity,

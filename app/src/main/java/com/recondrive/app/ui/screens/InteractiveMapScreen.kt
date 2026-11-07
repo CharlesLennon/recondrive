@@ -52,6 +52,8 @@ fun InteractiveMapScreen(
     offlineTileRepository: OfflineTileRepository,
     fogPreferences: FogPreferences = com.recondrive.app.ReconApplication.instance.fogPreferences,
     osmTileManager: OsmTileManager = com.recondrive.app.ReconApplication.instance.osmTileManager,
+    initialWaypoint: Pair<Double, Double>? = null,
+    initialWaypointName: String? = null,
     onNavigateToWaypoint: (lat: Double, lon: Double) -> Unit = { _, _ -> },
     onOpenSkins: () -> Unit = {},
     onOpenOfflinePacks: () -> Unit = {}
@@ -63,15 +65,27 @@ fun InteractiveMapScreen(
     val tileRevision by osmTileManager.revision.collectAsState()
 
     // Interactive Viewport State (Default: Vehicle Current Position, default zoom 12.5f for clear regional overview)
-    var cameraLat by remember { mutableDoubleStateOf(currentLat) }
-    var cameraLon by remember { mutableDoubleStateOf(currentLon) }
+    var cameraLat by remember { mutableDoubleStateOf(initialWaypoint?.first ?: currentLat) }
+    var cameraLon by remember { mutableDoubleStateOf(initialWaypoint?.second ?: currentLon) }
     var zoom by remember { mutableFloatStateOf(12.5f) } // 6.0f (whole UK) to 18.5f (street level)
-    var isFollowingGps by remember { mutableStateOf(true) }
+    var isFollowingGps by remember { mutableStateOf(initialWaypoint == null) }
     var isFogLayerActive by remember { mutableStateOf(true) }
 
     // Selected Target Waypoint
-    var selectedWaypoint by remember { mutableStateOf<Pair<Double, Double>?>(null) }
-    var waypointName by remember { mutableStateOf("Custom Tactical Waypoint") }
+    var selectedWaypoint by remember(initialWaypoint) { mutableStateOf<Pair<Double, Double>?>(initialWaypoint) }
+    var waypointName by remember(initialWaypointName) { mutableStateOf(initialWaypointName ?: "Custom Tactical Waypoint") }
+
+    LaunchedEffect(initialWaypoint) {
+        if (initialWaypoint != null) {
+            cameraLat = initialWaypoint.first
+            cameraLon = initialWaypoint.second
+            selectedWaypoint = initialWaypoint
+            if (initialWaypointName != null) {
+                waypointName = initialWaypointName
+            }
+            isFollowingGps = false
+        }
+    }
 
     // Map Rendering Mode: "HYBRID" (OSM Tiles + Vector), "VECTOR" (Pure Offline Vector Engine), "TILES" (OSM Streets)
     var mapRenderingMode by remember { mutableStateOf("HYBRID") }

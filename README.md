@@ -1,7 +1,7 @@
 # 🛰️ ReconDrive: Tactical OSM & Android Auto Exploration Navigator
 
 [![GitHub Release](https://img.shields.io/github/v/release/CharlesLennon/recondrive?color=cyan&label=Latest%20Release)](https://github.com/CharlesLennon/recondrive/releases/latest)
-[![Download APK](https://img.shields.io/badge/Download-APK%20(v1.0.7)-brightgreen?logo=android)](https://github.com/CharlesLennon/recondrive/releases/download/v1.0.7/ReconDrive-v1.0.7-tactical.apk)
+[![Download APK](https://img.shields.io/badge/Download-APK%20(v1.0.8)-brightgreen?logo=android)](https://github.com/CharlesLennon/recondrive/releases/download/v1.0.8/ReconDrive-v1.0.8-tactical.apk)
 [![Build Android APK](https://github.com/CharlesLennon/recondrive/actions/workflows/build-apk.yml/badge.svg)](https://github.com/CharlesLennon/recondrive/actions/workflows/build-apk.yml)
 [![Android](https://img.shields.io/badge/Platform-Android%20%7C%20Android%20Auto-green.svg)](https://developer.android.com/training/cars/apps)
 [![Kotlin](https://img.shields.io/badge/Language-Kotlin%201.9.23-blue.svg)](https://kotlinlang.org/)
@@ -27,11 +27,11 @@ Full hardware-accelerated map surface projection on the car dashboard showing ex
 
 ---
 
-### 2. Handset Tactical HUD (Jetpack Compose)
-Mobile portrait dashboard with high-visibility speedometer (KM/H & MPH), heading bearing tape, radar canvas preview, exploration stats card, and destination navigation actions.
+### 2. Handset Tactical HUD & J.A.R.V.I.S. AI Cockpit (Jetpack Compose)
+Mobile portrait dashboard featuring an AI assistant cockpit asking *"Where to, sir?"*, holographic arc reactor diagnostics, saved location cards (Home, Work) with photo thumbnails, stacked contact cards for sub-destinations (e.g., Annabell), high-visibility speedometer (KM/H & MPH), heading bearing tape, radar canvas preview, and one-tap destination engagement routing.
 
 ![Handset Tactical HUD](screenshots/screenshot_02_handset_tactical_hud.png)
-*Fig 2. Mobile handset tactical HUD with real-time speed, heading tape, active fog perimeter, and exploration rank.*
+*Fig 2. Mobile tactical HUD featuring J.A.R.V.I.S. AI cockpit prompt, saved destination cards with photo previews, stacked contact cards, and real-time telemetry.*
 
 ---
 
