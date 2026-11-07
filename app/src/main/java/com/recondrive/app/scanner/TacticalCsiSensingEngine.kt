@@ -134,17 +134,18 @@ class TacticalCsiSensingEngine(private val context: Context) {
                         biologicalState = HumanPresenceState.ACTIVE_HUMAN_TRANSIT
                         val walkFreq = 1.8 // 1.8 Hz footstep Doppler modulation
                         phaseAngle += 0.35
-                        val stepModulation = abs(sin(phaseAngle * walkFreq)) * 0.45f
-                        rawPerturbation = (0.55f + stepModulation + (sin(phaseAngle * 5.2) * 0.15f).toFloat()).coerceIn(0.48f, 0.98f)
+                        val stepModulation = (abs(sin(phaseAngle * walkFreq)) * 0.45).toFloat()
+                        val microModulation = (sin(phaseAngle * 5.2) * 0.15).toFloat()
+                        rawPerturbation = (0.55f + stepModulation + microModulation).coerceIn(0.48f, 0.98f)
                         humanCount = 1
-                        distance = 2.4f + (sin(phaseAngle * 0.5) * 1.2f).toFloat().coerceIn(0f, 4f)
+                        distance = (2.4 + sin(phaseAngle * 0.5) * 1.2).toFloat().coerceIn(0f, 4f)
                         bpm = 0
                     }
                     liveVariance > 0.12f || isSimulatedBreathing -> {
                         biologicalState = HumanPresenceState.RESPIRATION_MICRO_MOTION
                         val breathFreq = 0.28 // ~17 breaths per minute
                         phaseAngle += 0.08
-                        val chestCavityModulation = (sin(phaseAngle * breathFreq) * 0.18f).toFloat()
+                        val chestCavityModulation = (sin(phaseAngle * breathFreq) * 0.18).toFloat()
                         rawPerturbation = (0.24f + abs(chestCavityModulation)).coerceIn(0.18f, 0.44f)
                         humanCount = 1
                         distance = 3.6f
@@ -153,7 +154,8 @@ class TacticalCsiSensingEngine(private val context: Context) {
                     else -> {
                         biologicalState = HumanPresenceState.VACANT
                         phaseAngle += 0.04
-                        rawPerturbation = (baseNoiseFloor + (sin(phaseAngle * 0.8) * 0.03f).toFloat()).coerceIn(0.03f, 0.15f)
+                        val ambientModulation = (sin(phaseAngle * 0.8) * 0.03).toFloat()
+                        rawPerturbation = (baseNoiseFloor + ambientModulation).coerceIn(0.03f, 0.15f)
                         humanCount = 0
                         distance = 0f
                         bpm = 0
