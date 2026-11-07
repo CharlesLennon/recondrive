@@ -924,9 +924,18 @@ object UkOsmDataEngine {
         OsmPlace("Stratford", "Greater London", 51.5430, -0.0016, false, 300000)
     )
 
+    val UK_STREET_NAMES: List<String> = listOf(
+        "High Street", "Station Road", "Church Street", "Church Lane", "Victoria Road",
+        "Green Lane", "Manor Road", "Park Road", "London Road", "Queens Road",
+        "King Street", "New Road", "Park Avenue", "The Avenue", "Mill Lane",
+        "School Lane", "Main Street", "St. John's Road", "Alexander Road", "George Street",
+        "North Street", "South Street", "West Street", "East Street", "The Crescent",
+        "Crown Hill", "Castle Lane", "Broad Street", "Market Square", "Bridge Street"
+    )
+
     /**
      * Dynamically generates secondary and residential road networks for the current viewport bounding box.
-     * Guarantees realistic road coverage anywhere in the UK at zoom >= 11.0f.
+     * Guarantees realistic road coverage anywhere in the UK at zoom >= 10.0f.
      */
     fun getLocalStreetGridForBounds(
         bounds: UkBoundingBox,
@@ -938,11 +947,13 @@ object UkOsmDataEngine {
 
         // 1. Grid resolution step size based on zoom level
         val step = when {
-            zoom >= 15.5f -> 0.003  // ~300m fine residential grid
-            zoom >= 13.5f -> 0.007  // ~700m city streets & avenues
-            zoom >= 12.0f -> 0.015  // ~1.5km regional collectors
-            zoom >= 10.5f -> 0.030  // ~3km primary interconnects
-            else -> 0.060           // ~6km regional sector grid
+            zoom >= 18.0f -> 0.00045 // ~45m intimate residential lanes & cul-de-sacs
+            zoom >= 16.5f -> 0.00090 // ~90m neighborhood street blocks
+            zoom >= 15.0f -> 0.00180 // ~180m local road network
+            zoom >= 13.5f -> 0.00400 // ~400m urban avenues & collectors
+            zoom >= 12.0f -> 0.01000 // ~1km regional collectors
+            zoom >= 10.5f -> 0.02500 // ~2.5km primary interconnects
+            else -> 0.05000          // ~5km regional corridors
         }
 
         val startLat = floor(bounds.minLat / step) * step
@@ -964,9 +975,14 @@ object UkOsmDataEngine {
             }
             if (pts.size >= 2) {
                 val isMajor = (latIdx % 3 == 0)
+                val streetName = if (isMajor) {
+                    "A${(currLat * 100).toInt().absoluteValue} " + UK_STREET_NAMES[abs((currLat * 1000).toInt()) % UK_STREET_NAMES.size]
+                } else {
+                    UK_STREET_NAMES[abs((currLat * 10000).toInt()) % UK_STREET_NAMES.size]
+                }
                 localStreets.add(
                     OsmRoadSegment(
-                        name = if (isMajor) "Sector Arterial Road" else "Local Street",
+                        name = streetName,
                         ref = if (isMajor) "B${(currLat * 100).toInt().absoluteValue}" else "C${(currLat * 200).toInt().absoluteValue}",
                         type = if (isMajor) OsmRoadType.SECONDARY else OsmRoadType.RESIDENTIAL,
                         points = pts
@@ -990,9 +1006,14 @@ object UkOsmDataEngine {
             }
             if (pts.size >= 2) {
                 val isMajor = (lonIdx % 3 == 0)
+                val streetName = if (isMajor) {
+                    "B${(currLon * 100).toInt().absoluteValue} " + UK_STREET_NAMES[abs((currLon * 1000 + 13).toInt()) % UK_STREET_NAMES.size]
+                } else {
+                    UK_STREET_NAMES[abs((currLon * 10000 + 7).toInt()) % UK_STREET_NAMES.size]
+                }
                 localStreets.add(
                     OsmRoadSegment(
-                        name = if (isMajor) "Radial Boulevard" else "Way",
+                        name = streetName,
                         ref = if (isMajor) "A${(currLon * 100).toInt().absoluteValue}" else "B${(currLon * 200).toInt().absoluteValue}",
                         type = if (isMajor) OsmRoadType.PRIMARY else OsmRoadType.TERTIARY,
                         points = pts

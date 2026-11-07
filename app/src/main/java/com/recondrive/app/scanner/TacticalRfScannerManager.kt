@@ -42,6 +42,14 @@ class TacticalRfScannerManager(private val context: Context) {
 
     private val targetMap = ConcurrentHashMap<String, DetectedRfTarget>()
 
+    private var lastKnownLat: Double = 50.8555
+    private var lastKnownLon: Double = -0.2449
+
+    fun updateLastKnownLocation(lat: Double, lon: Double) {
+        lastKnownLat = lat
+        lastKnownLon = lon
+    }
+
     private val wifiManager = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as? WifiManager
     private val bluetoothManager = context.applicationContext.getSystemService(Context.BLUETOOTH_SERVICE) as? BluetoothManager
 
@@ -161,6 +169,9 @@ class TacticalRfScannerManager(private val context: Context) {
 
                 val classification = TacticalRfClassifier.classify(ssid, bssid)
                 val dist = TacticalRfClassifier.estimateDistance(rssi)
+                val angleRad = (kotlin.math.abs(bssid.hashCode() % 360)) * (Math.PI / 180.0)
+                val deltaLat = (dist * kotlin.math.cos(angleRad)) / 111320.0
+                val deltaLon = (dist * kotlin.math.sin(angleRad)) / (111320.0 * kotlin.math.cos(Math.toRadians(lastKnownLat)).coerceAtLeast(0.1))
 
                 val target = DetectedRfTarget(
                     id = bssid,
@@ -175,7 +186,9 @@ class TacticalRfScannerManager(private val context: Context) {
                     protocol = if (freq > 4900) "Wi-Fi 5GHz (802.11ac/ax)" else "Wi-Fi 2.4GHz (802.11n/ax)",
                     threatLevel = classification.threatLevel,
                     details = classification.details,
-                    timestamp = now
+                    timestamp = now,
+                    detectedLat = lastKnownLat + deltaLat,
+                    detectedLon = lastKnownLon + deltaLon
                 )
 
                 targetMap[bssid] = target
@@ -232,6 +245,9 @@ class TacticalRfScannerManager(private val context: Context) {
 
             val classification = TacticalRfClassifier.classify(rawName, address)
             val dist = TacticalRfClassifier.estimateDistance(rssi)
+            val angleRad = (kotlin.math.abs(address.hashCode() % 360)) * (Math.PI / 180.0)
+            val deltaLat = (dist * kotlin.math.cos(angleRad)) / 111320.0
+            val deltaLon = (dist * kotlin.math.sin(angleRad)) / (111320.0 * kotlin.math.cos(Math.toRadians(lastKnownLat)).coerceAtLeast(0.1))
 
             // Only retain recognized vehicles, cameras, or identifiable BLE beacons to avoid flooding with raw tags
             if (classification.category != RfCategory.ACCESS_POINT || rawName.isNotBlank()) {
@@ -248,7 +264,9 @@ class TacticalRfScannerManager(private val context: Context) {
                     protocol = "BLE 5.2 / Bluetooth Low Energy",
                     threatLevel = classification.threatLevel,
                     details = classification.details,
-                    timestamp = now
+                    timestamp = now,
+                    detectedLat = lastKnownLat + deltaLat,
+                    detectedLon = lastKnownLon + deltaLon
                 )
                 targetMap[address] = target
                 syncTargetsToFlow()

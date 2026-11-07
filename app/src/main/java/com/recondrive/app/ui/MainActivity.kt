@@ -415,6 +415,9 @@ class MainActivity : ComponentActivity() {
                                     scannerManager = ReconApplication.instance.rfScannerManager,
                                     currentLat = currentLat,
                                     currentLon = currentLon,
+                                    currentHeading = currentHeading,
+                                    deviceHeading = deviceHeading,
+                                    currentSpeedKmh = currentSpeedKmh,
                                     onNavigateToLocation = { name, destLat, destLon ->
                                         targetWaypoint = destLat to destLon
                                         targetWaypointName = name
