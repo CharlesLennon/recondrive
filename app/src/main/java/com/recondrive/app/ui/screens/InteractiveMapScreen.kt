@@ -477,11 +477,18 @@ fun InteractiveMapScreen(
             if (isFogLayerActive) {
                 val nativeCanvas = drawContext.canvas.nativeCanvas
 
-                // Surveillance Radar Beam Radius: Scales with configured fogRange (50m to 500m) and map zoom
-                // Guaranteed visible sector: 85px minimum, max 42% of screen dimension
-                val baseBeamPx = 95f + (fogRange.toFloat() - 50f) * (240f / 450f)
-                val zoomScale = (1.0f + (zoom - 13.0f) * 0.12f).coerceIn(0.70f, 1.45f)
-                val screenBeamRadius = (baseBeamPx * zoomScale).coerceIn(85f, (width.coerceAtMost(height) * 0.42f))
+                // Surveillance Radar Beam Radius: Anchored 1:1 to real-world meters at the current Web Mercator zoom
+                // In Web Mercator, 1 degree longitude = 111,320m * cos(latitude).
+                // We project a point 1 meter away to calculate the exact pixel-to-meter ratio for the active camera viewport:
+                val cosLat = cos(Math.toRadians(currentLat)).coerceAtLeast(0.01)
+                val deltaLon1m = 1.0 / (111320.0 * cosLat)
+                val p1m = project(currentLat, currentLon + deltaLon1m)
+                val pixelsPerMeter = kotlin.math.abs(p1m.x - vehicleScreenPos.x).toDouble()
+                val geoBeamRadius = (pixelsPerMeter * fogRange.toDouble()).toFloat()
+
+                // Relative to zoom level: expands when zooming in, contracts when zooming out
+                // Floor at 12f so when zoomed all the way out to UK view, the cursor reticle stays clearly visible
+                val screenBeamRadius = geoBeamRadius.coerceAtLeast(12f)
 
                 // 1. Android Native Path with EVEN_ODD FillType (Rock-solid hardware-accelerated cutout)
                 val androidShroudPath = android.graphics.Path().apply {
@@ -501,21 +508,23 @@ fun InteractiveMapScreen(
                 nativeCanvas.drawPath(androidShroudPath, shroudPaint)
 
                 // 3. Vignette Transition Shadow (Atmospheric boundary separating cleared sector from dense shroud)
-                val shadowRingPaint = android.graphics.Paint().apply {
-                    color = fogSkin.shroudColor
-                    alpha = (effectiveOpacity * 200).toInt().coerceIn(0, 255)
-                    style = android.graphics.Paint.Style.STROKE
-                    strokeWidth = 24f
-                    isAntiAlias = true
+                if (screenBeamRadius > 20f) {
+                    val shadowRingPaint = android.graphics.Paint().apply {
+                        color = fogSkin.shroudColor
+                        alpha = (effectiveOpacity * 200).toInt().coerceIn(0, 255)
+                        style = android.graphics.Paint.Style.STROKE
+                        strokeWidth = (screenBeamRadius * 0.15f).coerceIn(6f, 24f)
+                        isAntiAlias = true
+                    }
+                    nativeCanvas.drawCircle(vehicleScreenPos.x, vehicleScreenPos.y, screenBeamRadius + (screenBeamRadius * 0.08f).coerceIn(4f, 12f), shadowRingPaint)
                 }
-                nativeCanvas.drawCircle(vehicleScreenPos.x, vehicleScreenPos.y, screenBeamRadius + 12f, shadowRingPaint)
 
                 // 4. Perimeter Laser Glowing Boundary (Theme-specific laser border)
                 val auraPaint = android.graphics.Paint().apply {
                     color = fogSkin.perimeterGlowColor
                     alpha = 85
                     style = android.graphics.Paint.Style.STROKE
-                    strokeWidth = fogSkin.borderStrokeWidth + 6f
+                    strokeWidth = fogSkin.borderStrokeWidth + 4f
                     isAntiAlias = true
                 }
                 nativeCanvas.drawCircle(vehicleScreenPos.x, vehicleScreenPos.y, screenBeamRadius + 2f, auraPaint)
@@ -531,16 +540,18 @@ fun InteractiveMapScreen(
                 }
                 nativeCanvas.drawCircle(vehicleScreenPos.x, vehicleScreenPos.y, screenBeamRadius, perimeterPaint)
 
-                // Inner tactical range dashed circle
-                val innerRingPaint = android.graphics.Paint().apply {
-                    color = fogSkin.perimeterGlowColor
-                    alpha = 75
-                    style = android.graphics.Paint.Style.STROKE
-                    strokeWidth = 1.5f
-                    isAntiAlias = true
-                    pathEffect = android.graphics.DashPathEffect(floatArrayOf(6f, 6f), 0f)
+                // Inner tactical range dashed circle (only visible when cleared sector is wide enough)
+                if (screenBeamRadius > 35f) {
+                    val innerRingPaint = android.graphics.Paint().apply {
+                        color = fogSkin.perimeterGlowColor
+                        alpha = 75
+                        style = android.graphics.Paint.Style.STROKE
+                        strokeWidth = 1.5f
+                        isAntiAlias = true
+                        pathEffect = android.graphics.DashPathEffect(floatArrayOf(6f, 6f), 0f)
+                    }
+                    nativeCanvas.drawCircle(vehicleScreenPos.x, vehicleScreenPos.y, screenBeamRadius * 0.88f, innerRingPaint)
                 }
-                nativeCanvas.drawCircle(vehicleScreenPos.x, vehicleScreenPos.y, (screenBeamRadius * 0.92f).coerceAtLeast(10f), innerRingPaint)
 
                 // 5. Explored Road Trajectory Glowing Track
                 val exploredTrail = Path().apply {

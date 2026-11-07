@@ -134,12 +134,14 @@ class AppUpdateManager(private val context: Context) {
 
         scope.launch {
             try {
-                val targetDir = File(
-                    context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS) ?: context.cacheDir,
-                    "updates"
-                ).apply { mkdirs() }
-
+                // Use internal cache directory to avoid SD card/scoped storage mounting or path-mapping issues
+                val targetDir = File(context.cacheDir, "updates").apply { mkdirs() }
                 val targetFile = File(targetDir, release.apkFileName)
+
+                // Delete any partial or obsolete build before downloading
+                if (targetFile.exists()) {
+                    targetFile.delete()
+                }
 
                 withContext(Dispatchers.IO) {
                     downloadFileWithRedirects(
@@ -156,7 +158,17 @@ class AppUpdateManager(private val context: Context) {
                     }
                 }
 
-                Timber.i("APK Download Completed: ${targetFile.absolutePath} (${targetFile.length()} bytes)")
+                // Make file world-readable so system package installer process can read the raw bytes
+                targetFile.setReadable(true, false)
+
+                // Verify package archive integrity prior to triggering installation
+                val packageArchiveInfo = context.packageManager.getPackageArchiveInfo(targetFile.absolutePath, 0)
+                if (packageArchiveInfo == null) {
+                    targetFile.delete()
+                    throw IllegalStateException("Downloaded package is corrupted or incomplete. Please retry.")
+                }
+
+                Timber.i("APK Download & Integrity Verified: ${targetFile.absolutePath} (${targetFile.length()} bytes)")
                 _updateState.value = UpdateState.ReadyToInstall(targetFile, release)
 
                 if (onAutoInstall) {
@@ -194,18 +206,39 @@ class AppUpdateManager(private val context: Context) {
                 }
             }
 
+            // Ensure world-readable permissions on Linux filesystem level
+            apkFile.setReadable(true, false)
+
             val apkUri: Uri = FileProvider.getUriForFile(
                 context,
                 "${context.packageName}.fileprovider",
                 apkFile
             )
 
-            val installIntent = Intent(Intent.ACTION_VIEW).apply {
-                setDataAndType(apkUri, "application/vnd.android.package-archive")
-                flags = Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK
+            // Explicitly grant read URI permissions to known system package installers across Android OEMs
+            val knownInstallers = listOf(
+                "com.google.android.packageinstaller",
+                "com.android.packageinstaller",
+                "com.google.android.apps.packageinstaller",
+                "com.samsung.android.packageinstaller",
+                "com.miui.packageinstaller",
+                "android"
+            )
+            for (pkg in knownInstallers) {
+                try {
+                    context.grantUriPermission(pkg, apkUri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                } catch (_: Exception) {}
             }
 
-            // Explicitly grant read URI permissions to resolving package installers
+            val installIntent = Intent(Intent.ACTION_VIEW).apply {
+                setDataAndType(apkUri, "application/vnd.android.package-archive")
+                flags = Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                        Intent.FLAG_ACTIVITY_NEW_TASK or
+                        Intent.FLAG_ACTIVITY_CLEAR_TOP
+                putExtra(Intent.EXTRA_NOT_UNKNOWN_SOURCE, true)
+            }
+
+            // Also grant to any activities that resolve the intent (now visible via <queries>)
             val resolveInfos = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                 context.packageManager.queryIntentActivities(
                     installIntent,
@@ -216,11 +249,25 @@ class AppUpdateManager(private val context: Context) {
                 context.packageManager.queryIntentActivities(installIntent, PackageManager.MATCH_DEFAULT_ONLY)
             }
             for (info in resolveInfos) {
-                context.grantUriPermission(info.activityInfo.packageName, apkUri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                try {
+                    context.grantUriPermission(info.activityInfo.packageName, apkUri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                } catch (_: Exception) {}
             }
 
-            Timber.i("Launching Android Package Installer for $apkUri")
-            context.startActivity(installIntent)
+            Timber.i("Launching Android Package Installer for $apkUri (resolving handlers: ${resolveInfos.size})")
+            try {
+                context.startActivity(installIntent)
+            } catch (e: Exception) {
+                Timber.w(e, "Standard ACTION_VIEW package install failed, trying ACTION_INSTALL_PACKAGE fallback")
+                val fallbackIntent = Intent(Intent.ACTION_INSTALL_PACKAGE).apply {
+                    setDataAndType(apkUri, "application/vnd.android.package-archive")
+                    flags = Intent.FLAG_GRANT_READ_URI_PERMISSION or
+                            Intent.FLAG_ACTIVITY_NEW_TASK or
+                            Intent.FLAG_ACTIVITY_CLEAR_TOP
+                    putExtra(Intent.EXTRA_NOT_UNKNOWN_SOURCE, true)
+                }
+                context.startActivity(fallbackIntent)
+            }
 
         } catch (e: Exception) {
             Timber.e(e, "Failed to launch package installer")

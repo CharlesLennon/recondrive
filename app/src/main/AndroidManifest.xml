@@ -25,6 +25,23 @@
         android:name="android.hardware.location.gps"
         android:required="true" />
 
+    <!-- Package Installer Queries for Target SDK 34 / Android 11+ In-App APK Updater -->
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:mimeType="application/vnd.android.package-archive" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.INSTALL_PACKAGE" />
+            <data android:mimeType="application/vnd.android.package-archive" />
+        </intent>
+        <package android:name="com.google.android.packageinstaller" />
+        <package android:name="com.android.packageinstaller" />
+        <package android:name="com.google.android.apps.packageinstaller" />
+        <package android:name="com.samsung.android.packageinstaller" />
+        <package android:name="com.miui.packageinstaller" />
+    </queries>
+
     <application
         android:name=".ReconApplication"
         android:allowBackup="true"
