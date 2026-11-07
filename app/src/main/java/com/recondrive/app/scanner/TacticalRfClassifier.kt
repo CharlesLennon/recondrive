@@ -131,17 +131,18 @@ object TacticalRfClassifier {
         // 1. BLUETOOTH CLASSIC MAJOR DEVICE CLASS (Vehicles, Audio, Telephony)
         // =====================================================================
         if (bluetoothClass != null) {
-            when (bluetoothClass.majorDeviceClass) {
-                BluetoothClass.Device.Major.VEHICLE -> {
-                    return ClassificationResult(
-                        category = RfCategory.VEHICLE,
-                        targetName = if (s.isNotBlank()) "VEHICLE BT ($s)" else "AUTOMOTIVE HANDS-FREE SYSTEM",
-                        vendor = knownVendor ?: "Automotive In-Cabin System",
-                        threatLevel = "CONNECTED VEHICLE TELEMETRY",
-                        details = "Bluetooth Classic BR/EDR vehicle infotainment / hands-free cockpit transceiver.",
-                        protocolOverride = "Bluetooth Classic (Vehicle Profile)"
-                    )
-                }
+            val devClass = bluetoothClass.deviceClass
+            val isCarAudioOrHandsfree = devClass == BluetoothClass.Device.AUDIO_VIDEO_CAR_AUDIO ||
+                    devClass == BluetoothClass.Device.AUDIO_VIDEO_HANDSFREE
+            if (isCarAudioOrHandsfree) {
+                return ClassificationResult(
+                    category = RfCategory.VEHICLE,
+                    targetName = if (s.isNotBlank()) "VEHICLE BT ($s)" else "AUTOMOTIVE HANDS-FREE SYSTEM",
+                    vendor = knownVendor ?: "Automotive In-Cabin System",
+                    threatLevel = "CONNECTED VEHICLE TELEMETRY",
+                    details = "Bluetooth Classic BR/EDR vehicle infotainment / hands-free cockpit transceiver.",
+                    protocolOverride = "Bluetooth Classic (Car Audio)"
+                )
             }
         }
 
