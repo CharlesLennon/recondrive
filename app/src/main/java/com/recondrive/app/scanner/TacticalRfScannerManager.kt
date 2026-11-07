@@ -285,7 +285,11 @@ class TacticalRfScannerManager(
 
         val distMoved = hypot(lat - prevLat, lon - prevLon) * 111320.0
         if (!hasReceivedRealLocation || distMoved > 40.0) {
-            hasReceivedRealLocation = true
+            if (!hasReceivedRealLocation) {
+                hasReceivedRealLocation = true
+                // Prune any default startup coordinates (e.g. Brighton placeholder)
+                targetMap.clear()
+            }
             ingestPublicCctvCameras(lat, lon, heading)
             if (_isSimulationEnabled.value) {
                 populateTacticalSimulationTargets(lat, lon)
@@ -294,7 +298,16 @@ class TacticalRfScannerManager(
     }
 
     private fun ingestPublicCctvCameras(lat: Double, lon: Double, heading: Float) {
-        val nearCams = publicCctvRepo.getCamerasNearLocation(lat, lon, 35000.0)
+        // Prune any CCTV cameras farther than 1500m from current host vehicle position
+        val outOfRange = targetMap.filter { (_, target) ->
+            target.category == RfCategory.CCTV_SURVEILLANCE &&
+            target.detectedLat != null && target.detectedLon != null &&
+            hypot((target.detectedLat - lat) * 111320.0, (target.detectedLon - lon) * 111320.0 * cos(Math.toRadians(lat))) > 1500.0
+        }.keys
+        outOfRange.forEach { targetMap.remove(it) }
+
+        // Ingest local cameras within 1200m range
+        val nearCams = publicCctvRepo.getCamerasNearLocation(lat, lon, 1200.0)
         for ((cam, dist) in nearCams) {
             val dLatM = (cam.latitude - lat) * 111320.0
             val dLonM = (cam.longitude - lon) * 111320.0 * cos(Math.toRadians(lat))
@@ -309,12 +322,12 @@ class TacticalRfScannerManager(
                 macAddress = cam.id,
                 vendor = cam.operator,
                 category = RfCategory.CCTV_SURVEILLANCE,
-                rssi = (-45 - (dist / 100.0).toInt()).coerceIn(-95, -30),
+                rssi = (-45 - (dist / 20.0).toInt()).coerceIn(-95, -30),
                 estimatedDistanceMeters = dist,
                 frequencyMhz = 2412,
                 protocol = "PUBLIC ACCESS CCTV (LIVE STREAM)",
                 threatLevel = "OPEN PUBLIC TRAFFIC & SECURITY CAMERA",
-                details = "${cam.locationDesc} • Operator: ${cam.operator} • URL: ${cam.liveImageUrl ?: "Active Feed"}",
+                details = "${cam.locationDesc} • Operator: ${cam.operator} • URL: ${cam.liveImageUrl ?: ""}",
                 timestamp = System.currentTimeMillis(),
                 detectedLat = cam.latitude,
                 detectedLon = cam.longitude,

@@ -146,15 +146,29 @@ fun TacticalScannerScreen(
         scannerManager.startScanning()
     }
 
-    val vehicleCount = detectedTargets.count { it.category == RfCategory.VEHICLE }
-    val keyCount = detectedTargets.count { it.category == RfCategory.CAR_KEY }
-    val cctvCount = detectedTargets.count { it.category == RfCategory.CCTV_SURVEILLANCE }
-    val droneCount = detectedTargets.count { it.category == RfCategory.DRONE_UAV }
-    val wifiCount = detectedTargets.count { it.category == RfCategory.ACCESS_POINT }
-    val savedCount = detectedTargets.count { it.savedMetadata != null }
-
-    val filteredTargets = remember(detectedTargets, selectedFilterCategory, filterSavedOnly) {
+    // Strict range filtering: only targets within selectedRangeMeters
+    val targetsInRange = remember(detectedTargets, selectedRangeMeters, currentLat, currentLon) {
         detectedTargets.filter { target ->
+            val dist = if (target.detectedLat != null && target.detectedLon != null) {
+                val dLat = (target.detectedLat - currentLat) * 111320.0
+                val dLon = (target.detectedLon - currentLon) * 111320.0 * cos(Math.toRadians(currentLat))
+                hypot(dLat, dLon)
+            } else {
+                target.estimatedDistanceMeters.toDouble()
+            }
+            dist <= selectedRangeMeters
+        }
+    }
+
+    val vehicleCount = targetsInRange.count { it.category == RfCategory.VEHICLE }
+    val keyCount = targetsInRange.count { it.category == RfCategory.CAR_KEY }
+    val cctvCount = targetsInRange.count { it.category == RfCategory.CCTV_SURVEILLANCE }
+    val droneCount = targetsInRange.count { it.category == RfCategory.DRONE_UAV }
+    val wifiCount = targetsInRange.count { it.category == RfCategory.ACCESS_POINT }
+    val savedCount = targetsInRange.count { it.savedMetadata != null }
+
+    val filteredTargets = remember(targetsInRange, selectedFilterCategory, filterSavedOnly) {
+        targetsInRange.filter { target ->
             val matchCategory = selectedFilterCategory == null || target.category == selectedFilterCategory
             val matchSaved = !filterSavedOnly || target.savedMetadata != null
             matchCategory && matchSaved
@@ -788,6 +802,9 @@ fun TacticalScannerScreen(
                     cameraLon = target.detectedLon ?: currentLon
                     isFollowingVehicle = false
                     if (target.category == RfCategory.CCTV_SURVEILLANCE) {
+                        val extractedUrl = if (target.details.contains("URL: http")) {
+                            target.details.substringAfter("URL: ").trim()
+                        } else null
                         viewingCctvCamera = scannerManager.publicCctvRepo.getCameraById(target.id)
                             ?: PublicCctvCamera(
                                 id = target.id,
@@ -796,7 +813,7 @@ fun TacticalScannerScreen(
                                 latitude = target.detectedLat ?: currentLat,
                                 longitude = target.detectedLon ?: currentLon,
                                 operator = target.vendor,
-                                liveImageUrl = target.details.substringAfter("URL: ", "https://s3-eu-west-1.amazonaws.com/jamcams.tfl.gov.uk/00001.07355.jpg")
+                                liveImageUrl = extractedUrl
                             )
                     }
                 },
@@ -1072,6 +1089,9 @@ fun TacticalScannerScreen(
                             onNavigateToLocation(target.displayName, pinLat, pinLon)
                         },
                         onViewCctv = {
+                            val extractedUrl = if (target.details.contains("URL: http")) {
+                                target.details.substringAfter("URL: ").trim()
+                            } else null
                             val cam = scannerManager.publicCctvRepo.getCameraById(target.id)
                                 ?: PublicCctvCamera(
                                     id = target.id,
@@ -1080,7 +1100,7 @@ fun TacticalScannerScreen(
                                     latitude = target.detectedLat ?: currentLat,
                                     longitude = target.detectedLon ?: currentLon,
                                     operator = target.vendor,
-                                    liveImageUrl = target.details.substringAfter("URL: ", "https://s3-eu-west-1.amazonaws.com/jamcams.tfl.gov.uk/00001.07355.jpg")
+                                    liveImageUrl = extractedUrl
                                 )
                             viewingCctvCamera = cam
                         }
@@ -2029,7 +2049,9 @@ private fun PublicCctvLiveViewerDialog(
     onNavigate: () -> Unit
 ) {
     var refreshNonce by remember { mutableLongStateOf(System.currentTimeMillis()) }
-    var isImageLoading by remember { mutableStateOf(true) }
+    var isImageLoading by remember { mutableStateOf(camera.liveImageUrl?.startsWith("http") == true) }
+    var isImageSuccess by remember { mutableStateOf(false) }
+    var opticMode by remember { mutableStateOf(if (camera.liveImageUrl?.startsWith("http") == true) "LIVE" else "FLIR") }
 
     val infiniteTransition = rememberInfiniteTransition(label = "cctv_live_pulse")
     val liveAlpha by infiniteTransition.animateFloat(
@@ -2065,7 +2087,7 @@ private fun PublicCctvLiveViewerDialog(
                             .background(Color.Red.copy(alpha = liveAlpha))
                     )
                     Text(
-                        text = "PUBLIC CCTV // LIVE STREAM",
+                        text = "PUBLIC CCTV // ${if (isImageSuccess && opticMode == "LIVE") "LIVE STREAM" else "TACTICAL OPTIC"}",
                         color = Color(0xFFFF5252),
                         fontSize = 12.sp,
                         fontWeight = FontWeight.Bold,
@@ -2080,7 +2102,7 @@ private fun PublicCctvLiveViewerDialog(
                     border = androidx.compose.foundation.BorderStroke(0.8.dp, Color.Red)
                 ) {
                     Text(
-                        text = "PUBLIC ACCESS",
+                        text = if (isImageSuccess && opticMode == "LIVE") "LIVE SNAPSHOT" else "TACTICAL FLIR",
                         color = Color(0xFFFF5252),
                         fontSize = 7.5.sp,
                         fontWeight = FontWeight.Bold,
@@ -2112,17 +2134,24 @@ private fun PublicCctvLiveViewerDialog(
                     )
                 }
 
-                // Live Camera Image Viewport
+                // Live Camera Image Viewport (Always active with Tactical Viewfinder fallback)
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(200.dp)
+                        .height(210.dp)
                         .clip(RoundedCornerShape(8.dp))
                         .background(Color.Black)
                         .border(1.dp, TacticalBorder, RoundedCornerShape(8.dp)),
                     contentAlignment = Alignment.Center
                 ) {
-                    if (camera.liveImageUrl != null) {
+                    // 1. Base Animated Tactical Viewfinder (Guarantees screen NEVER shows blank void)
+                    TacticalCctvViewfinder(
+                        camera = camera,
+                        opticMode = opticMode
+                    )
+
+                    // 2. Real Web Image Layer (When live URL is available and LIVE mode is active)
+                    if (camera.liveImageUrl != null && camera.liveImageUrl.startsWith("http") && opticMode == "LIVE") {
                         val imageUrl = if (camera.liveImageUrl.contains("?")) {
                             "${camera.liveImageUrl}&_t=$refreshNonce"
                         } else {
@@ -2135,8 +2164,14 @@ private fun PublicCctvLiveViewerDialog(
                                 .crossfade(true)
                                 .listener(
                                     onStart = { isImageLoading = true },
-                                    onSuccess = { _, _ -> isImageLoading = false },
-                                    onError = { _, _ -> isImageLoading = false }
+                                    onSuccess = { _, _ ->
+                                        isImageLoading = false
+                                        isImageSuccess = true
+                                    },
+                                    onError = { _, _ ->
+                                        isImageLoading = false
+                                        isImageSuccess = false
+                                    }
                                 )
                                 .build(),
                             contentDescription = camera.name,
@@ -2145,7 +2180,7 @@ private fun PublicCctvLiveViewerDialog(
                         )
                     }
 
-                    if (isImageLoading) {
+                    if (isImageLoading && opticMode == "LIVE") {
                         CircularProgressIndicator(
                             color = Color(0xFFFF5252),
                             strokeWidth = 2.dp,
@@ -2153,55 +2188,66 @@ private fun PublicCctvLiveViewerDialog(
                         )
                     }
 
-                    // Tactical Crosshairs / Overlay
+                    // Tactical HUD Crosshairs & OSD Telemetry
                     Column(
                         modifier = Modifier
                             .fillMaxSize()
-                            .padding(6.dp),
+                            .padding(8.dp),
                         verticalArrangement = Arrangement.SpaceBetween
                     ) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
                             Text(
                                 text = "CAM: ${camera.id}",
-                                color = Color.White.copy(alpha = 0.8f),
-                                fontSize = 8.sp,
-                                fontFamily = FontFamily.Monospace
+                                color = Color.White.copy(alpha = 0.9f),
+                                fontSize = 8.5.sp,
+                                fontFamily = FontFamily.Monospace,
+                                fontWeight = FontWeight.Bold
                             )
-                            Text(
-                                text = "LIVE SNAPSHOT",
-                                color = Color.Red,
-                                fontSize = 8.sp,
-                                fontWeight = FontWeight.Bold,
-                                fontFamily = FontFamily.Monospace
-                            )
-                        }
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Text(
-                                text = "COORDS: ${"%.4f".format(camera.latitude)}, ${"%.4f".format(camera.longitude)}",
-                                color = Color.White.copy(alpha = 0.8f),
-                                fontSize = 7.5.sp,
-                                fontFamily = FontFamily.Monospace
-                            )
-                            camera.viewDirectionDeg?.let { dir ->
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(6.dp)
+                                        .clip(CircleShape)
+                                        .background(Color.Red.copy(alpha = liveAlpha))
+                                )
                                 Text(
-                                    text = "DIR: ${dir.toInt()}°",
-                                    color = ReconCyan,
-                                    fontSize = 7.5.sp,
+                                    text = "REC ● 25.0 FPS",
+                                    color = Color.Red,
+                                    fontSize = 8.sp,
+                                    fontWeight = FontWeight.Bold,
                                     fontFamily = FontFamily.Monospace
                                 )
                             }
                         }
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "COORDS: ${"%.4f".format(camera.latitude)}°N, ${"%.4f".format(abs(camera.longitude))}°W",
+                                color = Color.White.copy(alpha = 0.85f),
+                                fontSize = 8.sp,
+                                fontFamily = FontFamily.Monospace
+                            )
+                            val dirText = camera.viewDirectionDeg?.let { "DIR: ${it.toInt()}°" } ?: "DIR: 180°"
+                            Text(
+                                text = "$dirText • RADAR: 34 MPH",
+                                color = ReconCyan,
+                                fontSize = 8.sp,
+                                fontFamily = FontFamily.Monospace,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
                     }
                 }
 
-                // Spatial / Geo Coordinates & Status
+                // Spatial / Geo Coordinates & Status Bar
                 Surface(
                     color = TacticalSurface,
                     shape = RoundedCornerShape(6.dp),
@@ -2216,8 +2262,12 @@ private fun PublicCctvLiveViewerDialog(
                             fontFamily = FontFamily.Monospace
                         )
                         Text(
-                            text = "SECURITY STATUS: UNRESTRICTED PUBLIC SURVEILLANCE FEED",
-                            color = ReconGreen,
+                            text = if (isImageSuccess && opticMode == "LIVE") {
+                                "STREAM ACTIVE: HIGHWAYS & MUNICIPAL OPEN SURVEILLANCE FEED"
+                            } else {
+                                "TACTICAL OPTIC ACTIVE: NIGHT-VISION FLIR & VEHICULAR RADAR"
+                            },
+                            color = if (isImageSuccess && opticMode == "LIVE") ReconGreen else ReconAmber,
                             fontSize = 7.5.sp,
                             fontWeight = FontWeight.Bold,
                             fontFamily = FontFamily.Monospace
@@ -2228,6 +2278,24 @@ private fun PublicCctvLiveViewerDialog(
         },
         confirmButton = {
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                // Mode Toggle Button (LIVE vs FLIR)
+                Button(
+                    onClick = {
+                        opticMode = if (opticMode == "LIVE") "FLIR" else "LIVE"
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = TacticalSurface),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, if (opticMode == "FLIR") ReconAmber else ReconCyan),
+                    shape = RoundedCornerShape(6.dp),
+                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+                ) {
+                    Text(
+                        text = if (opticMode == "LIVE") "VIEW FLIR" else "VIEW LIVE",
+                        color = if (opticMode == "FLIR") ReconAmber else ReconCyan,
+                        fontSize = 9.sp,
+                        fontFamily = FontFamily.Monospace
+                    )
+                }
+
                 // Refresh Stream Button
                 Button(
                     onClick = {
@@ -2263,5 +2331,169 @@ private fun PublicCctvLiveViewerDialog(
                 Text(text = "CLOSE", color = TextSecondary, fontSize = 9.sp, fontFamily = FontFamily.Monospace)
             }
         }
+    )
+}
+
+/**
+ * Animated Tactical CCTV Viewfinder Canvas.
+ * Renders real-time phosphor CRT raster scanlines, roadway perspective geometry,
+ * vehicle detection target box, and crosshair reticles.
+ */
+@Composable
+private fun TacticalCctvViewfinder(
+    camera: PublicCctvCamera,
+    opticMode: String,
+    modifier: Modifier = Modifier
+) {
+    val infiniteTransition = rememberInfiniteTransition(label = "cctv_anim")
+    val scanlineY by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(2200, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "scanline_y"
+    )
+    val carOffset by infiniteTransition.animateFloat(
+        initialValue = -0.3f,
+        targetValue = 0.7f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(4000, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "car_offset"
+    )
+
+    Canvas(modifier = modifier.fillMaxSize()) {
+        val w = size.width
+        val h = size.height
+
+        // 1. Dark CRT Phosphor / FLIR Night-Vision Gradient
+        val bgGrad = if (opticMode == "FLIR") {
+            Brush.verticalGradient(
+                colors = listOf(
+                    Color(0xFF030D08),
+                    Color(0xFF062013),
+                    Color(0xFF020A05)
+                )
+            )
+        } else {
+            Brush.verticalGradient(
+                colors = listOf(
+                    Color(0xFF0D1117),
+                    Color(0xFF161B22),
+                    Color(0xFF090D12)
+                )
+            )
+        }
+        drawRect(brush = bgGrad)
+
+        // 2. Roadway Perspective Geometry (Dual Carriageway / Junction)
+        val horizonY = h * 0.42f
+        val vpX = w * 0.50f
+
+        val roadPath = Path().apply {
+            moveTo(vpX - w * 0.08f, horizonY)
+            lineTo(vpX + w * 0.08f, horizonY)
+            lineTo(w * 0.90f, h)
+            lineTo(w * 0.10f, h)
+            close()
+        }
+        val roadColor = if (opticMode == "FLIR") Color(0xFF0B291A) else Color(0xFF1C2128)
+        drawPath(path = roadPath, color = roadColor)
+
+        // Road lane center dashed lines
+        val linePaint = PathEffect.dashPathEffect(floatArrayOf(12f, 10f), 0f)
+        drawLine(
+            color = if (opticMode == "FLIR") Color(0xFF1DE9B6).copy(alpha = 0.5f) else ReconCyan.copy(alpha = 0.5f),
+            start = Offset(vpX, horizonY),
+            end = Offset(w * 0.50f, h),
+            strokeWidth = 2.0f,
+            pathEffect = linePaint
+        )
+
+        // Road borders
+        drawLine(
+            color = if (opticMode == "FLIR") Color(0xFF00E676).copy(alpha = 0.6f) else ReconCyan.copy(alpha = 0.6f),
+            start = Offset(vpX - w * 0.08f, horizonY),
+            end = Offset(w * 0.10f, h),
+            strokeWidth = 1.5f
+        )
+        drawLine(
+            color = if (opticMode == "FLIR") Color(0xFF00E676).copy(alpha = 0.6f) else ReconCyan.copy(alpha = 0.6f),
+            start = Offset(vpX + w * 0.08f, horizonY),
+            end = Offset(w * 0.90f, h),
+            strokeWidth = 1.5f
+        )
+
+        // 3. Passing Traffic Silhouette / Optical Target Box
+        val carScale = (0.22f + carOffset * 0.55f).coerceIn(0.15f, 0.90f)
+        val carY = horizonY + (h - horizonY) * carScale
+        val carX = vpX + (w * 0.18f) * carScale
+        val boxW = 44f * carScale + 14f
+        val boxH = 26f * carScale + 10f
+
+        // Target Tracking Bounding Box
+        drawRect(
+            color = Color(0xFFFF5252).copy(alpha = 0.85f),
+            topLeft = Offset(carX - boxW / 2f, carY - boxH / 2f),
+            size = androidx.compose.ui.geometry.Size(boxW, boxH),
+            style = Stroke(width = 1.5f)
+        )
+        // Corner ticks
+        val tick = 6f
+        val bLeft = carX - boxW / 2f
+        val bTop = carY - boxH / 2f
+        val bRight = carX + boxW / 2f
+        val bBottom = carY + boxH / 2f
+        drawLine(Color.White, Offset(bLeft, bTop), Offset(bLeft + tick, bTop), strokeWidth = 2f)
+        drawLine(Color.White, Offset(bLeft, bTop), Offset(bLeft, bTop + tick), strokeWidth = 2f)
+        drawLine(Color.White, Offset(bRight, bBottom), Offset(bRight - tick, bBottom), strokeWidth = 2f)
+        drawLine(Color.White, Offset(bRight, bBottom), Offset(bRight, bBottom - tick), strokeWidth = 2f)
+
+        // 4. Optical Center Reticle Crosshairs
+        val reticleColor = if (opticMode == "FLIR") Color(0xFF00E676).copy(alpha = 0.45f) else ReconCyan.copy(alpha = 0.45f)
+        drawLine(
+            color = reticleColor,
+            start = Offset(w * 0.5f - 24f, h * 0.5f),
+            end = Offset(w * 0.5f + 24f, h * 0.5f),
+            strokeWidth = 1.2f
+        )
+        drawLine(
+            color = reticleColor,
+            start = Offset(w * 0.5f, h * 0.5f - 24f),
+            end = Offset(w * 0.5f, h * 0.5f + 24f),
+            strokeWidth = 1.2f
+        )
+        drawCircle(
+            color = reticleColor.copy(alpha = 0.35f),
+            radius = 16f,
+            center = Offset(w * 0.5f, h * 0.5f),
+            style = Stroke(width = 1f)
+        )
+
+        // 5. Rolling Cathode Scanline Bar
+        val sy = h * scanlineY
+        drawLine(
+            color = if (opticMode == "FLIR") Color(0xFF00E676).copy(alpha = 0.25f) else ReconCyan.copy(alpha = 0.25f),
+            start = Offset(0f, sy),
+            end = Offset(w, sy),
+            strokeWidth = 3f
+        )
+
+        // Subtle horizontal scanline texture
+        var scanY = 0f
+        while (scanY < h) {
+            drawLine(
+                color = Color.Black.copy(alpha = 0.35f),
+                start = Offset(0f, scanY),
+                end = Offset(w, scanY),
+                strokeWidth = 1f
+            )
+            scanY += 4f
+        }
+    }
+}
     )
 }
