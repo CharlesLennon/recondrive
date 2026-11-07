@@ -756,6 +756,141 @@ def generate_screenshot_06():
     print(f"Saved: {out_path} ({os.path.getsize(out_path)} bytes)")
 
 
+# ==============================================================================
+# 7. SCREENSHOT 07: 24/7 PERSISTENT NOTIFICATION & BACKGROUND TRACKING (800 x 1400)
+# ==============================================================================
+
+def generate_screenshot_07():
+    print("Generating Screenshot 07: 24/7 Background Notification & Service...")
+    W, H = 800, 1400
+    img = Image.new('RGB', (W, H), '#0A0D12')
+    draw = ImageDraw.Draw(img)
+
+    # 1. Android Status Bar
+    draw.rectangle([(0, 0), (W, 40)], fill='#0D1117')
+    draw.text((24, 12), "10:42", fill='#F0F6FC', font=FONT_HEAD)
+    draw.text((W - 140, 12), "5G  92% 🔋", fill='#8B949E', font=FONT_SUB)
+
+    # 2. Top Header with 24/7 Radar Active Badge
+    draw.text((24, 60), "RECON // TACTICAL RADAR", fill='#00E5FF', font=FONT_HEAD)
+    draw.text((24, 82), "GRID: 51.5074°N, 0.1278°W  •  LONDON SECTOR", fill='#8B949E', font=FONT_MONO_SM)
+
+    # Badges Row
+    badge_x = W - 24 - 110
+    draw.rounded_rectangle([(badge_x, 60), (badge_x + 110, 92)], radius=6, fill='#121721', outline='#00E676', width=1)
+    draw.text((badge_x + 12, 70), "🛰️ RADAR 24/7", fill='#00E676', font=FONT_MONO_SM)
+
+    badge_x2 = badge_x - 110
+    draw.rounded_rectangle([(badge_x2, 60), (badge_x2 + 100, 92)], radius=6, fill='#121721', outline='#00E676', width=1)
+    draw.text((badge_x2 + 10, 70), "🚗 AUTO ON", fill='#00E676', font=FONT_MONO_SM)
+
+    # 3. ONGOING PERSISTENT NOTIFICATION CARD (Highlight Feature)
+    notif_y = 120
+    notif_h = 190
+    draw.rounded_rectangle([(16, notif_y), (W - 16, notif_y + notif_h)], radius=14, fill='#161B22', outline='#00E5FF', width=2)
+
+    # Notification Header line
+    draw.text((36, notif_y + 16), "🧭 ReconDrive • Ongoing Exploration Service", fill='#8B949E', font=FONT_MONO_SM)
+    draw.text((W - 90, notif_y + 16), "Active", fill='#00E676', font=FONT_MONO_SM)
+
+    # Notification Title
+    draw.text((36, notif_y + 44), "🛰️ ReconDrive Tactical Radar Active", fill='#F0F6FC', font=FONT_TITLE)
+
+    # Notification Body
+    draw.text((36, notif_y + 78), "Explored: 42.50 km²  •  Streak: 14.8 km  •  Speed: 68 km/h", fill='#00E5FF', font=FONT_MONO)
+    draw.text((36, notif_y + 106), "24/7 BACKGROUND SURVEILLANCE • Fog unmasked continuously while app is closed", fill='#8B949E', font=FONT_MONO_SM)
+
+    # Notification Action Buttons
+    btn_y = notif_y + 136
+    draw.rounded_rectangle([(36, btn_y), (180, btn_y + 38)], radius=6, fill='#00E5FF')
+    draw.text((56, btn_y + 10), "OPEN RADAR", fill='#0A0D12', font=FONT_HEAD)
+
+    draw.rounded_rectangle([(196, btn_y), (340, btn_y + 38)], radius=6, fill='#21262D', outline='#30363D', width=1)
+    draw.text((220, btn_y + 10), "PAUSE RADAR", fill='#F0F6FC', font=FONT_HEAD)
+
+    # 4. Telemetry Dual Gauges (Speed & Heading)
+    gauge_y = notif_y + notif_h + 24
+    draw.rounded_rectangle([(16, gauge_y), (W - 16, gauge_y + 120)], radius=12, fill='#121721', outline='#21262D', width=1)
+
+    # Speed
+    draw.text((W / 4 - 30, gauge_y + 18), "68", fill='#00E5FF', font=FONT_MONO_XL)
+    draw.text((W / 4 - 40, gauge_y + 85), "KM/H (42 MPH)", fill='#8B949E', font=FONT_MONO_SM)
+
+    # Divider
+    draw.line([(W / 2, gauge_y + 20), (W / 2, gauge_y + 100)], fill='#21262D', width=2)
+
+    # Heading
+    draw.text((3 * W / 4 - 40, gauge_y + 18), "352°", fill='#00E676', font=FONT_MONO_XL)
+    draw.text((3 * W / 4 - 45, gauge_y + 85), "HEADING // N-NW", fill='#8B949E', font=FONT_MONO_SM)
+
+    # 5. Radar Mini Canvas
+    radar_y = gauge_y + 144
+    radar_h = 420
+    draw.rounded_rectangle([(16, radar_y), (W - 16, radar_y + radar_h)], radius=12, fill='#070A0F', outline='#00E5FF', width=1)
+
+    rcx, rcy = W / 2, radar_y + radar_h / 2
+    for r in [60, 130, 200]:
+        draw.ellipse([(rcx - r, rcy - r), (rcx + r, rcy + r)], outline='#00E5FF22', width=1)
+
+    draw.line([(rcx - 20, rcy), (rcx + 20, rcy)], fill='#00E5FF44', width=2)
+    draw.line([(rcx, rcy - 20), (rcx, rcy + 20)], fill='#00E5FF44', width=2)
+
+    # Explored road trail
+    trail = [(rcx - 120, rcy + 160), (rcx - 60, rcy + 80), (rcx, rcy), (rcx + 80, rcy - 120)]
+    for i in range(len(trail) - 1):
+        draw.line([trail[i], trail[i+1]], fill='#00E676', width=5)
+
+    # Vehicle cursor
+    draw.polygon([(rcx, rcy - 16), (rcx + 12, rcy + 14), (rcx, rcy + 8), (rcx - 12, rcy + 14)], fill='#00E5FF')
+
+    draw.text((36, radar_y + 20), "RADAR: ACTIVE TELEMETRY INGESTION", fill='#00E676', font=FONT_MONO_SM)
+    draw.text((W - 220, radar_y + 20), "BACKGROUND RECON: ON", fill='#00E5FF', font=FONT_MONO_SM)
+
+    # 6. Exploration Career Intel Card
+    intel_y = radar_y + radar_h + 20
+    draw.rounded_rectangle([(16, intel_y), (W - 16, intel_y + 180)], radius=12, fill='#121721', outline='#21262D', width=1)
+
+    draw.text((36, intel_y + 16), "EXPLORATION INTEL", fill='#8B949E', font=FONT_HEAD)
+    draw.text((W - 160, intel_y + 16), "TACTICAL SCOUT", fill='#00E5FF', font=FONT_HEAD)
+
+    draw.text((36, intel_y + 50), "42.50 km²", fill='#F0F6FC', font=FONT_MONO_LG)
+    draw.text((36, intel_y + 98), "Territory Uncovered", fill='#8B949E', font=FONT_SUB)
+
+    draw.text((W - 200, intel_y + 50), "14.80 km", fill='#00E676', font=FONT_MONO_LG)
+    draw.text((W - 200, intel_y + 98), "Uncharted Streak", fill='#8B949E', font=FONT_SUB)
+
+    # Divider and Background Notification status
+    draw.line([(36, intel_y + 130), (W - 36, intel_y + 130)], fill='#21262D', width=1)
+    draw.text((36, intel_y + 146), "🔔 24/7 Fog Unmasking (Notification Active)", fill='#00E5FF', font=FONT_MONO_SM)
+    draw.text((W - 110, intel_y + 146), "ACTIVE", fill='#00E676', font=FONT_HEAD)
+
+    # 7. Bottom Navigation Bar
+    nav_y = H - 90
+    draw.rectangle([(0, nav_y), (W, H)], fill='#0D1117')
+    draw.line([(0, nav_y), (W, nav_y)], fill='#21262D', width=1)
+    
+    tabs = [
+        ("HUD", "#00E5FF", True),
+        ("MAP", "#8B949E", False),
+        ("SKINS", "#8B949E", False),
+        ("OFFLINE", "#8B949E", False),
+    ]
+    tab_step = W / len(tabs)
+    for i, (tname, tcol, is_active) in enumerate(tabs):
+        tx_c = i * tab_step + tab_step / 2
+        tw = draw.textlength(tname, font=FONT_HEAD)
+        draw.text((tx_c - tw / 2, nav_y + 16), tname, fill=tcol, font=FONT_HEAD)
+        if is_active:
+            draw.line([(tx_c - 16, nav_y + 36), (tx_c + 16, nav_y + 36)], fill='#00E5FF', width=2)
+
+    # Android Home Gesture Bar
+    draw.rounded_rectangle([(W / 2 - 60, H - 14), (W / 2 + 60, H - 10)], radius=2, fill='#484F58')
+
+    out_path = os.path.join(OUTPUT_DIR, "screenshot_07_background_notification_service.png")
+    img.save(out_path)
+    print(f"Saved: {out_path} ({os.path.getsize(out_path)} bytes)")
+
+
 if __name__ == '__main__':
     generate_screenshot_01()
     generate_screenshot_02()
@@ -763,4 +898,5 @@ if __name__ == '__main__':
     generate_screenshot_04()
     generate_screenshot_05()
     generate_screenshot_06()
-    print("All 6 screenshots generated successfully!")
+    generate_screenshot_07()
+    print("All 7 screenshots generated successfully!")

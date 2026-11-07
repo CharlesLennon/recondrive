@@ -27,6 +27,19 @@ class FogPreferences(context: Context) {
     )
     val fogOpacity: StateFlow<Float> = _fogOpacity.asStateFlow()
 
+    // 24/7 Background Radar Exploration (Unmasks fog even when app is closed / in background)
+    private val _isBackgroundTrackingEnabled = MutableStateFlow(
+        prefs.getBoolean(KEY_BACKGROUND_TRACKING, true)
+    )
+    val isBackgroundTrackingEnabled: StateFlow<Boolean> = _isBackgroundTrackingEnabled.asStateFlow()
+
+    fun setBackgroundTrackingEnabled(enabled: Boolean) {
+        if (_isBackgroundTrackingEnabled.value == enabled) return
+        Timber.i("Setting 24/7 Background Fog Tracking: $enabled")
+        _isBackgroundTrackingEnabled.value = enabled
+        prefs.edit().putBoolean(KEY_BACKGROUND_TRACKING, enabled).apply()
+    }
+
     fun setFogRange(rangeMeters: Int) {
         val clamped = rangeMeters.coerceIn(MIN_RANGE_METERS, MAX_RANGE_METERS)
         if (_fogRangeMeters.value == clamped) return
@@ -71,6 +84,7 @@ class FogPreferences(context: Context) {
         private const val PREFS_NAME = "recondrive_fog_prefs"
         private const val KEY_FOG_RANGE = "pref_fog_range_meters"
         private const val KEY_FOG_OPACITY = "pref_fog_opacity"
+        private const val KEY_BACKGROUND_TRACKING = "pref_background_tracking"
 
         const val DEFAULT_RANGE_METERS = 180
         const val MIN_RANGE_METERS = 50

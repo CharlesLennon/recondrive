@@ -4,6 +4,7 @@ import android.Manifest
 import android.annotation.SuppressLint
 import android.content.pm.PackageManager
 import android.location.Location
+import android.os.Build
 import android.os.Bundle
 import android.os.Looper
 import android.widget.Toast
@@ -21,9 +22,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.lifecycleScope
 import com.google.android.gms.location.*
 import com.recondrive.app.ReconApplication
 import com.recondrive.app.fog.ExplorationStats
+import com.recondrive.app.service.ExplorationTrackingService
 import com.recondrive.app.ui.screens.InteractiveMapScreen
 import com.recondrive.app.ui.screens.OfflineRegionsDialog
 import com.recondrive.app.ui.screens.SkinSelectorDialog
@@ -32,11 +35,13 @@ import com.recondrive.app.ui.theme.ReconCyan
 import com.recondrive.app.ui.theme.ReconDriveTheme
 import com.recondrive.app.ui.theme.TacticalObsidian
 import com.recondrive.app.ui.theme.TextSecondary
+import kotlinx.coroutines.launch
 import timber.log.Timber
 
 /**
  * Mobile Handset Main Activity
  * Hosts the tactical HUD and manages GPS telemetry ingestion into the Fog of War engine.
+ * Coordinates with ExplorationTrackingService to provide 24/7 territory unmasking via persistent notification.
  */
 class MainActivity : ComponentActivity() {
 
@@ -55,10 +60,17 @@ class MainActivity : ComponentActivity() {
         val coarseGranted = permissions[Manifest.permission.ACCESS_COARSE_LOCATION] ?: false
 
         if (fineGranted || coarseGranted) {
-            startLocationUpdates()
+            checkBackgroundLocationAndStartService()
         } else {
             Toast.makeText(this, "Location permission required for Tactical Radar", Toast.LENGTH_LONG).show()
         }
+    }
+
+    private val backgroundPermissionLauncher = registerForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { _ ->
+        // Proceed with service start regardless of background location prompt result
+        startExplorationServiceIfEnabled()
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -70,6 +82,20 @@ class MainActivity : ComponentActivity() {
             override fun onLocationResult(result: LocationResult) {
                 for (location in result.locations) {
                     onNewLocation(location)
+                }
+            }
+        }
+
+        // Synchronize UI telemetry with the 24/7 background service location stream
+        lifecycleScope.launch {
+            ExplorationTrackingService.currentLocation.collect { loc ->
+                loc?.let {
+                    currentLat = it.latitude
+                    currentLon = it.longitude
+                    currentSpeedKmh = it.speed * 3.6f
+                    if (it.hasBearing()) {
+                        currentHeading = it.bearing
+                    }
                 }
             }
         }
@@ -209,6 +235,9 @@ class MainActivity : ComponentActivity() {
                                     },
                                     onOfflinePacksClick = {
                                         showOfflineDialog = true
+                                    },
+                                    onToggleBackgroundRadar = {
+                                        toggleBackgroundRadar()
                                     }
                                 )
                             }
@@ -239,19 +268,68 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun checkAndRequestPermissions() {
-        val fineGranted = ContextCompat.checkSelfPermission(
-            this, Manifest.permission.ACCESS_FINE_LOCATION
-        ) == PackageManager.PERMISSION_GRANTED
+        val permissionsToRequest = mutableListOf(
+            Manifest.permission.ACCESS_FINE_LOCATION,
+            Manifest.permission.ACCESS_COARSE_LOCATION
+        )
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            permissionsToRequest.add(Manifest.permission.POST_NOTIFICATIONS)
+        }
 
-        if (fineGranted) {
-            startLocationUpdates()
+        val missing = permissionsToRequest.filter {
+            ContextCompat.checkSelfPermission(this, it) != PackageManager.PERMISSION_GRANTED
+        }
+
+        if (missing.isEmpty()) {
+            checkBackgroundLocationAndStartService()
         } else {
-            permissionLauncher.launch(
-                arrayOf(
-                    Manifest.permission.ACCESS_FINE_LOCATION,
-                    Manifest.permission.ACCESS_COARSE_LOCATION
-                )
-            )
+            permissionLauncher.launch(permissionsToRequest.toTypedArray())
+        }
+    }
+
+    private fun checkBackgroundLocationAndStartService() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            val bgGranted = ContextCompat.checkSelfPermission(
+                this, Manifest.permission.ACCESS_BACKGROUND_LOCATION
+            ) == PackageManager.PERMISSION_GRANTED
+            if (!bgGranted) {
+                try {
+                    backgroundPermissionLauncher.launch(Manifest.permission.ACCESS_BACKGROUND_LOCATION)
+                } catch (e: Exception) {
+                    Timber.w(e, "Background location permission request note")
+                }
+            }
+        }
+        startExplorationServiceIfEnabled()
+        startLocationUpdates()
+    }
+
+    private fun startExplorationServiceIfEnabled() {
+        val isEnabled = ReconApplication.instance.fogPreferences.isBackgroundTrackingEnabled.value
+        if (isEnabled) {
+            Timber.i("Starting 24/7 background exploration tracking service")
+            ExplorationTrackingService.start(this)
+        }
+    }
+
+    private fun toggleBackgroundRadar() {
+        val currentlyRunning = ExplorationTrackingService.isRunning.value
+        if (currentlyRunning) {
+            ExplorationTrackingService.stop(this)
+            ReconApplication.instance.fogPreferences.setBackgroundTrackingEnabled(false)
+            Toast.makeText(
+                this,
+                "24/7 Radar paused. Background fog removal stopped.",
+                Toast.LENGTH_SHORT
+            ).show()
+        } else {
+            ReconApplication.instance.fogPreferences.setBackgroundTrackingEnabled(true)
+            ExplorationTrackingService.start(this)
+            Toast.makeText(
+                this,
+                "24/7 Radar ACTIVE! Territory will uncover in background with ongoing notification.",
+                Toast.LENGTH_LONG
+            ).show()
         }
     }
 
@@ -277,12 +355,16 @@ class MainActivity : ComponentActivity() {
             currentHeading = location.bearing
         }
 
-        // Push to Fog of War exploration engine
-        ReconApplication.instance.fogGridManager.processLocation(location)
+        // Feed fog grid directly if background service is not currently active
+        if (!ExplorationTrackingService.isRunning.value) {
+            ReconApplication.instance.fogGridManager.processLocation(location)
+        }
     }
 
     override fun onDestroy() {
         super.onDestroy()
         fusedLocationClient.removeLocationUpdates(locationCallback)
+        // Note: ExplorationTrackingService is intentionally NOT stopped on activity destroy
+        // so that fog continues to be unmasked when the app is closed or in background!
     }
 }

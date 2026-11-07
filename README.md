@@ -61,6 +61,14 @@ OTA updater dialog querying `https://api.github.com/repos/CharlesLennon/recondri
 
 ---
 
+### 6. 24/7 Background Exploration & Persistent Notification
+ReconDrive tracks and burns away Fog of War **around the clock**, even when the app is minimized, screen is locked, or another navigation app is active. Backed by an Android 14 `FOREGROUND_SERVICE_LOCATION` architecture with an ongoing status notification:
+
+![24/7 Background Notification Service](screenshots/screenshot_07_background_notification_service.png)
+*Fig 7. Persistent ongoing notification keeping ReconDrive active in the background, updating charted territory, streak distance, and speed in real-time while phone is locked or app is closed.*
+
+---
+
 ## 📸 Architecture & Design Overview
 
 ```
@@ -151,8 +159,15 @@ ReconDrive features a built-in tactical OTA updater that communicates directly w
 - **Offline `.mbtiles` Support**: Store entire countries or regional vector tile packs locally in the app storage directory with zero mobile data reliance.
 - **Offline Turn-by-Turn Engine**: Calculates routing geometry, step maneuvers, target coordinates, and trip durations on device.
 
-### 7. 📱 Mobile Handset Tactical HUD (Jetpack Compose)
-- Full-screen tactical dashboard with real-time velocity (KM/H & MPH), heading bearing tape, decimal coordinates, radar sweep canvas preview, live skin pairing badge, and one-tap destination routing.
+### 7. 🛰️ 24/7 Background Fog Exploration & Persistent Notification
+- **Ongoing Foreground Service (`ExplorationTrackingService`)**: Compliant with Android 14 `FOREGROUND_SERVICE_LOCATION` architecture.
+- **Continuous Unmasking**: Removes fog of war and calculates explored $km^2$ and uncharted streaks 24/7, even when the handset is locked in your pocket or running other apps.
+- **Live Ongoing Notification**: Displays real-time explored area, active streak distance, and driving velocity directly in the Android notification tray and lockscreen.
+- **Device Boot & Update Auto-Restart (`BootReceiver`)**: Automatically resumes tracking upon phone boot or app update if background exploration is active.
+- **Battery-Conscious Geofenced Throttling**: Intelligent location polling interval (3000ms, 3m min delta) with throttled notification rendering to conserve mobile battery life.
+
+### 8. 📱 Mobile Handset Tactical HUD (Jetpack Compose)
+- Full-screen tactical dashboard with real-time velocity (KM/H & MPH), heading bearing tape, decimal coordinates, radar sweep canvas preview, live skin pairing badge, 24/7 background radar toggle, and one-tap destination routing.
 
 ---
 
@@ -176,9 +191,13 @@ recondrive/
 │       │   │   ├── ExplorationStats.kt       # Career rankings & metrics
 │       │   │   ├── FogGridManager.kt         # Spatial indexing & beam unmasking
 │       │   │   └── SpatialCell.kt            # Room DB Entity & Dao
+│       │   ├── service/                      # 🛰️ 24/7 Background Exploration Service
+│       │   │   ├── ExplorationTrackingService.kt # Android 14 location foreground service & notification
+│       │   │   └── BootReceiver.kt           # Auto-restart on device reboot
 │       │   ├── map/                          # 🗺️ Vector Maps & Offline Data
 │       │   │   ├── OfflineTileRepository.kt  # Local .mbtiles manager
-│       │   │   └── TacticalMapStyle.kt       # Dark tactical JSON style
+│       │   │   ├── TacticalMapStyle.kt       # Dark tactical JSON style
+│       │   │   └── UkOsmDataEngine.kt        # Complete UK road network & spatial geometry
 │       │   ├── navigation/                   # 🧭 Offline Routing Engine
 │       │   │   ├── NavigationStep.kt         # Step & Maneuver data model
 │       │   │   └── OfflineRoutingEngine.kt   # Turn-by-turn route solver
@@ -187,9 +206,17 @@ recondrive/
 │       │   │   ├── MapSkin.kt                # OSM vector cartography themes
 │       │   │   └── SkinManager.kt            # Independent preference & cycle manager
 │       │   ├── ui/                           # 📱 Handset Jetpack Compose Interface
-│       │   │   ├── MainActivity.kt           # GPS telemetry ingestion
+│       │   │   ├── MainActivity.kt           # GPS telemetry ingestion & background service coordination
 │       │   │   ├── screens/
+│       │   │   │   ├── InteractiveMapScreen.kt # Google Maps-style free-roaming UK OSM map
+│       │   │   │   ├── TacticalHudScreen.kt  # Handset tactical dashboard with 24/7 radar badge
 │       │   │   │   ├── SkinSelectorDialog.kt # Visual dual-tab skin picker dialog
+│       │   │   │   └── OfflineRegionsDialog.kt # Offline UK region downloader dialog
+│       │   │   └── theme/                    # Tactical typography, shapes & palettes
+│       │   └── update/                       # 🔄 GitHub Releases OTA Auto-Updater
+│       │       ├── AppUpdateManager.kt       # GitHub Releases API checker & streaming downloader
+│       │       ├── ReleaseInfo.kt            # SemVer parser & asset models
+│       │       └── UpdateDialog.kt           # Tactical update prompt dialog
 │       │   │   │   ├── TacticalHudScreen.kt  # Tactical HUD & Radar canvas
 │       │   │   │   └── UpdateDialog.kt       # In-App GitHub OTA updater dialog
 │       │   │   └── theme/                    # Tactical obsidian & cyan palette

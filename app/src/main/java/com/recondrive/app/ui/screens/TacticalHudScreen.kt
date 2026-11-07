@@ -38,7 +38,8 @@ fun TacticalHudScreen(
     currentLat: Double = 51.5074,
     currentLon: Double = -0.1278,
     onSearchClick: () -> Unit = {},
-    onOfflinePacksClick: () -> Unit = {}
+    onOfflinePacksClick: () -> Unit = {},
+    onToggleBackgroundRadar: () -> Unit = {}
 ) {
     var showSkinDialog by remember { mutableStateOf(false) }
     var showUpdateDialog by remember { mutableStateOf(false) }
@@ -152,6 +153,38 @@ fun TacticalHudScreen(
                         Text(
                             text = "SKINS",
                             color = Color(fogSkin.perimeterGlowColor),
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.Monospace
+                        )
+                    }
+                }
+
+                // 24/7 Background Radar Status & Toggle Pill
+                val isServiceRunning by com.recondrive.app.service.ExplorationTrackingService.isRunning.collectAsState()
+                Surface(
+                    color = TacticalSurface,
+                    shape = RoundedCornerShape(4.dp),
+                    border = androidx.compose.foundation.BorderStroke(
+                        1.dp,
+                        if (isServiceRunning) ReconGreen else ReconAmber
+                    ),
+                    modifier = Modifier.clickable { onToggleBackgroundRadar() }
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Sensors,
+                            contentDescription = "24/7 Background Radar",
+                            tint = if (isServiceRunning) ReconGreen else ReconAmber,
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(
+                            text = if (isServiceRunning) "RADAR 24/7" else "RADAR PAUSED",
+                            color = if (isServiceRunning) ReconGreen else ReconAmber,
                             fontSize = 10.sp,
                             fontWeight = FontWeight.Bold,
                             fontFamily = FontFamily.Monospace
@@ -482,6 +515,40 @@ fun TacticalHudScreen(
                             fontSize = 11.sp
                         )
                     }
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+                Divider(color = TacticalBorder)
+                Spacer(modifier = Modifier.height(8.dp))
+
+                // Ongoing Notification & 24/7 Background Status Indicator
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Default.NotificationsActive,
+                            contentDescription = null,
+                            tint = if (isServiceRunning) ReconCyan else TextSecondary,
+                            modifier = Modifier.size(14.dp)
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(
+                            text = if (isServiceRunning) "24/7 Fog Unmasking (Notification Active)" else "Background Fog Removal Paused",
+                            color = if (isServiceRunning) ReconCyan else TextSecondary,
+                            fontSize = 10.sp,
+                            fontFamily = FontFamily.Monospace
+                        )
+                    }
+                    Text(
+                        text = if (isServiceRunning) "ACTIVE" else "OFF",
+                        color = if (isServiceRunning) ReconGreen else ReconAmber,
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace
+                    )
                 }
             }
         }
