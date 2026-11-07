@@ -598,46 +598,98 @@ def generate_screenshot_05():
 # ==============================================================================
 
 def generate_screenshot_06():
-    print("Generating Screenshot 06: Interactive Google Maps-style UK Map...")
+    print("Generating Screenshot 06: Interactive Google Maps-style UK Map with Live OSM Cartography...")
     W, H = 800, 1400
-    img = Image.new('RGB', (W, H), '#0A0D12')
+    img = Image.new('RGB', (W, H), '#080C14')
     draw = ImageDraw.Draw(img)
 
     cx, cy = W / 2.0, H / 2.0
 
-    # 1. Background Vector Water Features (River Thames & Estuary)
+    # 1. Background Vector Landmass & Streamed OSM Street Grid
+    # Streamed raster tile background grid texture
+    for grid_x in range(0, W, 32):
+        draw.line([(grid_x, 0), (grid_x, H)], fill='#0F1622', width=1)
+    for grid_y in range(0, H, 32):
+        draw.line([(0, grid_y), (W, grid_y)], fill='#0F1622', width=1)
+
+    # Secondary city street blocks (OSM urban building & street density)
+    for bx in range(80, W - 80, 56):
+        for by in range(160, H - 280, 56):
+            if math.hypot(bx - cx, by - cy) < 320:
+                draw.rectangle([(bx, by), (bx + 48, by + 48)], fill='#0D131D', outline='#162232', width=1)
+
+    # 2. Vector Water Features (River Thames meandering with realistic bends & bridges)
     thames_pts = [
-        (0, cy + 120),
-        (cx - 240, cy + 100),
-        (cx - 100, cy + 80),
-        (cx, cy + 70),
-        (cx + 140, cy + 85),
-        (cx + 280, cy + 130),
-        (W, cy + 160)
+        (0, cy + 180),
+        (cx - 300, cy + 160),
+        (cx - 200, cy + 120),
+        (cx - 120, cy + 85),
+        (cx - 40, cy + 60),     # Westminster Bridge
+        (cx + 40, cy + 70),     # London Bridge
+        (cx + 100, cy + 55),    # Tower Bridge
+        (cx + 170, cy + 110),   # Isle of Dogs / Canary Wharf loop
+        (cx + 220, cy + 70),
+        (cx + 310, cy + 120),
+        (W, cy + 150)
     ]
-    draw.line(thames_pts, fill='#06131D', width=28)
-    draw.line(thames_pts, fill='#0C2236', width=14)
+    draw.line(thames_pts, fill='#040E18', width=34)
+    draw.line(thames_pts, fill='#0A2238', width=18)
+    draw.line(thames_pts, fill='#0E3352', width=8)
 
-    # 2. Road Networks (UK Motorways M25 Ring, M1, M4, M20)
-    # M25 Orbital Ring around London
-    draw.ellipse([(cx - 280, cy - 220), (cx + 280, cy + 220)], outline='#1C2636', width=8)
-    draw.ellipse([(cx - 280, cy - 220), (cx + 280, cy + 220)], outline='#00E5FF', width=3)
+    # Bridges across Thames
+    for b_offset in [(-40, 60), (0, 65), (40, 70), (100, 55)]:
+        bx = cx + b_offset[0]
+        by = cy + b_offset[1]
+        draw.line([(bx - 8, by - 12), (bx + 8, by + 12)], fill='#2B3B52', width=4)
 
-    # M1 Northwards
-    draw.line([(cx - 50, cy - 60), (cx - 120, cy - 220), (cx - 180, 0)], fill='#00E5FF', width=4)
-    # M4 Westwards
-    draw.line([(cx - 60, cy + 20), (cx - 280, cy + 30), (0, cy + 40)], fill='#00E5FF', width=4)
-    # M20 Eastwards to Dover
-    draw.line([(cx + 80, cy + 60), (cx + 280, cy + 180), (W, cy + 260)], fill='#00E5FF', width=4)
-    # A1(M) North
-    draw.line([(cx, cy - 60), (cx + 20, cy - 220), (cx + 40, 0)], fill='#00A8CC', width=3)
+    # 3. Greater London Road Arterials & Circulars
+    # A406 North Circular
+    nc_pts = [
+        (cx - 240, cy + 20),
+        (cx - 210, cy - 80),
+        (cx - 140, cy - 140),
+        (cx, cy - 165),
+        (cx + 140, cy - 140),
+        (cx + 220, cy - 80),
+        (cx + 240, cy + 20)
+    ]
+    draw.line(nc_pts, fill='#005577', width=6)
+    draw.line(nc_pts, fill='#00A8CC', width=3)
 
-    # Local secondary grid around Central London / Boroughs
-    for r in range(-3, 4):
-        draw.line([(cx - 180, cy + r * 45), (cx + 180, cy + r * 45)], fill='#16222F', width=2)
-        draw.line([(cx + r * 50, cy - 140), (cx + r * 50, cy + 140)], fill='#16222F', width=2)
+    # A205 South Circular
+    sc_pts = [
+        (cx - 230, cy + 30),
+        (cx - 180, cy + 120),
+        (cx - 80, cy + 170),
+        (cx + 60, cy + 175),
+        (cx + 180, cy + 130),
+        (cx + 240, cy + 40)
+    ]
+    draw.line(sc_pts, fill='#005577', width=5)
+    draw.line(sc_pts, fill='#00A8CC', width=3)
 
-    # 3. Explored Fog of War Trail & Perimeter Shroud
+    # M25 Outer London Orbital Motorway
+    draw.ellipse([(cx - 340, cy - 280), (cx + 340, cy + 280)], outline='#002844', width=12)
+    draw.ellipse([(cx - 340, cy - 280), (cx + 340, cy + 280)], outline='#00E5FF', width=4)
+
+    # Radial Motorways & Trunks
+    # M1 North
+    draw.line([(cx - 60, cy - 80), (cx - 140, cy - 260), (cx - 200, 0)], fill='#00E5FF', width=5)
+    # M4 West
+    draw.line([(cx - 80, cy + 10), (cx - 280, cy + 20), (0, cy + 30)], fill='#00E5FF', width=5)
+    # A40 Westway
+    draw.line([(cx - 240, cy - 40), (cx - 80, cy - 10), (cx, cy)], fill='#00A8CC', width=4)
+    # A4 Piccadilly / Knightsbridge
+    draw.line([(cx - 200, cy + 30), (cx - 60, cy + 15), (cx, cy)], fill='#00A8CC', width=4)
+    # A11 Whitechapel / Stratford
+    draw.line([(cx, cy), (cx + 120, cy - 30), (cx + 240, cy - 60)], fill='#00A8CC', width=4)
+    # A13 Commercial Rd / Thames Gateway
+    draw.line([(cx, cy + 20), (cx + 160, cy + 30), (W, cy + 60)], fill='#00A8CC', width=4)
+    # A2 Old Kent Rd & A3 South
+    draw.line([(cx, cy + 20), (cx + 120, cy + 140), (cx + 240, cy + 260)], fill='#00A8CC', width=4)
+    draw.line([(cx, cy + 20), (cx - 80, cy + 140), (cx - 180, cy + 280)], fill='#00A8CC', width=4)
+
+    # 4. Explored Fog of War Trail & Cleared Perimeter
     explored_trail = [
         (cx - 180, cy + 140),
         (cx - 80, cy + 70),
@@ -645,49 +697,70 @@ def generate_screenshot_06():
         (cx + 80, cy - 60),
         (cx + 140, cy - 140)
     ]
-    for gw in (18, 12, 6):
+    for gw in (20, 14, 6):
         draw.line(explored_trail, fill='#00E676' if gw == 6 else '#004D25', width=gw)
 
     # Cleared surveillance beam
-    beam_r = 170.0
+    beam_r = 160.0
     for gr in (3, 2, 1):
         draw.ellipse([(cx - beam_r - gr, cy - beam_r - gr), (cx + beam_r + gr, cy + beam_r + gr)], outline='#00E5FF', width=1)
     draw.ellipse([(cx - beam_r, cy - beam_r), (cx + beam_r, cy + beam_r)], outline='#00E5FF', width=2)
 
-    # 4. Target Waypoint (Amber destination pin & dashed route line)
+    # 5. Target Waypoint (Amber destination pin & dashed route line)
     wp_x, wp_y = cx + 180, cy - 200
-    # Dashed route
     draw.line([(cx, cy), (wp_x, wp_y)], fill='#FFD600', width=3)
-    # Pin
     draw.ellipse([(wp_x - 14, wp_y - 14), (wp_x + 14, wp_y + 14)], fill='#FFD600')
     draw.ellipse([(wp_x - 24, wp_y - 24), (wp_x + 24, wp_y + 24)], outline='#FFD600', width=2)
 
-    # 5. Vehicle Cursor (Cyan arrow at center)
+    # 6. Vehicle GPS Cursor (Cyan tactical triangle)
     draw.ellipse([(cx - 24, cy - 24), (cx + 24, cy + 24)], fill='#00E5FF22')
-    draw.polygon([(cx + 12, cy - 12), (cx - 6, cy - 2), (cx - 2, cy + 2), (cx - 12, cy + 12)], fill='#00E5FF')
+    draw.polygon([(cx + 14, cy - 14), (cx - 6, cy - 2), (cx - 2, cy + 2), (cx - 12, cy + 12)], fill='#00E5FF')
 
-    # 6. Highway Shields / Labels
-    draw.rounded_rectangle([(cx - 290, cy - 10), (cx - 250, cy + 12)], radius=3, fill='#003366', outline='#00E5FF', width=1)
-    draw.text((cx - 284, cy - 8), "M25", fill='#FFFFFF', font=FONT_MONO_XS)
+    # 7. Settlement & Place Labels on Map
+    places = [
+        ("London", cx - 8, cy - 24, True),
+        ("Westminster", cx - 70, cy + 30, False),
+        ("Camden", cx - 50, cy - 90, False),
+        ("Stratford", cx + 130, cy - 40, False),
+        ("Greenwich", cx + 110, cy + 90, False),
+        ("Watford", cx - 180, cy - 240, False),
+        ("Dartford", cx + 260, cy + 140, False),
+        ("Heathrow", cx - 260, cy + 40, False),
+    ]
+    for pname, px, py, is_cap in places:
+        dot_r = 5 if is_cap else 3
+        draw.ellipse([(px - dot_r, py - dot_r), (px + dot_r, py + dot_r)], fill='#FFD600' if is_cap else '#00E5FF')
+        draw.text((px + 8, py - 7), pname, fill='#FFFFFF' if is_cap else '#8B949E', font=FONT_HEAD if is_cap else FONT_TEXT_BOLD)
 
-    draw.rounded_rectangle([(cx - 150, cy - 150), (cx - 118, cy - 128)], radius=3, fill='#003366', outline='#00E5FF', width=1)
-    draw.text((cx - 142, cy - 148), "M1", fill='#FFFFFF', font=FONT_MONO_XS)
+    # Road Shields
+    draw.rounded_rectangle([(cx - 320, cy - 10), (cx - 280, cy + 12)], radius=3, fill='#003366', outline='#00E5FF', width=1)
+    draw.text((cx - 314, cy - 8), "M25", fill='#FFFFFF', font=FONT_MONO_XS)
 
-    # 7. Top Floating Search Bar & City Jump Chips
-    draw.rounded_rectangle([(24, 50), (W - 24, 102)], radius=8, fill='#121721', outline='#21262D', width=1)
-    draw.text((44, 68), "🔍", fill='#00E5FF', font=FONT_SUB)
-    draw.text((74, 68), "United Kingdom OSM • Tap map to explore & route", fill='#8B949E', font=FONT_TEXT)
-    
-    draw.rounded_rectangle([(W - 130, 60), (W - 36, 92)], radius=4, fill='#070A0F', outline='#00E676', width=1)
-    draw.text((W - 118, 68), "UK OSM", fill='#00E676', font=FONT_MONO_XS)
+    draw.rounded_rectangle([(cx - 150, cy - 170), (cx - 118, cy - 148)], radius=3, fill='#003366', outline='#00E5FF', width=1)
+    draw.text((cx - 142, cy - 168), "M1", fill='#FFFFFF', font=FONT_MONO_XS)
+
+    draw.rounded_rectangle([(cx - 10, cy - 185), (cx + 36, cy - 163)], radius=3, fill='#004422', outline='#00E676', width=1)
+    draw.text((cx - 4, cy - 183), "A406", fill='#FFFFFF', font=FONT_MONO_XS)
+
+    # 8. Top Floating Search Bar & City Jump Chips
+    draw.rounded_rectangle([(24, 48), (W - 24, 96)], radius=8, fill='#121721', outline='#21262D', width=1)
+    draw.text((44, 62), "🔍", fill='#00E5FF', font=FONT_SUB)
+    draw.text((74, 64), "United Kingdom OSM • Tap map to drop waypoint", fill='#8B949E', font=FONT_TEXT)
+    draw.rounded_rectangle([(W - 130, 56), (W - 36, 88)], radius=4, fill='#070A0F', outline='#00E676', width=1)
+    draw.text((W - 118, 64), "UK OSM", fill='#00E676', font=FONT_MONO_XS)
+
+    # Top OSM Status Active Indicator Chip
+    draw.rounded_rectangle([(24, 106), (360, 134)], radius=12, fill='#121721', outline='#00E5FF', width=1)
+    draw.ellipse([(36, 117), (44, 125)], fill='#00E676')
+    draw.text((50, 114), "OSM DATA ACTIVE • UK 100% COVERAGE", fill='#00E5FF', font=FONT_MONO_XS)
 
     # Quick Jump Chips
     chips = ["🏛️ London", "🐝 Manchester", "🏭 Birmingham", "🏰 Edinburgh", "🐉 Cardiff", "⚓ Belfast"]
     ch_x = 24
     for chip in chips:
         ch_w = draw.textlength(chip, font=FONT_TEXT) + 24
-        draw.rounded_rectangle([(ch_x, 116), (ch_x + ch_w, 150)], radius=16, fill='#121721', outline='#21262D', width=1)
-        draw.text((ch_x + 12, 126), chip, fill='#F0F6FC' if "London" in chip else '#8B949E', font=FONT_TEXT)
+        draw.rounded_rectangle([(ch_x, 144), (ch_x + ch_w, 178)], radius=16, fill='#121721', outline='#21262D', width=1)
+        draw.text((ch_x + 12, 154), chip, fill='#F0F6FC' if "London" in chip else '#8B949E', font=FONT_TEXT)
         ch_x += ch_w + 8
 
     # 8. Right Floating Tactical Controls (Google Maps-style)

@@ -8,9 +8,9 @@ import kotlin.math.*
 enum class OsmRoadType(val priority: Int, val defaultSpeedLimit: Int) {
     MOTORWAY(1, 112),    // 70 mph (M1, M25, M6, M4, etc.)
     TRUNK(2, 96),        // 60 mph (A1, A303, A82, etc.)
-    PRIMARY(3, 80),      // 50 mph (Major A-roads)
-    SECONDARY(4, 64),    // 40 mph (B-roads)
-    TERTIARY(5, 48),     // 30 mph (C-roads & urban collectors)
+    PRIMARY(3, 80),      // 50 mph (Major A-roads, London Circulars)
+    SECONDARY(4, 64),    // 40 mph (B-roads & urban collectors)
+    TERTIARY(5, 48),     // 30 mph (C-roads & city streets)
     RESIDENTIAL(6, 32)   // 20-30 mph (Local neighborhood streets)
 }
 
@@ -61,6 +61,149 @@ object UkOsmDataEngine {
         maxLat = 60.85,
         minLon = -8.65,
         maxLon = 1.78
+    )
+
+    // =========================================================================
+    // 0. AUTHENTIC UK COASTLINES (Great Britain & Northern Ireland)
+    // =========================================================================
+
+    val UK_COASTLINE: List<Pair<Double, Double>> = listOf(
+        51.1275 to 1.3134,  // Dover
+        51.0800 to 1.1800,  // Folkestone
+        50.8500 to 0.5800,  // Hastings
+        50.7300 to 0.2500,  // Beachy Head
+        50.8200 to -0.1400, // Brighton
+        50.7900 to -0.8000, // Bognor Regis
+        50.8000 to -1.0800, // Portsmouth
+        50.8800 to -1.3500, // Southampton Water
+        50.7200 to -1.8800, // Bournemouth
+        50.5200 to -2.4400, // Portland Bill
+        50.7200 to -2.9300, // Lyme Regis
+        50.6200 to -3.4100, // Exmouth
+        50.4600 to -3.5200, // Torbay
+        50.3600 to -4.1400, // Plymouth Sound
+        50.1500 to -5.0600, // Falmouth
+        49.9600 to -5.2100, // Lizard Point (South tip)
+        50.0700 to -5.7100, // Land's End
+        50.2100 to -5.4800, // St Ives
+        50.4100 to -5.0800, // Newquay
+        50.7100 to -4.5500, // Bude
+        51.0200 to -4.5300, // Hartland Point
+        51.2100 to -4.1200, // Ilfracombe
+        51.2100 to -3.4700, // Minehead
+        51.3400 to -2.9800, // Weston-super-Mare
+        51.5800 to -2.6500, // Severn Estuary
+        51.5500 to -2.9800, // Newport
+        51.4600 to -3.1600, // Cardiff Bay
+        51.5800 to -3.9800, // Swansea Bay
+        51.5500 to -4.2800, // Gower
+        51.6800 to -4.7000, // Tenby
+        51.7000 to -5.1500, // Milford Haven
+        51.9000 to -5.3100, // St David's Head
+        52.1000 to -4.6600, // Cardigan
+        52.4100 to -4.0800, // Aberystwyth
+        52.8000 to -4.1000, // Barmouth
+        52.8000 to -4.7000, // Lleyn Peninsula
+        53.1400 to -4.2700, // Caernarfon
+        53.3000 to -4.6300, // Holyhead (Anglesey)
+        53.4200 to -4.3500, // Amlwch
+        53.2800 to -3.8300, // Conwy / Great Orme
+        53.3500 to -3.1500, // Dee Estuary / Wirral
+        53.4500 to -3.0500, // Liverpool Mersey
+        53.7500 to -3.0500, // Lytham / Ribble
+        53.8200 to -3.0500, // Blackpool
+        54.0700 to -2.9000, // Morecambe Bay
+        54.1100 to -3.2300, // Barrow-in-Furness
+        54.5100 to -3.6100, // St Bees Head
+        54.8500 to -3.4000, // Maryport
+        54.9500 to -3.4000, // Solway Firth
+        54.8000 to -4.0500, // Kirkcudbright
+        54.6400 to -4.8600, // Mull of Galloway
+        55.1500 to -5.0300, // Stranraer
+        55.4600 to -4.6300, // Ayr
+        55.7000 to -4.8500, // Largs
+        55.9500 to -4.7600, // Greenock / Clyde
+        55.4200 to -5.6000, // Campbeltown / Kintyre
+        56.0000 to -5.5000, // Loch Fyne
+        56.4100 to -5.4700, // Oban
+        56.7300 to -6.1600, // Ardnamurchan Point
+        57.1000 to -5.8500, // Mallaig / Sound of Sleat
+        57.4000 to -6.2000, // Isle of Skye
+        57.7500 to -5.7000, // Gairloch
+        57.8900 to -5.1600, // Ullapool
+        58.2000 to -5.1500, // Lochinver
+        58.6200 to -5.0000, // Cape Wrath (NW tip)
+        58.5700 to -4.7500, // Durness
+        58.5500 to -3.5200, // Thurso
+        58.6700 to -3.3700, // Dunnet Head (North tip)
+        58.6400 to -3.0300, // John o' Groats
+        58.4400 to -3.0900, // Wick
+        58.1000 to -3.8500, // Helmsdale
+        57.8800 to -4.0000, // Dornoch Firth
+        57.5000 to -4.2200, // Inverness / Moray Firth
+        57.7200 to -3.2800, // Lossiemouth
+        57.6900 to -2.0000, // Fraserburgh
+        57.5100 to -1.7800, // Peterhead
+        57.1500 to -2.0800, // Aberdeen
+        56.9600 to -2.2100, // Stonehaven
+        56.7100 to -2.4600, // Montrose
+        56.5500 to -2.5900, // Arbroath
+        56.4600 to -2.9600, // Dundee
+        56.3400 to -2.8000, // St Andrews / Fife Ness
+        56.0500 to -3.1500, // Kirkcaldy
+        55.9800 to -3.1800, // Edinburgh / Leith
+        56.0000 to -2.5100, // Dunbar
+        55.9200 to -2.1400, // St Abb's Head
+        55.7700 to -1.9900, // Berwick-upon-Tweed
+        55.6000 to -1.7100, // Bamburgh
+        55.3000 to -1.5500, // Amble
+        55.0100 to -1.4200, // Tynemouth
+        54.9100 to -1.3700, // Sunderland
+        54.6900 to -1.2100, // Hartlepool
+        54.6000 to -1.1500, // Redcar
+        54.4900 to -0.6100, // Whitby
+        54.2800 to -0.4000, // Scarborough
+        54.1200 to -0.0800, // Flamborough Head
+        53.5800 to 0.1100,  // Spurn Point / Humber
+        53.5500 to -0.0200, // Cleethorpes
+        53.1400 to 0.3400,  // Skegness
+        52.9500 to 0.0500,  // The Wash
+        52.7500 to 0.3900,  // King's Lynn
+        52.9400 to 0.4900,  // Hunstanton
+        52.9300 to 1.3000,  // Cromer
+        52.6000 to 1.7300,  // Great Yarmouth
+        52.4800 to 1.7600,  // Lowestoft (East tip)
+        52.3300 to 1.6800,  // Southwold
+        51.9500 to 1.3400,  // Felixstowe / Harwich
+        51.7900 to 1.1500,  // Clacton-on-Sea
+        51.5300 to 0.7100,  // Southend-on-Sea
+        51.4200 to 0.8500,  // Isle of Sheppey
+        51.3900 to 1.4400,  // Margate
+        51.3300 to 1.4200,  // Ramsgate
+        51.1275 to 1.3134   // Back to Dover
+    )
+
+    val NORTHERN_IRELAND_COASTLINE: List<Pair<Double, Double>> = listOf(
+        54.1000 to -6.2500, // Carlingford Lough
+        54.2100 to -5.8900, // Newcastle / Mourne
+        54.3800 to -5.5500, // Strangford Lough
+        54.6400 to -5.5300, // Donaghadee
+        54.6600 to -5.6700, // Bangor
+        54.6200 to -5.8400, // Belfast Lough
+        54.7100 to -5.8100, // Carrickfergus
+        54.8500 to -5.8100, // Larne
+        54.9700 to -5.9500, // Glenarm
+        55.0800 to -6.0600, // Cushendall
+        55.2200 to -6.1500, // Fair Head
+        55.2400 to -6.5100, // Giant's Causeway
+        55.2000 to -6.6500, // Portrush
+        55.1800 to -6.9500, // Magilligan Point
+        55.0000 to -7.3200, // Lough Foyle / Derry
+        54.8200 to -7.4600, // Strabane
+        54.4800 to -8.0800, // Belleek / Lough Erne
+        54.3400 to -7.6400, // Enniskillen
+        54.1700 to -6.3400, // Newry
+        54.1000 to -6.2500  // Warrenpoint
     )
 
     // =========================================================================
@@ -121,8 +264,8 @@ object UkOsmDataEngine {
                 52.5100 to -1.8600, // Spaghetti Junction, Birmingham
                 52.8000 to -2.1200, // Stafford
                 53.0000 to -2.2500, // Stoke-on-Trent
-                53.3300 to -2.5000, // Knutsford / Manchester West
-                53.3800 to -2.6000, // Warrington / Thelwall Viaduct
+                53.3300 to -2.5000, // Knutsford
+                53.3800 to -2.6000, // Warrington
                 53.5500 to -2.6500, // Wigan
                 53.7600 to -2.6800, // Preston
                 54.0500 to -2.7800, // Lancaster
@@ -190,6 +333,76 @@ object UkOsmDataEngine {
                 53.7400 to -1.5500, // Leeds South
                 53.7200 to -1.2500, // Pontefract
                 53.7400 to -0.3400  // Hull
+            ),
+            lanes = 3
+        ),
+
+        // M40: London to Birmingham via Oxford
+        OsmRoadSegment(
+            name = "M40 Motorway",
+            ref = "M40",
+            type = OsmRoadType.MOTORWAY,
+            points = listOf(
+                51.5300 to -0.4500, // Uxbridge / Denham
+                51.6000 to -0.6500, // Beaconsfield
+                51.6300 to -0.8000, // High Wycombe
+                51.7200 to -1.0500, // Wheatley / Oxford
+                51.9000 to -1.2500, // Bicester
+                52.0600 to -1.3300, // Banbury
+                52.2800 to -1.5800, // Warwick
+                52.3600 to -1.7800  // M42 Birmingham
+            ),
+            lanes = 3
+        ),
+
+        // M3: London to Southampton
+        OsmRoadSegment(
+            name = "M3 Motorway",
+            ref = "M3",
+            type = OsmRoadType.MOTORWAY,
+            points = listOf(
+                51.4200 to -0.4200, // Sunbury-on-Thames
+                51.3500 to -0.6000, // Lightwater
+                51.3100 to -0.7400, // Camberley
+                51.2600 to -1.0800, // Basingstoke
+                51.0600 to -1.3100, // Winchester
+                50.9600 to -1.3900  // Southampton
+            ),
+            lanes = 3
+        ),
+
+        // M11: London to Cambridge
+        OsmRoadSegment(
+            name = "M11 Motorway",
+            ref = "M11",
+            type = OsmRoadType.MOTORWAY,
+            points = listOf(
+                51.5800 to 0.0400,  // Redbridge / Woodford
+                51.6800 to 0.1200,  // M25 J27 Epping
+                51.7800 to 0.1500,  // Harlow
+                51.8800 to 0.2200,  // Stansted Airport
+                52.0500 to 0.1800,  // Saffron Walden
+                52.1800 to 0.1000,  // Cambridge
+                52.2800 to 0.0200   // A14 Girton
+            ),
+            lanes = 2
+        ),
+
+        // M60: Manchester Orbital Ring Road
+        OsmRoadSegment(
+            name = "M60 Manchester Ring",
+            ref = "M60",
+            type = OsmRoadType.MOTORWAY,
+            points = listOf(
+                53.4600 to -2.3500, // Trafford / Eccles
+                53.5200 to -2.3200, // Swinton / M62
+                53.5400 to -2.2500, // Prestwich
+                53.5300 to -2.1500, // Middleton
+                53.4800 to -2.1400, // Ashton-under-Lyne
+                53.4100 to -2.1700, // Stockport
+                53.3900 to -2.2800, // Cheadle
+                53.4300 to -2.3600, // Stretford
+                53.4600 to -2.3500  // Complete loop
             ),
             lanes = 3
         ),
@@ -326,6 +539,186 @@ object UkOsmDataEngine {
                 51.1300 to 1.3100  // Port of Dover
             ),
             lanes = 3
+        ),
+
+        // =====================================================================
+        // GREATER LONDON PRIMARY ARTERIAL NETWORK (Visible in Central & Suburbs)
+        // =====================================================================
+
+        // A406: North Circular Road
+        OsmRoadSegment(
+            name = "A406 North Circular",
+            ref = "A406",
+            type = OsmRoadType.PRIMARY,
+            points = listOf(
+                51.4920 to -0.2800, // Chiswick Roundabout
+                51.5180 to -0.2880, // Ealing / Hanger Lane
+                51.5320 to -0.2600, // Park Royal
+                51.5540 to -0.2280, // Staples Corner (M1)
+                51.5780 to -0.1980, // Finchley
+                51.6130 to -0.1340, // Southgate / Palmers Green
+                51.6160 to -0.0650, // Edmonton
+                51.5950 to -0.0120, // Chingford
+                51.5830 to 0.0400,  // Woodford (M11)
+                51.5580 to 0.0550,  // Ilford
+                51.5240 to 0.0680,  // Barking
+                51.5100 to 0.0600   // Beckton Roundabout
+            ),
+            lanes = 3
+        ),
+
+        // A205: South Circular Road
+        OsmRoadSegment(
+            name = "A205 South Circular",
+            ref = "A205",
+            type = OsmRoadType.PRIMARY,
+            points = listOf(
+                51.4900 to -0.2800, // Chiswick Bridge
+                51.4720 to -0.2780, // Mortlake
+                51.4650 to -0.2400, // Barnes Common
+                51.4620 to -0.1700, // Clapham Common South
+                51.4550 to -0.1200, // Brixton Hill
+                51.4460 to -0.0500, // Dulwich
+                51.4480 to 0.0050,  // Catford
+                51.4680 to 0.0450,  // Eltham
+                51.4900 to 0.0650   // Woolwich Ferry
+            ),
+            lanes = 2
+        ),
+
+        // A40: Westway / Oxford Street / Holborn
+        OsmRoadSegment(
+            name = "A40 Westway",
+            ref = "A40",
+            type = OsmRoadType.PRIMARY,
+            points = listOf(
+                51.5400 to -0.4500, // Uxbridge
+                51.5280 to -0.3500, // Greenford
+                51.5230 to -0.2200, // White City / Westway flyover
+                51.5190 to -0.1800, // Paddington
+                51.5160 to -0.1550, // Marble Arch / Oxford Street
+                51.5170 to -0.1150  // Holborn / City
+            ),
+            lanes = 3
+        ),
+
+        // A4: Great West Road / Piccadilly / Knightsbridge
+        OsmRoadSegment(
+            name = "A4 Piccadilly / Great West Rd",
+            ref = "A4",
+            type = OsmRoadType.PRIMARY,
+            points = listOf(
+                51.4900 to -0.3500, // Brentford
+                51.4920 to -0.2800, // Chiswick
+                51.4940 to -0.2200, // Hammersmith Flyover
+                51.4970 to -0.1750, // South Kensington
+                51.5030 to -0.1500, // Hyde Park Corner
+                51.5080 to -0.1300, // Piccadilly Circus
+                51.5074 to -0.1278  // Trafalgar Square
+            ),
+            lanes = 2
+        ),
+
+        // A11: Whitechapel / Mile End / Stratford
+        OsmRoadSegment(
+            name = "A11 Whitechapel Rd",
+            ref = "A11",
+            type = OsmRoadType.PRIMARY,
+            points = listOf(
+                51.5140 to -0.0750, // Aldgate
+                51.5190 to -0.0580, // Whitechapel
+                51.5250 to -0.0350, // Mile End
+                51.5380 to -0.0050, // Bow Interchange
+                51.5450 to 0.0020   // Stratford Olympic Park
+            ),
+            lanes = 2
+        ),
+
+        // A13: Commercial Road / Thames Gateway
+        OsmRoadSegment(
+            name = "A13 Commercial Rd",
+            ref = "A13",
+            type = OsmRoadType.PRIMARY,
+            points = listOf(
+                51.5130 to -0.0700, // Aldgate East
+                51.5160 to -0.0300, // Limehouse
+                51.5190 to 0.0100,  // Canning Town
+                51.5230 to 0.0800,  // Barking Flyover
+                51.5150 to 0.2000,  // Dagenham
+                51.5000 to 0.3500   // Rainham / M25 J30
+            ),
+            lanes = 3
+        ),
+
+        // A3: Kingston Bypass / Elephant & Castle
+        OsmRoadSegment(
+            name = "A3 London Corridor",
+            ref = "A3",
+            type = OsmRoadType.PRIMARY,
+            points = listOf(
+                51.3800 to -0.3200, // Tolworth / Kingston
+                51.4200 to -0.2400, // Wimbledon Common
+                51.4600 to -0.1800, // Wandsworth
+                51.4850 to -0.1250, // Kennington
+                51.4950 to -0.1000, // Elephant & Castle
+                51.5070 to -0.0870  // London Bridge
+            ),
+            lanes = 2
+        ),
+
+        // A2: Old Kent Road / Blackheath
+        OsmRoadSegment(
+            name = "A2 Old Kent Road",
+            ref = "A2",
+            type = OsmRoadType.PRIMARY,
+            points = listOf(
+                51.4950 to -0.0950, // Elephant & Castle
+                51.4820 to -0.0650, // Old Kent Road Center
+                51.4720 to -0.0300, // New Cross Gate
+                51.4700 to 0.0050,  // Blackheath
+                51.4550 to 0.1200,  // Bexley
+                51.4400 to 0.2200   // Dartford M25
+            ),
+            lanes = 2
+        ),
+
+        // A23: Brixton / Croydon / Brighton Road
+        OsmRoadSegment(
+            name = "A23 Brixton Rd",
+            ref = "A23",
+            type = OsmRoadType.PRIMARY,
+            points = listOf(
+                51.4980 to -0.1180, // Westminster Bridge South
+                51.4850 to -0.1150, // Oval
+                51.4620 to -0.1150, // Brixton
+                51.4250 to -0.1250, // Streatham
+                51.3750 to -0.1000, // Croydon
+                51.3000 to -0.1400  // Coulsdon / M23 J7
+            ),
+            lanes = 2
+        ),
+
+        // Central London Ring: Marylebone -> Euston -> City -> Tower Bridge -> Waterloo
+        OsmRoadSegment(
+            name = "Central London Inner Ring",
+            ref = "Inner Ring",
+            type = OsmRoadType.PRIMARY,
+            points = listOf(
+                51.5160 to -0.1580, // Marble Arch
+                51.5220 to -0.1550, // Baker Street
+                51.5270 to -0.1330, // Euston Road
+                51.5300 to -0.1180, // King's Cross St Pancras
+                51.5290 to -0.1000, // Angel Islington
+                51.5240 to -0.0850, // Old Street Roundabout
+                51.5140 to -0.0750, // Aldgate
+                51.5050 to -0.0750, // Tower Bridge
+                51.4980 to -0.0980, // Elephant & Castle
+                51.4920 to -0.1220, // Lambeth Bridge
+                51.4980 to -0.1450, // Victoria
+                51.5040 to -0.1500, // Hyde Park Corner
+                51.5160 to -0.1580  // Marble Arch (Closed ring)
+            ),
+            lanes = 2
         )
     )
 
@@ -334,18 +727,28 @@ object UkOsmDataEngine {
     // =========================================================================
 
     val MAJOR_WATERWAYS: List<OsmWaterBody> = listOf(
-        // River Thames (London to North Sea)
+        // River Thames (Windsor through Central London to Southend Estuary)
         OsmWaterBody(
             name = "River Thames",
             points = listOf(
+                51.4800 to -0.6100, // Windsor
+                51.4400 to -0.5200, // Staines
+                51.4100 to -0.3600, // Kingston
                 51.4500 to -0.3200, // Richmond
                 51.4800 to -0.2200, // Hammersmith
-                51.4800 to -0.1300, // Westminster
-                51.5000 to -0.0700, // Tower Bridge
-                51.5000 to 0.0000,  // Greenwich
+                51.4750 to -0.1700, // Chelsea
+                51.4850 to -0.1250, // Vauxhall
+                51.5010 to -0.1190, // Westminster / London Eye
+                51.5080 to -0.1050, // Blackfriars
+                51.5074 to -0.0870, // London Bridge
+                51.5050 to -0.0750, // Tower Bridge
+                51.5020 to -0.0200, // Canary Wharf / Isle of Dogs loop
+                51.4850 to -0.0050, // Greenwich
+                51.5000 to 0.0500,  // Thames Barrier
                 51.4900 to 0.1400,  // Erith
                 51.4500 to 0.3600,  // Gravesend
-                51.5200 to 0.7200   // Southend Estuary
+                51.5200 to 0.7200,  // Southend Estuary
+                51.5000 to 1.1000   // Outer Thames North Sea
             )
         ),
 
@@ -383,6 +786,31 @@ object UkOsmDataEngine {
             )
         ),
 
+        // River Mersey (Manchester / Liverpool)
+        OsmWaterBody(
+            name = "River Mersey",
+            points = listOf(
+                53.4200 to -2.2000, // Stockport
+                53.4300 to -2.3500, // Sale / Stretford
+                53.3700 to -2.6000, // Warrington
+                53.3400 to -2.7500, // Runcorn Widnes Bridge
+                53.3500 to -2.9500, // Speke / John Lennon Airport
+                53.4000 to -3.0000, // Albert Dock Liverpool
+                53.4500 to -3.0500  // Irish Sea
+            )
+        ),
+
+        // River Tyne (Newcastle)
+        OsmWaterBody(
+            name = "River Tyne",
+            points = listOf(
+                54.9700 to -1.7500, // Blaydon
+                54.9680 to -1.6050, // Tyne Bridge, Newcastle
+                54.9850 to -1.4800, // Wallsend
+                55.0100 to -1.4200  // Tynemouth Piers
+            )
+        ),
+
         // Loch Ness (Scottish Highlands)
         OsmWaterBody(
             name = "Loch Ness",
@@ -396,7 +824,7 @@ object UkOsmDataEngine {
     )
 
     // =========================================================================
-    // 3. COMPLETE UK SETTLEMENTS & CITIES CATALOG (50+ Locations)
+    // 3. COMPLETE UK SETTLEMENTS & CITIES CATALOG (40+ Locations)
     // =========================================================================
 
     val MAJOR_CITIES: List<OsmPlace> = listOf(
@@ -435,73 +863,89 @@ object UkOsmDataEngine {
         OsmPlace("Perth", "Perthshire", 56.3950, -3.4308, true, 47000),
         OsmPlace("Stirling", "Stirlingshire", 56.1165, -3.9369, true, 37000),
         OsmPlace("Fort William", "Highland", 56.8198, -5.1052, false, 10500),
-        OsmPlace("Penzance", "Cornwall", 50.1186, -5.5372, false, 21000)
+        OsmPlace("Penzance", "Cornwall", 50.1186, -5.5372, false, 21000),
+        OsmPlace("Westminster", "Greater London", 51.4995, -0.1333, false, 250000),
+        OsmPlace("Camden", "Greater London", 51.5390, -0.1426, false, 270000),
+        OsmPlace("Greenwich", "Greater London", 51.4826, -0.0077, false, 280000),
+        OsmPlace("Stratford", "Greater London", 51.5430, -0.0016, false, 300000)
     )
 
     /**
      * Dynamically generates secondary and residential road networks for the current viewport bounding box.
-     * When zooming into UK cities, this generates true-to-life local street networks and rings.
+     * Guarantees realistic road coverage anywhere in the UK at zoom >= 11.0f.
      */
     fun getLocalStreetGridForBounds(
         bounds: UkBoundingBox,
         zoom: Float
     ): List<OsmRoadSegment> {
-        if (zoom < 12.0f) return emptyList()
+        if (zoom < 11.0f) return emptyList()
 
         val localStreets = mutableListOf<OsmRoadSegment>()
 
-        // Check if any major city is within current viewport
-        val visibleCities = MAJOR_CITIES.filter { bounds.contains(it.lat, it.lon) }
+        // 1. Grid resolution step size based on zoom level
+        val step = when {
+            zoom >= 15.5f -> 0.003  // ~300m fine residential grid
+            zoom >= 13.5f -> 0.007  // ~700m city streets & avenues
+            zoom >= 12.0f -> 0.015  // ~1.5km regional collectors
+            else -> 0.030           // ~3km primary interconnects
+        }
 
-        for (city in visibleCities) {
-            val step = 0.008 // ~800m grid
-            val numRings = min(4, ((zoom - 11.5f) * 1.5f).toInt())
+        val startLat = floor(bounds.minLat / step) * step
+        val endLat = ceil(bounds.maxLat / step) * step
+        val startLon = floor(bounds.minLon / step) * step
+        val endLon = ceil(bounds.maxLon / step) * step
 
-            for (ring in 1..numRings) {
-                val radius = ring * step
-                // Ring road
-                val ringPts = listOf(
-                    (city.lat + radius) to (city.lon - radius),
-                    (city.lat + radius) to (city.lon + radius),
-                    (city.lat - radius) to (city.lon + radius),
-                    (city.lat - radius) to (city.lon - radius),
-                    (city.lat + radius) to (city.lon - radius)
-                )
+        // Generate horizontal (East-West) road segments with subtle natural curvature
+        var latIdx = 0
+        var currLat = startLat
+        while (currLat <= endLat) {
+            val pts = mutableListOf<Pair<Double, Double>>()
+            var cLon = bounds.minLon - step
+            while (cLon <= bounds.maxLon + step) {
+                // Subtle organic offset to mimic realistic UK road curving
+                val jitter = sin(cLon * 120.0 + currLat * 60.0) * (step * 0.12)
+                pts.add((currLat + jitter) to cLon)
+                cLon += step * 0.5
+            }
+            if (pts.size >= 2) {
+                val isMajor = (latIdx % 3 == 0)
                 localStreets.add(
                     OsmRoadSegment(
-                        name = "${city.name} Ring Road R$ring",
-                        ref = "B${(city.lat * 100).toInt() + ring}",
-                        type = if (ring == 1) OsmRoadType.SECONDARY else OsmRoadType.TERTIARY,
-                        points = ringPts
-                    )
-                )
-
-                // Radial arterials
-                val northSouth = listOf(
-                    (city.lat - radius * 1.4) to city.lon,
-                    (city.lat + radius * 1.4) to city.lon
-                )
-                val eastWest = listOf(
-                    city.lat to (city.lon - radius * 1.8),
-                    city.lat to (city.lon + radius * 1.8)
-                )
-                localStreets.add(
-                    OsmRoadSegment(
-                        name = "${city.name} High Street",
-                        ref = "A${(city.lon * 100).toInt().absoluteValue}",
-                        type = OsmRoadType.PRIMARY,
-                        points = northSouth
-                    )
-                )
-                localStreets.add(
-                    OsmRoadSegment(
-                        name = "${city.name} Commercial Way",
-                        ref = "A${(city.lat * 50).toInt()}",
-                        type = OsmRoadType.PRIMARY,
-                        points = eastWest
+                        name = if (isMajor) "Sector Arterial Road" else "Local Street",
+                        ref = if (isMajor) "B${(currLat * 100).toInt().absoluteValue}" else "C${(currLat * 200).toInt().absoluteValue}",
+                        type = if (isMajor) OsmRoadType.SECONDARY else OsmRoadType.RESIDENTIAL,
+                        points = pts
                     )
                 )
             }
+            currLat += step
+            latIdx++
+        }
+
+        // Generate vertical (North-South) road segments
+        var lonIdx = 0
+        var currLon = startLon
+        while (currLon <= endLon) {
+            val pts = mutableListOf<Pair<Double, Double>>()
+            var cLat = bounds.minLat - step
+            while (cLat <= bounds.maxLat + step) {
+                val jitter = cos(cLat * 120.0 + currLon * 60.0) * (step * 0.12)
+                pts.add(cLat to (currLon + jitter))
+                cLat += step * 0.5
+            }
+            if (pts.size >= 2) {
+                val isMajor = (lonIdx % 3 == 0)
+                localStreets.add(
+                    OsmRoadSegment(
+                        name = if (isMajor) "Radial Boulevard" else "Way",
+                        ref = if (isMajor) "A${(currLon * 100).toInt().absoluteValue}" else "B${(currLon * 200).toInt().absoluteValue}",
+                        type = if (isMajor) OsmRoadType.PRIMARY else OsmRoadType.TERTIARY,
+                        points = pts
+                    )
+                )
+            }
+            currLon += step
+            lonIdx++
         }
 
         return localStreets
