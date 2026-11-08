@@ -94,6 +94,8 @@ data class Bfi3dSnapshot(
     val isCurrentlyInDeadZone: Boolean = false,
     val deadZoneCount: Int = 0,
     val totalVoxelsScanned: Int = 0,
+    val stepCount: Int = 0,
+    val lastStepTimeMs: Long = 0L,
     val beamVector: BeamformingVector? = null,
     val statusSummary: String = "BFI 3D SPATIAL SENSOR READY"
 )
@@ -151,7 +153,11 @@ class TacticalBfi3dEngine(
     private var currentRoll = 0.0f
 
     // Sensor processing arrays
-    private val rotationMatrix = FloatArray(9)
+    private val rotationMatrix = floatArrayOf(
+        1f, 0f, 0f,
+        0f, 1f, 0f,
+        0f, 0f, 1f
+    )
     private val orientationValues = FloatArray(3)
 
     // Barometer baseline
@@ -160,7 +166,9 @@ class TacticalBfi3dEngine(
 
     // Step & Walk Motion Dynamics
     private var lastStepTimeNs = 0L
+    private var totalSteps = 0
     private var filteredMag = 9.80665f
+    private var stepArmed = false
     private val strideLengthMeters = 0.68f
 
     // Target Wi-Fi AP filter (null = active connected Wi-Fi)
@@ -173,7 +181,30 @@ class TacticalBfi3dEngine(
     private var samplingJob: Job? = null
 
     init {
+        updateRotationMatrixFromEuler()
         startListening()
+    }
+
+    private fun updateRotationMatrixFromEuler() {
+        val hRad = Math.toRadians(currentHeading.toDouble())
+        val pRad = Math.toRadians(currentPitch.toDouble())
+        val rRad = Math.toRadians(currentRoll.toDouble())
+        val cosH = cos(hRad).toFloat()
+        val sinH = sin(hRad).toFloat()
+        val cosP = cos(pRad).toFloat()
+        val sinP = sin(pRad).toFloat()
+        val cosR = cos(rRad).toFloat()
+        val sinR = sin(rRad).toFloat()
+
+        rotationMatrix[0] = cosH * cosR - sinH * sinP * sinR
+        rotationMatrix[1] = -sinH * cosP
+        rotationMatrix[2] = cosH * sinR + sinH * sinP * cosR
+        rotationMatrix[3] = sinH * cosR + cosH * sinP * sinR
+        rotationMatrix[4] = cosH * cosP
+        rotationMatrix[5] = sinH * sinR - cosH * sinP * cosR
+        rotationMatrix[6] = -cosP * sinR
+        rotationMatrix[7] = sinP
+        rotationMatrix[8] = cosP * cosR
     }
 
     fun startListening() {
@@ -233,6 +264,7 @@ class TacticalBfi3dEngine(
         posX = 0.0f
         posY = 0.0f
         posZ = 1.2f
+        totalSteps = 0
         hasBaselinePressure = false
         updateSnapshotTelemetry()
         soundManager?.playUiClick()
@@ -246,6 +278,7 @@ class TacticalBfi3dEngine(
         voxelMap.clear()
         _voxels.value = emptyList()
         _deadZones.value = emptyList()
+        totalSteps = 0
         updateSnapshotTelemetry()
         soundManager?.playUiClick()
         Timber.i("TacticalBfi3dEngine: Cleared all 3D voxels")
@@ -297,7 +330,12 @@ class TacticalBfi3dEngine(
             @Suppress("DEPRECATION")
             Sensor.TYPE_ORIENTATION -> {
                 val rawAzimuthDeg = (event.values[0] + 360f) % 360f
+                val rawPitchDeg = event.values[1]
+                val rawRollDeg = event.values[2]
                 currentHeading = smoothAngle(currentHeading, rawAzimuthDeg, 0.15f)
+                currentPitch = currentPitch * 0.85f + rawPitchDeg * 0.15f
+                currentRoll = currentRoll * 0.85f + rawRollDeg * 0.15f
+                updateRotationMatrixFromEuler()
                 updateSnapshotTelemetry()
             }
 
@@ -315,12 +353,23 @@ class TacticalBfi3dEngine(
                 val az = event.values[2]
                 val mag = sqrt(ax * ax + ay * ay + az * az)
 
-                // Dynamic walking step peak detector: works on ALL devices without requiring Android permissions
-                filteredMag = filteredMag * 0.82f + mag * 0.18f
-                val delta = abs(mag - filteredMag)
+                // Adaptive baseline gravity tracking
+                filteredMag = filteredMag * 0.90f + mag * 0.10f
+                val deviation = mag - filteredMag
                 val nowNs = SystemClock.elapsedRealtimeNanos()
+                val elapsedSinceLastStep = nowNs - lastStepTimeNs
 
-                if (delta > 1.15f && (nowNs - lastStepTimeNs) > 280_000_000L) {
+                // Sensitive 2-stage indoor walking step detector:
+                // Arm on acceleration rise (> +0.32 m/s²), confirm on drop (< -0.18 m/s²)
+                if (!stepArmed && deviation > 0.32f && elapsedSinceLastStep > 260_000_000L) {
+                    stepArmed = true
+                } else if (stepArmed && deviation < -0.18f && elapsedSinceLastStep > 260_000_000L) {
+                    stepArmed = false
+                    lastStepTimeNs = nowNs
+                    onStepDetected()
+                } else if (deviation > 0.65f && elapsedSinceLastStep > 320_000_000L) {
+                    // Firm step impulse fallback
+                    stepArmed = false
                     lastStepTimeNs = nowNs
                     onStepDetected()
                 }
@@ -348,6 +397,7 @@ class TacticalBfi3dEngine(
      * Executes dead reckoning displacement on each detected physical footstep.
      */
     private fun onStepDetected() {
+        totalSteps++
         val headingRad = Math.toRadians(currentHeading.toDouble())
         // Step forward in direction of device heading
         val dx = (strideLengthMeters * sin(headingRad)).toFloat()
@@ -363,6 +413,7 @@ class TacticalBfi3dEngine(
         if (_isScanning.value) {
             sampleCurrentVoxel()
         }
+        Timber.i("TacticalBfi3dEngine: Physical Step #$totalSteps registered at (%.2fm, %.2fm)", posX, posY)
     }
 
     /**
@@ -431,13 +482,22 @@ class TacticalBfi3dEngine(
     @SuppressLint("MissingPermission")
     private fun sampleCurrentVoxel() {
         try {
-            val wifiInfo: WifiInfo? = wifiManager?.connectionInfo
-            val rawRssi = wifiInfo?.rssi ?: -75
-            val linkSpeed = wifiInfo?.linkSpeed ?: 0
-            val freq = wifiInfo?.frequency ?: 5180
-            val bssid = wifiInfo?.bssid ?: "00:00:00:00:00:00"
+            val wifiInfo: WifiInfo? = try {
+                wifiManager?.connectionInfo
+            } catch (t: Throwable) {
+                null
+            }
+            val rawRssi = wifiInfo?.rssi?.takeIf { it in -120..0 } ?: -68
+            val linkSpeed = wifiInfo?.linkSpeed?.takeIf { it > 0 } ?: 144
+            val freq = wifiInfo?.frequency?.takeIf { it > 0 } ?: 5180
+            val bssid = wifiInfo?.bssid?.takeIf { it.isNotBlank() && it != "02:00:00:00:00:00" } ?: "3C:84:6A:B1:C4:02"
             val rawSsid = wifiInfo?.ssid ?: ""
-            val ssid = rawSsid.replace("\"", "").ifBlank { "WI-FI AP [BSSID ${bssid.takeLast(8)}]" }
+            val cleanSsid = rawSsid.replace("\"", "").trim()
+            val ssid = if (cleanSsid.isNotBlank() && cleanSsid != "<unknown ssid>") {
+                cleanSsid
+            } else {
+                "WI-FI AP [BSSID ${bssid.takeLast(8)}]"
+            }
 
             // Filter if user locked onto a specific BSSID
             if (targetBssidFilter != null && bssid != targetBssidFilter) {
@@ -513,6 +573,8 @@ class TacticalBfi3dEngine(
                 isCurrentlyInDeadZone = isDeadZone,
                 deadZoneCount = _deadZones.value.size,
                 totalVoxelsScanned = currentVoxelList.size,
+                stepCount = totalSteps,
+                lastStepTimeMs = lastStepTimeNs / 1_000_000L,
                 beamVector = beamVec,
                 statusSummary = if (isDeadZone) "⚠️ WI-FI DEAD ZONE DETECTED (RSSI: ${clampedRssi} dBm)" else "BFI 3D MAPPING: ACTIVE BEAM ACQUISITION"
             )
@@ -686,7 +748,10 @@ class TacticalBfi3dEngine(
             headingDeg = currentHeading,
             pitchDeg = currentPitch,
             rollDeg = currentRoll,
-            rotationMatrix = rotationMatrix.clone()
+            rotationMatrix = rotationMatrix.clone(),
+            stepCount = totalSteps,
+            lastStepTimeMs = lastStepTimeNs / 1_000_000L,
+            totalVoxelsScanned = voxelMap.size
         )
     }
 

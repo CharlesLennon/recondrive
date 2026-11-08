@@ -403,10 +403,30 @@ fun Bfi3dSpatialScreen(
             // -----------------------------------------------------------------
             // G. Draw Real-Time 3D Smartphone Model & Orientation Ray
             // -----------------------------------------------------------------
-            val R = snapshot.rotationMatrix
-            val pw = 0.16f // phone half-width (0.32m width in 3D room)
-            val pl = 0.32f // phone half-length (0.64m length in 3D room)
-            val pt = 0.025f // phone half-thickness (0.05m depth)
+            // Use hardware rotation matrix with guaranteed fallback to Euler angle matrix
+            val R = if (snapshot.rotationMatrix.size == 9 && (snapshot.rotationMatrix[0] != 0f || snapshot.rotationMatrix[4] != 0f || snapshot.rotationMatrix[8] != 0f)) {
+                snapshot.rotationMatrix
+            } else {
+                val hRad = Math.toRadians(snapshot.headingDeg.toDouble())
+                val pRad = Math.toRadians(snapshot.pitchDeg.toDouble())
+                val rRad = Math.toRadians(snapshot.rollDeg.toDouble())
+                val cosH = cos(hRad).toFloat()
+                val sinH = sin(hRad).toFloat()
+                val cosP = cos(pRad).toFloat()
+                val sinP = sin(pRad).toFloat()
+                val cosR = cos(rRad).toFloat()
+                val sinR = sin(rRad).toFloat()
+                floatArrayOf(
+                    cosH * cosR - sinH * sinP * sinR, -sinH * cosP, cosH * sinR + sinH * sinP * cosR,
+                    sinH * cosR + cosH * sinP * sinR,  cosH * cosP, sinH * sinR - cosH * sinP * cosR,
+                    -cosP * sinR,                      sinP,        cosP * cosR
+                )
+            }
+
+            // Prominent Tactical Phone Scale (0.56m width, 1.04m length, 0.10m thickness)
+            val pw = 0.28f
+            val pl = 0.52f
+            val pt = 0.05f
 
             // Transform local phone coords (xd, yd, zd) into world space (wx, wy, wz)
             fun phoneToWorld(xd: Float, yd: Float, zd: Float): Triple<Float, Float, Float> {
@@ -416,18 +436,25 @@ fun Bfi3dSpatialScreen(
                 return Triple(wx, wy, wz)
             }
 
-            // Vertical drop line to floor shadow
+            // Vertical drop line to floor shadow and user anchor
             val userFloorProj = project(snapshot.posX, snapshot.posY, 0f)
             val phoneCenterProj = project(snapshot.posX, snapshot.posY, snapshot.posZ)
             if (userFloorProj != null && phoneCenterProj != null) {
+                // Altitude vertical connector line
                 drawLine(
-                    color = ReconCyan.copy(alpha = 0.45f),
+                    color = ReconCyan.copy(alpha = 0.6f),
                     start = Offset(phoneCenterProj.screenX, phoneCenterProj.screenY),
                     end = Offset(userFloorProj.screenX, userFloorProj.screenY),
-                    strokeWidth = 1.5.dp.toPx(),
+                    strokeWidth = 2.dp.toPx(),
                     cap = StrokeCap.Round
                 )
-                drawCircle(ReconCyan.copy(alpha = 0.35f), radius = 8.dp.toPx(), center = Offset(userFloorProj.screenX, userFloorProj.screenY))
+                // Concentric floor shadow rings
+                drawCircle(ReconCyan.copy(alpha = 0.45f), radius = 10.dp.toPx(), center = Offset(userFloorProj.screenX, userFloorProj.screenY))
+                drawCircle(ReconCyan.copy(alpha = 0.2f), radius = 18.dp.toPx(), center = Offset(userFloorProj.screenX, userFloorProj.screenY), style = Stroke(1.5.dp.toPx()))
+
+                // High-visibility core user reticle at phone position
+                drawCircle(ReconCyan.copy(alpha = 0.35f), radius = 14.dp.toPx(), center = Offset(phoneCenterProj.screenX, phoneCenterProj.screenY), style = Stroke(1.5.dp.toPx()))
+                drawCircle(ReconCyan, radius = 4.dp.toPx(), center = Offset(phoneCenterProj.screenX, phoneCenterProj.screenY))
             }
 
             // Project 8 Vertices of 3D Phone Cuboid
@@ -441,7 +468,7 @@ fun Bfi3dSpatialScreen(
             val pBackBL = phoneToWorld(-pw, -pl, -pt).let { project(it.first, it.second, it.third) }
             val pBackBR = phoneToWorld(pw, -pl, -pt).let { project(it.first, it.second, it.third) }
 
-            // 1. Draw Back Chassis Face
+            // 1. Draw Back Chassis Face & Camera Bump
             if (pBackTR != null && pBackTL != null && pBackBL != null && pBackBR != null) {
                 val backPath = Path().apply {
                     moveTo(pBackTL.screenX, pBackTL.screenY)
@@ -450,22 +477,30 @@ fun Bfi3dSpatialScreen(
                     lineTo(pBackBL.screenX, pBackBL.screenY)
                     close()
                 }
-                drawPath(backPath, color = Color(0xFF101924).copy(alpha = 0.92f))
-                drawPath(backPath, color = TacticalBorder, style = Stroke(width = 1.5.dp.toPx()))
+                drawPath(backPath, color = Color(0xFF1E2C3D))
+                drawPath(backPath, color = ReconCyan.copy(alpha = 0.8f), style = Stroke(width = 2.dp.toPx()))
+
+                // Camera island module on upper back chassis
+                val camIsland = Offset(
+                    pBackTL.screenX * 0.75f + pBackTR.screenX * 0.25f,
+                    pBackTL.screenY * 0.75f + pBackBL.screenY * 0.25f
+                )
+                drawCircle(Color(0xFF0F1722), radius = 7.dp.toPx(), center = camIsland)
+                drawCircle(ReconCyan, radius = 3.dp.toPx(), center = camIsland)
             }
 
             // 2. Draw Side Bevel Edges
             if (pBackTR != null && pFrontTR != null) {
-                drawLine(ReconCyan.copy(alpha = 0.65f), Offset(pBackTR.screenX, pBackTR.screenY), Offset(pFrontTR.screenX, pFrontTR.screenY), strokeWidth = 1.5.dp.toPx())
+                drawLine(ReconCyan, Offset(pBackTR.screenX, pBackTR.screenY), Offset(pFrontTR.screenX, pFrontTR.screenY), strokeWidth = 2.dp.toPx())
             }
             if (pBackTL != null && pFrontTL != null) {
-                drawLine(ReconCyan.copy(alpha = 0.65f), Offset(pBackTL.screenX, pBackTL.screenY), Offset(pFrontTL.screenX, pFrontTL.screenY), strokeWidth = 1.5.dp.toPx())
+                drawLine(ReconCyan, Offset(pBackTL.screenX, pBackTL.screenY), Offset(pFrontTL.screenX, pFrontTL.screenY), strokeWidth = 2.dp.toPx())
             }
             if (pBackBL != null && pFrontBL != null) {
-                drawLine(ReconCyan.copy(alpha = 0.65f), Offset(pBackBL.screenX, pBackBL.screenY), Offset(pFrontBL.screenX, pFrontBL.screenY), strokeWidth = 1.5.dp.toPx())
+                drawLine(ReconCyan, Offset(pBackBL.screenX, pBackBL.screenY), Offset(pFrontBL.screenX, pFrontBL.screenY), strokeWidth = 2.dp.toPx())
             }
             if (pBackBR != null && pFrontBR != null) {
-                drawLine(ReconCyan.copy(alpha = 0.65f), Offset(pBackBR.screenX, pBackBR.screenY), Offset(pFrontBR.screenX, pFrontBR.screenY), strokeWidth = 1.5.dp.toPx())
+                drawLine(ReconCyan, Offset(pBackBR.screenX, pBackBR.screenY), Offset(pFrontBR.screenX, pFrontBR.screenY), strokeWidth = 2.dp.toPx())
             }
 
             // 3. Draw Front Glass Screen Face
@@ -477,10 +512,16 @@ fun Bfi3dSpatialScreen(
                     lineTo(pFrontBL.screenX, pFrontBL.screenY)
                     close()
                 }
-                // Glowing OLED screen glass
-                drawPath(frontPath, color = ReconCyan.copy(alpha = 0.32f))
+                // Vibrant illuminated OLED screen glass
+                drawPath(frontPath, color = Color(0xFF00E5FF).copy(alpha = 0.45f))
                 // Neon cyan screen bezel
-                drawPath(frontPath, color = ReconCyan, style = Stroke(width = 2.dp.toPx()))
+                drawPath(frontPath, color = ReconCyan, style = Stroke(width = 2.5.dp.toPx()))
+
+                // Screen tactical display reticle inside the phone display
+                val screenCenterX = (pFrontTL.screenX + pFrontTR.screenX + pFrontBL.screenX + pFrontBR.screenX) / 4f
+                val screenCenterY = (pFrontTL.screenY + pFrontTR.screenY + pFrontBL.screenY + pFrontBR.screenY) / 4f
+                drawCircle(Color.White.copy(alpha = 0.7f), radius = 3.5.dp.toPx(), center = Offset(screenCenterX, screenCenterY))
+                drawCircle(ReconCyan, radius = 7.dp.toPx(), center = Offset(screenCenterX, screenCenterY), style = Stroke(1.dp.toPx()))
 
                 // Camera pill notch at top edge of screen
                 val notchLeft = Offset(
@@ -491,27 +532,30 @@ fun Bfi3dSpatialScreen(
                     pFrontTL.screenX * 0.42f + pFrontTR.screenX * 0.58f,
                     pFrontTL.screenY * 0.42f + pFrontTR.screenY * 0.58f
                 )
-                drawLine(Color.White, notchLeft, notchRight, strokeWidth = 3.dp.toPx(), cap = StrokeCap.Round)
+                drawLine(Color.White, notchLeft, notchRight, strokeWidth = 3.5.dp.toPx(), cap = StrokeCap.Round)
             }
 
             // 4. Directional Targeting Laser / Antenna Beam (Shooting out of top of phone)
-            val tipWorld = phoneToWorld(0f, pl + 1.2f, 0f)
+            val tipWorld = phoneToWorld(0f, pl + 1.8f, 0f)
             val topCenterWorld = phoneToWorld(0f, pl, 0f)
             val tipProj = project(tipWorld.first, tipWorld.second, tipWorld.third)
             val topCenterProj = project(topCenterWorld.first, topCenterWorld.second, topCenterWorld.third)
 
             if (tipProj != null && topCenterProj != null) {
+                val tipOffset = Offset(tipProj.screenX, tipProj.screenY)
+                val startOffset = Offset(topCenterProj.screenX, topCenterProj.screenY)
                 // Forward targeting laser ray
                 drawLine(
                     color = ReconCyan,
-                    start = Offset(topCenterProj.screenX, topCenterProj.screenY),
-                    end = Offset(tipProj.screenX, tipProj.screenY),
-                    strokeWidth = 2.5.dp.toPx(),
+                    start = startOffset,
+                    end = tipOffset,
+                    strokeWidth = 3.dp.toPx(),
                     cap = StrokeCap.Round
                 )
-                // Pulsing targeting reticle at ray tip
-                drawCircle(ReconCyan.copy(alpha = 0.4f), radius = 6.dp.toPx(), center = Offset(tipProj.screenX, tipProj.screenY))
-                drawCircle(ReconCyan, radius = 2.5.dp.toPx(), center = Offset(tipProj.screenX, tipProj.screenY))
+                // Dual pulsing targeting reticle at ray tip
+                drawCircle(ReconCyan.copy(alpha = 0.4f), radius = 8.dp.toPx(), center = tipOffset)
+                drawCircle(ReconCyan, radius = 3.5.dp.toPx(), center = tipOffset)
+                drawCircle(Color.White, radius = 1.5.dp.toPx(), center = tipOffset)
             }
         }
 
@@ -653,33 +697,81 @@ fun Bfi3dSpatialScreen(
                 }
             }
 
-            // Real-Time 3D Coordinates & Beam Direction Strip
+            // Real-Time 3D Coordinates & PDR Walk / Voxel Telemetry Strip
             Surface(
-                color = TacticalObsidian.copy(alpha = 0.88f),
+                color = TacticalObsidian.copy(alpha = 0.92f),
                 shape = RoundedCornerShape(8.dp),
                 border = androidx.compose.foundation.BorderStroke(1.dp, TacticalBorder),
                 modifier = Modifier.fillMaxWidth()
             ) {
-                Row(
+                Column(
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(horizontal = 10.dp, vertical = 6.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
-                    Text(
-                        text = "POS: X: ${"%.2f".format(snapshot.posX)}m | Y: ${"%.2f".format(snapshot.posY)}m | Z: ${"%.2f".format(snapshot.posZ)}m",
-                        color = ReconCyan,
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Bold,
-                        fontFamily = FontFamily.Monospace
-                    )
-                    Text(
-                        text = "HDG: ${snapshot.headingDeg.toInt()}° | PITCH: ${snapshot.pitchDeg.toInt()}°",
-                        color = TextSecondary,
-                        fontSize = 9.5.sp,
-                        fontFamily = FontFamily.Monospace
-                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "POS: X: ${"%.2f".format(snapshot.posX)}m | Y: ${"%.2f".format(snapshot.posY)}m | Z: ${"%.2f".format(snapshot.posZ)}m",
+                            color = ReconCyan,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.Monospace
+                        )
+                        Text(
+                            text = "HDG: ${snapshot.headingDeg.toInt()}° | PITCH: ${snapshot.pitchDeg.toInt()}°",
+                            color = TextSecondary,
+                            fontSize = 9.5.sp,
+                            fontFamily = FontFamily.Monospace
+                        )
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "VOXELS: ${snapshot.totalVoxelsScanned}",
+                                color = ReconGreen,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                fontFamily = FontFamily.Monospace
+                            )
+                            Text(
+                                text = "STEPS: ${snapshot.stepCount}",
+                                color = ReconCyan,
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                fontFamily = FontFamily.Monospace
+                            )
+                            if (snapshot.lastStepTimeMs > 0 && (System.currentTimeMillis() - snapshot.lastStepTimeMs < 1500L)) {
+                                Text(
+                                    text = "⚡ STEP",
+                                    color = ReconGreen,
+                                    fontSize = 9.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    fontFamily = FontFamily.Monospace
+                                )
+                            }
+                        }
+
+                        Text(
+                            text = if (isScanning) "● TESTING ACTIVE [4Hz]" else "❚❚ TEST PAUSED",
+                            color = if (isScanning) ReconGreen else TacticalAmber,
+                            fontSize = 9.5.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.Monospace
+                        )
+                    }
                 }
             }
         }
@@ -694,109 +786,6 @@ fun Bfi3dSpatialScreen(
                 .padding(horizontal = 14.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            // Tactical Room Walk Controller (Step Forward, Backward, Strafe & Altitude Nudge)
-            Surface(
-                color = TacticalSurface.copy(alpha = 0.95f),
-                shape = RoundedCornerShape(10.dp),
-                border = androidx.compose.foundation.BorderStroke(1.dp, TacticalBorder),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 8.dp, vertical = 6.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Column {
-                        Text(
-                            text = "WALK STEP",
-                            color = ReconCyan,
-                            fontSize = 9.sp,
-                            fontWeight = FontWeight.Bold,
-                            fontFamily = FontFamily.Monospace
-                        )
-                        Text(
-                            text = "Auto-PDR Active",
-                            color = ReconGreen,
-                            fontSize = 8.sp,
-                            fontFamily = FontFamily.Monospace
-                        )
-                    }
-
-                    // Forward / Back / Left / Right Buttons
-                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Button(
-                            onClick = { bfiEngine.strafeLeft(0.5f) },
-                            colors = ButtonDefaults.buttonColors(containerColor = TacticalObsidian),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, ReconCyan),
-                            shape = RoundedCornerShape(6.dp),
-                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
-                            modifier = Modifier.height(30.dp)
-                        ) {
-                            Text("◀ L", color = ReconCyan, fontSize = 9.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
-                        }
-
-                        Button(
-                            onClick = { bfiEngine.moveForward(0.5f) },
-                            colors = ButtonDefaults.buttonColors(containerColor = ReconCyan.copy(alpha = 0.25f)),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, ReconCyan),
-                            shape = RoundedCornerShape(6.dp),
-                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp),
-                            modifier = Modifier.height(30.dp)
-                        ) {
-                            Text("▲ FWD", color = ReconCyan, fontSize = 9.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
-                        }
-
-                        Button(
-                            onClick = { bfiEngine.moveBackward(0.5f) },
-                            colors = ButtonDefaults.buttonColors(containerColor = TacticalObsidian),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, ReconCyan),
-                            shape = RoundedCornerShape(6.dp),
-                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
-                            modifier = Modifier.height(30.dp)
-                        ) {
-                            Text("▼ REV", color = ReconCyan, fontSize = 9.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
-                        }
-
-                        Button(
-                            onClick = { bfiEngine.strafeRight(0.5f) },
-                            colors = ButtonDefaults.buttonColors(containerColor = TacticalObsidian),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, ReconCyan),
-                            shape = RoundedCornerShape(6.dp),
-                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
-                            modifier = Modifier.height(30.dp)
-                        ) {
-                            Text("R ▶", color = ReconCyan, fontSize = 9.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
-                        }
-                    }
-
-                    // Altitude Steppers (+0.25m / -0.25m)
-                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Button(
-                            onClick = { bfiEngine.adjustAltitude(0.25f) },
-                            colors = ButtonDefaults.buttonColors(containerColor = TacticalObsidian),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, TacticalAmber),
-                            shape = RoundedCornerShape(6.dp),
-                            contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
-                            modifier = Modifier.height(30.dp)
-                        ) {
-                            Text("Z+▲", color = TacticalAmber, fontSize = 8.5.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
-                        }
-                        Button(
-                            onClick = { bfiEngine.adjustAltitude(-0.25f) },
-                            colors = ButtonDefaults.buttonColors(containerColor = TacticalObsidian),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, TacticalAmber),
-                            shape = RoundedCornerShape(6.dp),
-                            contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
-                            modifier = Modifier.height(30.dp)
-                        ) {
-                            Text("Z-▼", color = TacticalAmber, fontSize = 8.5.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
-                        }
-                    }
-                }
-            }
-
             // Elevation Preset Strip (Floor, Desk, Chest, Overhead, Ceiling)
             Surface(
                 color = TacticalSurface.copy(alpha = 0.95f),
