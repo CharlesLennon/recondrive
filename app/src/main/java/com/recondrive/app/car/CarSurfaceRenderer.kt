@@ -123,20 +123,6 @@ class CarSurfaceRenderer(
             }
             canvas.drawPath(majorPath, roadMajorPaint)
 
-            // 3. Draw Explored Discovered Track (Driven by Fog Skin Glow)
-            exploredGlowPaint.apply {
-                color = fogSkin.exploredRoadGlowColor
-                setShadowLayer(fogSkin.perimeterGlowRadius, 0f, 0f, fogSkin.exploredRoadGlowColor)
-            }
-            val exploredPath = Path().apply {
-                moveTo(cx - 280f, cy + 220f)
-                lineTo(cx - 100f, cy + 120f)
-                lineTo(cx, cy)
-                lineTo(cx + 140f, cy - 110f)
-                lineTo(cx + 320f, cy - 180f)
-            }
-            canvas.drawPath(exploredPath, exploredGlowPaint)
-
             // 4. Draw Active Navigation Route (Driven by Map Skin)
             routePaint.apply {
                 color = mapSkin.routeColor

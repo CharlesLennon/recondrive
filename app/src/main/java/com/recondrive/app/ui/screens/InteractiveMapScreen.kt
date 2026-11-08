@@ -535,14 +535,30 @@ fun InteractiveMapScreen(
                         strokeJoin = android.graphics.Paint.Join.ROUND
                     }
                     val rawCorridor = android.graphics.Path().apply {
-                        val first = timelineEntries.first()
-                        val p0 = project(first.latitude, first.longitude)
+                        // Order chronological (oldest to newest)
+                        val chronological = timelineEntries.asReversed()
+                        var lastLat = chronological.first().latitude
+                        var lastLon = chronological.first().longitude
+                        val p0 = project(lastLat, lastLon)
                         moveTo(p0.x, p0.y)
-                        for (entry in timelineEntries.drop(1)) {
+
+                        for (entry in chronological.drop(1)) {
+                            val distMeters = UkOsmDataEngine.calculateDistanceKm(lastLat, lastLon, entry.latitude, entry.longitude) * 1000.0
                             val pt = project(entry.latitude, entry.longitude)
-                            lineTo(pt.x, pt.y)
+                            // Only bridge sequential points within reasonable distance (<= 250m) to avoid cross-country teleport lines
+                            if (distMeters <= (fogRange * 2.5).coerceAtLeast(200.0)) {
+                                lineTo(pt.x, pt.y)
+                            } else {
+                                moveTo(pt.x, pt.y)
+                            }
+                            lastLat = entry.latitude
+                            lastLon = entry.longitude
                         }
-                        lineTo(vehicleScreenPos.x, vehicleScreenPos.y)
+
+                        val finalDistMeters = UkOsmDataEngine.calculateDistanceKm(lastLat, lastLon, currentLat, currentLon) * 1000.0
+                        if (finalDistMeters <= (fogRange * 2.5).coerceAtLeast(200.0)) {
+                            lineTo(vehicleScreenPos.x, vehicleScreenPos.y)
+                        }
                     }
                     val filledCorridor = android.graphics.Path()
                     corridorStrokePaint.getFillPath(rawCorridor, filledCorridor)
@@ -632,25 +648,6 @@ fun InteractiveMapScreen(
                         pathEffect = android.graphics.DashPathEffect(floatArrayOf(6f, 6f), 0f)
                     }
                     nativeCanvas.drawCircle(vehicleScreenPos.x, vehicleScreenPos.y, screenBeamRadius * 0.88f, innerRingPaint)
-                }
-
-                // 5. Explored Road Trajectory Glowing Track (Real Timeline Breadcrumbs)
-                if (timelineEntries.size >= 2) {
-                    val realTrail = Path().apply {
-                        val first = timelineEntries.first()
-                        val p0 = project(first.latitude, first.longitude)
-                        moveTo(p0.x, p0.y)
-                        for (entry in timelineEntries.drop(1)) {
-                            val pt = project(entry.latitude, entry.longitude)
-                            lineTo(pt.x, pt.y)
-                        }
-                        lineTo(vehicleScreenPos.x, vehicleScreenPos.y)
-                    }
-                    drawPath(
-                        path = realTrail,
-                        color = Color(fogSkin.exploredRoadGlowColor).copy(alpha = 0.85f),
-                        style = Stroke(width = 4.5f, cap = StrokeCap.Round)
-                    )
                 }
 
                 // 6. Fog Texture & Grid Overlay (Dynamic Fog Skin Styling)
