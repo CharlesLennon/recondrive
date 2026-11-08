@@ -153,9 +153,9 @@ class TacticalBfi3dEngine(
     private var baselinePressure = 1013.25f
     private var hasBaselinePressure = false
 
-    // Step detection fallback (accelerometer peak analysis)
+    // Step & Walk Motion Dynamics
     private var lastStepTimeNs = 0L
-    private var accelMagnitudeOld = 9.8f
+    private var filteredMag = 9.80665f
     private val strideLengthMeters = 0.68f
 
     // Target Wi-Fi AP filter (null = active connected Wi-Fi)
@@ -286,15 +286,6 @@ class TacticalBfi3dEngine(
                 currentPitch = currentPitch * 0.85f + rawPitchDeg * 0.15f
                 currentRoll = currentRoll * 0.85f + rawRollDeg * 0.15f
 
-                // Arm pitch elevation coupling: tilting up while walking naturally raises altitude
-                if (currentPitch > 25f) {
-                    val pitchFactor = sin(Math.toRadians(currentPitch.toDouble())).toFloat() * 0.005f
-                    posZ = (posZ + pitchFactor).coerceIn(0.1f, 3.0f)
-                } else if (currentPitch < -25f) {
-                    val pitchFactor = abs(sin(Math.toRadians(currentPitch.toDouble()))).toFloat() * 0.005f
-                    posZ = (posZ - pitchFactor).coerceIn(0.1f, 3.0f)
-                }
-
                 updateSnapshotTelemetry()
             }
 
@@ -306,7 +297,11 @@ class TacticalBfi3dEngine(
             }
 
             Sensor.TYPE_STEP_DETECTOR -> {
-                onStepDetected()
+                val nowNs = SystemClock.elapsedRealtimeNanos()
+                if (nowNs - lastStepTimeNs > 250_000_000L) {
+                    lastStepTimeNs = nowNs
+                    onStepDetected()
+                }
             }
 
             Sensor.TYPE_ACCELEROMETER -> {
@@ -315,16 +310,14 @@ class TacticalBfi3dEngine(
                 val az = event.values[2]
                 val mag = sqrt(ax * ax + ay * ay + az * az)
 
-                // Fallback step peak detector if TYPE_STEP_DETECTOR is absent
-                if (stepDetector == null) {
-                    val delta = abs(mag - accelMagnitudeOld)
-                    accelMagnitudeOld = mag
-                    val nowNs = SystemClock.elapsedRealtimeNanos()
+                // Dynamic walking step peak detector: works on ALL devices without requiring Android permissions
+                filteredMag = filteredMag * 0.82f + mag * 0.18f
+                val delta = abs(mag - filteredMag)
+                val nowNs = SystemClock.elapsedRealtimeNanos()
 
-                    if (delta > 2.2f && (nowNs - lastStepTimeNs) > 350_000_000L) {
-                        lastStepTimeNs = nowNs
-                        onStepDetected()
-                    }
+                if (delta > 1.15f && (nowNs - lastStepTimeNs) > 280_000_000L) {
+                    lastStepTimeNs = nowNs
+                    onStepDetected()
                 }
             }
 
@@ -334,10 +327,11 @@ class TacticalBfi3dEngine(
                     baselinePressure = pressureHpa
                     hasBaselinePressure = true
                 } else {
-                    // Hypsometric barometer altitude differential: ~8.43m per hPa
+                    // Smooth hypsometric altitude differential
                     val deltaPressure = baselinePressure - pressureHpa
                     val altDelta = deltaPressure * 8.43f
-                    posZ = (1.2f + altDelta).coerceIn(0.05f, 3.5f)
+                    val targetZ = (1.2f + altDelta).coerceIn(0.05f, 3.5f)
+                    posZ = posZ * 0.90f + targetZ * 0.10f
                 }
             }
         }
@@ -357,16 +351,65 @@ class TacticalBfi3dEngine(
         posX += dx
         posY += dy
 
-        // Constrain to typical room bounds (-15m to +15m)
-        posX = posX.coerceIn(-15f, 15f)
-        posY = posY.coerceIn(-15f, 15f)
-
+        clampToBounds()
         updateSnapshotTelemetry()
 
         // Trigger immediate RF voxel sample upon stepping
         if (_isScanning.value) {
             sampleCurrentVoxel()
         }
+    }
+
+    /**
+     * Move forward in the room along current device heading vector.
+     */
+    fun moveForward(distanceMeters: Float = 0.5f) {
+        val headingRad = Math.toRadians(currentHeading.toDouble())
+        posX += (distanceMeters * sin(headingRad)).toFloat()
+        posY += (distanceMeters * cos(headingRad)).toFloat()
+        clampToBounds()
+        updateSnapshotTelemetry()
+        if (_isScanning.value) sampleCurrentVoxel()
+    }
+
+    /**
+     * Move backward in the room.
+     */
+    fun moveBackward(distanceMeters: Float = 0.5f) {
+        moveForward(-distanceMeters)
+    }
+
+    /**
+     * Strafe left relative to device heading.
+     */
+    fun strafeLeft(distanceMeters: Float = 0.5f) {
+        val leftRad = Math.toRadians((currentHeading - 90f + 360f).toDouble())
+        posX += (distanceMeters * sin(leftRad)).toFloat()
+        posY += (distanceMeters * cos(leftRad)).toFloat()
+        clampToBounds()
+        updateSnapshotTelemetry()
+        if (_isScanning.value) sampleCurrentVoxel()
+    }
+
+    /**
+     * Strafe right relative to device heading.
+     */
+    fun strafeRight(distanceMeters: Float = 0.5f) {
+        strafeLeft(-distanceMeters)
+    }
+
+    /**
+     * Adjust elevation altitude up or down.
+     */
+    fun adjustAltitude(deltaZ: Float) {
+        posZ = (posZ + deltaZ).coerceIn(0.05f, 3.5f)
+        updateSnapshotTelemetry()
+        if (_isScanning.value) sampleCurrentVoxel()
+    }
+
+    private fun clampToBounds() {
+        posX = posX.coerceIn(-15f, 15f)
+        posY = posY.coerceIn(-15f, 15f)
     }
 
     // =========================================================================

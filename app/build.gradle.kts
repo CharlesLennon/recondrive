@@ -12,8 +12,8 @@ android {
         applicationId = "com.recondrive.app"
         minSdk = 26
         targetSdk = 34
-        versionCode = 39
-        versionName = "1.0.39-tactical"
+        versionCode = 40
+        versionName = "1.0.40-tactical"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {

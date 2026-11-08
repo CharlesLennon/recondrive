@@ -629,6 +629,109 @@ fun Bfi3dSpatialScreen(
                 .padding(horizontal = 14.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
+            // Tactical Room Walk Controller (Step Forward, Backward, Strafe & Altitude Nudge)
+            Surface(
+                color = TacticalSurface.copy(alpha = 0.95f),
+                shape = RoundedCornerShape(10.dp),
+                border = androidx.compose.foundation.BorderStroke(1.dp, TacticalBorder),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 8.dp, vertical = 6.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column {
+                        Text(
+                            text = "WALK STEP",
+                            color = ReconCyan,
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.Monospace
+                        )
+                        Text(
+                            text = "Auto-PDR Active",
+                            color = ReconGreen,
+                            fontSize = 8.sp,
+                            fontFamily = FontFamily.Monospace
+                        )
+                    }
+
+                    // Forward / Back / Left / Right Buttons
+                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Button(
+                            onClick = { bfiEngine.strafeLeft(0.5f) },
+                            colors = ButtonDefaults.buttonColors(containerColor = TacticalObsidian),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, ReconCyan),
+                            shape = RoundedCornerShape(6.dp),
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                            modifier = Modifier.height(30.dp)
+                        ) {
+                            Text("◀ L", color = ReconCyan, fontSize = 9.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
+                        }
+
+                        Button(
+                            onClick = { bfiEngine.moveForward(0.5f) },
+                            colors = ButtonDefaults.buttonColors(containerColor = ReconCyan.copy(alpha = 0.25f)),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, ReconCyan),
+                            shape = RoundedCornerShape(6.dp),
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 2.dp),
+                            modifier = Modifier.height(30.dp)
+                        ) {
+                            Text("▲ FWD", color = ReconCyan, fontSize = 9.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
+                        }
+
+                        Button(
+                            onClick = { bfiEngine.moveBackward(0.5f) },
+                            colors = ButtonDefaults.buttonColors(containerColor = TacticalObsidian),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, ReconCyan),
+                            shape = RoundedCornerShape(6.dp),
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                            modifier = Modifier.height(30.dp)
+                        ) {
+                            Text("▼ REV", color = ReconCyan, fontSize = 9.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
+                        }
+
+                        Button(
+                            onClick = { bfiEngine.strafeRight(0.5f) },
+                            colors = ButtonDefaults.buttonColors(containerColor = TacticalObsidian),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, ReconCyan),
+                            shape = RoundedCornerShape(6.dp),
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp),
+                            modifier = Modifier.height(30.dp)
+                        ) {
+                            Text("R ▶", color = ReconCyan, fontSize = 9.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
+                        }
+                    }
+
+                    // Altitude Steppers (+0.25m / -0.25m)
+                    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Button(
+                            onClick = { bfiEngine.adjustAltitude(0.25f) },
+                            colors = ButtonDefaults.buttonColors(containerColor = TacticalObsidian),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, TacticalAmber),
+                            shape = RoundedCornerShape(6.dp),
+                            contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
+                            modifier = Modifier.height(30.dp)
+                        ) {
+                            Text("Z+▲", color = TacticalAmber, fontSize = 8.5.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
+                        }
+                        Button(
+                            onClick = { bfiEngine.adjustAltitude(-0.25f) },
+                            colors = ButtonDefaults.buttonColors(containerColor = TacticalObsidian),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, TacticalAmber),
+                            shape = RoundedCornerShape(6.dp),
+                            contentPadding = PaddingValues(horizontal = 6.dp, vertical = 2.dp),
+                            modifier = Modifier.height(30.dp)
+                        ) {
+                            Text("Z-▼", color = TacticalAmber, fontSize = 8.5.sp, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
+            }
+
             // Elevation Preset Strip (Floor, Desk, Chest, Overhead, Ceiling)
             Surface(
                 color = TacticalSurface.copy(alpha = 0.95f),
