@@ -6,9 +6,7 @@ import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
-import androidx.compose.foundation.gestures.detectDragGestures
-import androidx.compose.foundation.gestures.rememberTransformableState
-import androidx.compose.foundation.gestures.transformable
+import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -29,6 +27,8 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import com.recondrive.app.scanner.Bfi3dSnapshot
 import com.recondrive.app.scanner.BfiVoxel
 import com.recondrive.app.scanner.DeadZoneCluster
@@ -56,67 +56,79 @@ fun Bfi3dSpatialScreen(
     bfiEngine: TacticalBfi3dEngine,
     onClose: () -> Unit
 ) {
-    val snapshot by bfiEngine.snapshot.collectAsState()
-    val isScanning by bfiEngine.isScanning.collectAsState()
-    val isGeigerAudioOn by bfiEngine.isGeigerAudioEnabled.collectAsState()
-    val voxels by bfiEngine.voxels.collectAsState()
-    val deadZones by bfiEngine.deadZones.collectAsState()
-
-    // 3D Camera Orbit State
-    var cameraAzimuthDeg by remember { mutableFloatStateOf(45.0f) }   // Horizontal orbit angle (0 - 360°)
-    var cameraPitchDeg by remember { mutableFloatStateOf(35.0f) }     // Vertical tilt angle (15 - 85°)
-    var cameraDistance by remember { mutableFloatStateOf(8.5f) }      // Camera distance from room center (4 - 20m)
-    var followUserPosition by remember { mutableStateOf(false) }
-
-    // Filter Mode
-    var filterMode by remember { mutableStateOf(VoxelFilterMode.ALL_VOXELS) }
-
-    // Animated Strobe for Dead Zone Warnings and Beam Wave
-    val infiniteTransition = rememberInfiniteTransition(label = "Bfi3dStrobe")
-    val deadZoneStrobe by infiniteTransition.animateFloat(
-        initialValue = 0.3f,
-        targetValue = 1.0f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(750, easing = LinearEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "DeadZoneAlpha"
-    )
-    val beamWavePhase by infiniteTransition.animateFloat(
-        initialValue = 0.0f,
-        targetValue = 1.0f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(1800, easing = LinearEasing),
-            repeatMode = RepeatMode.Restart
-        ),
-        label = "BeamWavePhase"
-    )
-
-    // Gesture handling for 3D Camera Orbit & Pinch Zoom
-    val transformableState = rememberTransformableState { zoomChange, _, _ ->
-        cameraDistance = (cameraDistance / zoomChange).coerceIn(4.0f, 22.0f)
+    LaunchedEffect(Unit) {
+        bfiEngine.startListening()
+        bfiEngine.startScanning()
     }
 
-    Box(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(TacticalObsidian)
+    Dialog(
+        onDismissRequest = {
+            bfiEngine.pauseScanning()
+            onClose()
+        },
+        properties = DialogProperties(
+            usePlatformDefaultWidth = false,
+            dismissOnBackPress = true,
+            dismissOnClickOutside = false
+        )
     ) {
-        // =====================================================================
-        // 1. 3D PERSPECTIVE CANVAS VIEWPORT
-        // =====================================================================
-        Canvas(
+        val snapshot by bfiEngine.snapshot.collectAsState()
+        val isScanning by bfiEngine.isScanning.collectAsState()
+        val isGeigerAudioOn by bfiEngine.isGeigerAudioEnabled.collectAsState()
+        val voxels by bfiEngine.voxels.collectAsState()
+        val deadZones by bfiEngine.deadZones.collectAsState()
+
+        // 3D Camera Orbit State
+        var cameraAzimuthDeg by remember { mutableFloatStateOf(45.0f) }   // Horizontal orbit angle (0 - 360°)
+        var cameraPitchDeg by remember { mutableFloatStateOf(35.0f) }     // Vertical tilt angle (15 - 85°)
+        var cameraDistance by remember { mutableFloatStateOf(8.5f) }      // Camera distance from room center (4 - 20m)
+        var followUserPosition by remember { mutableStateOf(false) }
+
+        // Filter Mode
+        var filterMode by remember { mutableStateOf(VoxelFilterMode.ALL_VOXELS) }
+
+        // Animated Strobe for Dead Zone Warnings and Beam Wave
+        val infiniteTransition = rememberInfiniteTransition(label = "Bfi3dStrobe")
+        val deadZoneStrobe by infiniteTransition.animateFloat(
+            initialValue = 0.3f,
+            targetValue = 1.0f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(750, easing = LinearEasing),
+                repeatMode = RepeatMode.Reverse
+            ),
+            label = "DeadZoneAlpha"
+        )
+        val beamWavePhase by infiniteTransition.animateFloat(
+            initialValue = 0.0f,
+            targetValue = 1.0f,
+            animationSpec = infiniteRepeatable(
+                animation = tween(1800, easing = LinearEasing),
+                repeatMode = RepeatMode.Restart
+            ),
+            label = "BeamWavePhase"
+        )
+
+        Box(
             modifier = Modifier
                 .fillMaxSize()
-                .transformable(transformableState)
-                .pointerInput(Unit) {
-                    detectDragGestures { change, dragAmount ->
-                        change.consume()
-                        cameraAzimuthDeg = (cameraAzimuthDeg - dragAmount.x * 0.35f + 360f) % 360f
-                        cameraPitchDeg = (cameraPitchDeg + dragAmount.y * 0.25f).coerceIn(12.0f, 85.0f)
-                    }
-                }
+                .background(TacticalObsidian)
         ) {
+            // =====================================================================
+            // 1. 3D PERSPECTIVE CANVAS VIEWPORT
+            // =====================================================================
+            Canvas(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .pointerInput(Unit) {
+                        detectTransformGestures { _, pan, zoom, _ ->
+                            cameraAzimuthDeg = (cameraAzimuthDeg - pan.x * 0.35f + 360f) % 360f
+                            cameraPitchDeg = (cameraPitchDeg + pan.y * 0.25f).coerceIn(12.0f, 85.0f)
+                            if (zoom != 1.0f) {
+                                cameraDistance = (cameraDistance / zoom).coerceIn(4.0f, 22.0f)
+                            }
+                        }
+                    }
+            ) {
             val canvasWidth = size.width
             val canvasHeight = size.height
             val centerX = canvasWidth / 2f
@@ -859,6 +871,7 @@ fun Bfi3dSpatialScreen(
             }
         }
     }
+}
 }
 
 /**

@@ -620,7 +620,11 @@ fun TacticalSettingsScreen(
                     )
 
                     Button(
-                        onClick = onOpenBfiSpatialScanner,
+                        onClick = {
+                            soundManager.playUiClick()
+                            android.widget.Toast.makeText(context, "Opening BFI 3D Beam Mapper...", android.widget.Toast.LENGTH_SHORT).show()
+                            onOpenBfiSpatialScanner()
+                        },
                         colors = ButtonDefaults.buttonColors(containerColor = AlertRed),
                         shape = RoundedCornerShape(8.dp),
                         modifier = Modifier.fillMaxWidth()

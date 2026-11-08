@@ -289,7 +289,10 @@ fun TacticalScannerScreen(
                 color = TacticalSurface,
                 shape = RoundedCornerShape(12.dp),
                 border = androidx.compose.foundation.BorderStroke(1.dp, ReconCyan),
-                modifier = Modifier.clickable { onOpenBfiSpatialScanner() }
+                modifier = Modifier.clickable {
+                    scannerManager.soundManager?.playUiClick()
+                    onOpenBfiSpatialScanner()
+                }
             ) {
                 Row(
                     modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp),

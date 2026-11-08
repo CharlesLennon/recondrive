@@ -269,13 +269,6 @@ class MainActivity : ComponentActivity() {
                     )
                 }
 
-                if (showBfiSpatialScanner) {
-                    com.recondrive.app.ui.screens.Bfi3dSpatialScreen(
-                        bfiEngine = ReconApplication.instance.bfi3dEngine,
-                        onClose = { showBfiSpatialScanner = false }
-                    )
-                }
-
                 Scaffold(
                     bottomBar = {
                         Column(
@@ -681,6 +674,16 @@ class MainActivity : ComponentActivity() {
                         }
                     }
                 }
+            }
+
+            if (showBfiSpatialScanner) {
+                com.recondrive.app.ui.screens.Bfi3dSpatialScreen(
+                    bfiEngine = ReconApplication.instance.bfi3dEngine,
+                    onClose = {
+                        Timber.i("MainActivity: Closing Bfi3dSpatialScreen")
+                        showBfiSpatialScanner = false
+                    }
+                )
             }
         }
         }
