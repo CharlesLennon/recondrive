@@ -391,41 +391,19 @@ class MainActivity : ComponentActivity() {
                                 )
 
                                 NavigationBarItem(
-                                    selected = false,
-                                    onClick = { showSkinsDialog = true },
+                                    selected = selectedTab == 5,
+                                    onClick = { selectedTab = 5 },
                                     icon = {
                                         Icon(
-                                            imageVector = Icons.Default.Palette,
-                                            contentDescription = "SKINS",
-                                            tint = TextSecondary
+                                            imageVector = Icons.Default.Settings,
+                                            contentDescription = "SETTINGS",
+                                            tint = if (selectedTab == 5) ReconCyan else TextSecondary
                                         )
                                     },
                                     label = {
                                         Text(
-                                            text = "SKINS",
-                                            color = TextSecondary,
-                                            fontFamily = FontFamily.Monospace,
-                                            fontSize = 8.5.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            maxLines = 1
-                                        )
-                                    }
-                                )
-
-                                NavigationBarItem(
-                                    selected = false,
-                                    onClick = { showOfflineDialog = true },
-                                    icon = {
-                                        Icon(
-                                            imageVector = Icons.Default.CloudDownload,
-                                            contentDescription = "OFFLINE",
-                                            tint = TextSecondary
-                                        )
-                                    },
-                                    label = {
-                                        Text(
-                                            text = "OFFLINE",
-                                            color = TextSecondary,
+                                            text = "SETTINGS",
+                                            color = if (selectedTab == 5) ReconCyan else TextSecondary,
                                             fontFamily = FontFamily.Monospace,
                                             fontSize = 8.5.sp,
                                             fontWeight = FontWeight.Bold,
@@ -677,6 +655,17 @@ class MainActivity : ComponentActivity() {
                             4 -> {
                                 com.recondrive.app.ui.screens.VehicleDiagnosticsScreen(
                                     obdManager = ReconApplication.instance.psaObdManager
+                                )
+                            }
+                            5 -> {
+                                com.recondrive.app.ui.screens.TacticalSettingsScreen(
+                                    soundPreferences = ReconApplication.instance.soundPreferences,
+                                    soundManager = ReconApplication.instance.tacticalSoundManager,
+                                    skinManager = ReconApplication.instance.skinManager,
+                                    fogPreferences = ReconApplication.instance.fogPreferences,
+                                    offlineTileRepository = ReconApplication.instance.offlineTileRepository,
+                                    onOpenSkins = { showSkinsDialog = true },
+                                    onOpenOfflinePacks = { showOfflineDialog = true }
                                 )
                             }
                         }

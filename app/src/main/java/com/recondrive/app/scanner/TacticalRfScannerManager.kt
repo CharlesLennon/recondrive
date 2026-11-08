@@ -110,7 +110,7 @@ class TacticalRfScannerManager(
     val uwbEngine: TacticalUwbEngine = TacticalUwbEngine(context)
     val irEngine: TacticalInfraredDetectionEngine = TacticalInfraredDetectionEngine(context)
     val barometerEngine: TacticalBarometerEngine = TacticalBarometerEngine(context)
-    val sirenEngine: TacticalAudioSirenEngine = TacticalAudioSirenEngine(context)
+    val sirenEngine: TacticalAudioSirenEngine = TacticalAudioSirenEngine(context, soundManager)
     val imuEngine: TacticalImuEngine = TacticalImuEngine(context)
     val nfcManager: TacticalNfcManager = TacticalNfcManager(context)
     val gnssEngine: TacticalGnssEngine = TacticalGnssEngine(context)
@@ -148,6 +148,9 @@ class TacticalRfScannerManager(
     // Magnetic Anomaly Baseline for Ferromagnetic Vehicle Proximity Detection
     private var baselineMagneticMagnitude = 45.0f
     private var lastMagneticAnomalyTime = 0L
+    private var lastDroneAlertTime = 0L
+    private var lastCoTravelAlertTime = 0L
+    private var lastKeyAlertTime = 0L
 
     // Wi-Fi Scan Broadcast Receiver
     private val wifiScanReceiver = object : BroadcastReceiver() {
@@ -1202,7 +1205,23 @@ class TacticalRfScannerManager(
                 detectionTech = targetTech,
                 droneTelemetry = droneTelemetry
             )
+            val isNewTarget = !targetMap.containsKey(address)
             targetMap[address] = target
+            if (isNewTarget) {
+                soundManager.playTargetChirp()
+            }
+            if (isDrone && (now - lastDroneAlertTime > 45000L)) {
+                lastDroneAlertTime = now
+                val uasTag = droneTelemetry?.uasId ?: "Airborne Drone"
+                val altTag = droneTelemetry?.altitudeAglMeters?.let { " at ${it.toInt()}m AGL" } ?: ""
+                soundManager.dispatchAlert(
+                    category = com.recondrive.app.audio.AlertCategory.OPEN_DRONE_ID,
+                    title = "🛸 AERIAL DRONE DETECTED",
+                    message = "Airborne UAV $uasTag active in airspace$altTag.",
+                    ttsPhrase = "Alert: Drone detected in local airspace.",
+                    soundType = "TACTICAL_CHIRP"
+                )
+            }
             syncTargetsToFlow()
         } catch (e: Exception) {
             Timber.w(e, "Error processing BLE scan result")
@@ -1402,6 +1421,14 @@ class TacticalRfScannerManager(
 
                 targetMap[madId] = target
                 syncTargetsToFlow()
+
+                soundManager.dispatchAlert(
+                    category = com.recondrive.app.audio.AlertCategory.FERROMAGNETIC_MASS,
+                    title = "🧲 FERROMAGNETIC PROXIMITY [MAD]",
+                    message = "Significant ferromagnetic anomaly (ΔB: ${"%.1f".format(deltaB)} μT). Large metallic automobile mass detected adjacent.",
+                    ttsPhrase = "Notice: Large metallic automobile mass adjacent.",
+                    soundType = "RADAR_BEEP"
+                )
             }
         }
     }
@@ -1423,7 +1450,13 @@ class TacticalRfScannerManager(
                 saved.customNickname.isNotBlank() -> "${saved.customNickname} in range"
                 else -> "${saved.originalName} detected"
             }
-            soundManager.playAlert(saved.alertSound, spoken)
+            soundManager.dispatchAlert(
+                category = com.recondrive.app.audio.AlertCategory.SAVED_WATCHLIST_TARGET,
+                title = "🎯 WATCHLIST TARGET DETECTED",
+                message = "$spoken (approx ${distanceMeters.toInt()}m away)",
+                ttsPhrase = spoken,
+                soundType = saved.alertSound
+            )
             savedDeviceRepository.recordDetection(saved.id, lastKnownLat, lastKnownLon)
         }
     }
@@ -1522,7 +1555,17 @@ class TacticalRfScannerManager(
 
         targetMap[targetId] = target
         syncTargetsToFlow()
-        soundManager.playRadarBeep()
+        val now = System.currentTimeMillis()
+        if (now - lastKeyAlertTime > 25000L) {
+            lastKeyAlertTime = now
+            soundManager.dispatchAlert(
+                category = com.recondrive.app.audio.AlertCategory.KEY_FOB_PROXIMITY,
+                title = "🔑 VEHICLE KEY DETECTED",
+                message = "Vehicle NFC key / smart fob in proximity: ${scanned.tagType}",
+                ttsPhrase = "Vehicle key detected.",
+                soundType = "TACTICAL_CHIRP"
+            )
+        }
     }
 
     private fun syncTargetsToFlow() {
@@ -1543,6 +1586,17 @@ class TacticalRfScannerManager(
             val intel = coTravelMap[id]
             if (intel != null && target.coTravel != intel) {
                 targetMap[id] = target.copy(coTravel = intel)
+                if (intel.level == CoTravelLevel.PERSISTENT_ESCORT && (now - lastCoTravelAlertTime > 60000L)) {
+                    lastCoTravelAlertTime = now
+                    val name = target.displayName
+                    soundManager.dispatchAlert(
+                        category = com.recondrive.app.audio.AlertCategory.CO_TRAVEL_FOLLOWING,
+                        title = "🚘 CO-TRAVEL SURVEILLANCE ALERT",
+                        message = "Vehicle $name following through ${intel.correlatedTurnsCount} turns.",
+                        ttsPhrase = "Caution: Vehicle following detected across multiple turns.",
+                        soundType = "INTERCEPTION_ALERT"
+                    )
+                }
             } else if (intel == null && target.coTravel != null && !target.coTravel.isDismissed) {
                 targetMap[id] = target.copy(coTravel = null)
             }
@@ -1583,6 +1637,7 @@ class TacticalRfScannerManager(
                 delay(10000L) // Sweep cadence every 10 seconds in background
                 cycle++
                 if (_isScanning.value && !_isScannerPaused.value) {
+                    soundManager.playRadarPing()
                     mainHandler.post {
                         triggerHardwareWifiScan()
                         auditCellularBaseStations()

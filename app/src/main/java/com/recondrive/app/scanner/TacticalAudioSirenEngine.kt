@@ -38,7 +38,10 @@ data class SirenTelemetry(
  *    if the emergency cruiser is APPROACHING (incoming threat) or RECEDING (moving away).
  * 5. Crash-resilient IO coroutine lifecycle: releases AudioRecord exclusively on thread exit to avoid native SIGSEGV.
  */
-class TacticalAudioSirenEngine(private val context: Context) {
+class TacticalAudioSirenEngine(
+    private val context: Context,
+    private val soundManager: com.recondrive.app.audio.TacticalSoundManager? = null
+) {
 
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
@@ -48,6 +51,7 @@ class TacticalAudioSirenEngine(private val context: Context) {
     @Volatile
     private var isRunning = false
     private var processingJob: Job? = null
+    private var lastAlertTimestamp = 0L
 
     private val bufferSize = 2048   // ~46.4ms temporal resolution at 44.1 kHz
 
@@ -300,6 +304,18 @@ class TacticalAudioSirenEngine(private val context: Context) {
 
                     val directionText = if (isApproaching) "APPROACHING (INCOMING)" else "RECEDING (DEPARTING)"
                     val msg = "🚨 $sirenType • $directionText (%.0f Hz)".format(peakHz)
+
+                    // Dispatch tactical threat alert respecting user settings (Nothing, Notification, Voice, Both)
+                    if (now - lastAlertTimestamp > 35000L) {
+                        lastAlertTimestamp = now
+                        soundManager?.dispatchAlert(
+                            category = com.recondrive.app.audio.AlertCategory.EMERGENCY_SIREN,
+                            title = "🚨 EMERGENCY SIREN DETECTED",
+                            message = "$sirenType detected • $directionText (%.0f Hz)".format(peakHz),
+                            ttsPhrase = "Alert: Emergency $sirenType detected $directionText.",
+                            soundType = "INTERCEPTION_ALERT"
+                        )
+                    }
 
                     _telemetry.update {
                         it.copy(

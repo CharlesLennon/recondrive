@@ -336,15 +336,25 @@ class TacticalImsiCatcherDetector(
             else -> "UMTS KASUMI (MODERATE)"
         }
 
-        // Acoustic alert check (with 30-second cooldown)
+        // Threat alert dispatch (evaluates user preference: Nothing, Notification, Voice, or Both)
         if (threatLevel != ImsiThreatLevel.CLEAR && (now - lastAlertTimestamp) > 30_000L) {
             lastAlertTimestamp = now
             if (threatLevel == ImsiThreatLevel.CRITICAL_INTERCEPTION_RISK) {
-                soundManager?.playInterceptionAlert()
-                soundManager?.playVoiceAlert("Warning: Rogue base station detected. High interception risk.")
+                soundManager?.dispatchAlert(
+                    category = com.recondrive.app.audio.AlertCategory.SUSPICIOUS_CELL_TOWER,
+                    title = "⚠️ CRITICAL ROGUE BASE STATION",
+                    message = "IMSI Catcher / Rogue base station detected! High interception risk.",
+                    ttsPhrase = "Warning: Rogue base station detected. High interception risk.",
+                    soundType = "INTERCEPTION_ALERT"
+                )
             } else {
-                soundManager?.playRadarBeep()
-                soundManager?.playVoiceAlert("Caution: Cellular anomaly detected.")
+                soundManager?.dispatchAlert(
+                    category = com.recondrive.app.audio.AlertCategory.CELLULAR_ANOMALY,
+                    title = "📶 CELLULAR ANOMALY DETECTED",
+                    message = "Suspicious cell parameters, unencrypted A5/0 or rapid TAC hopping.",
+                    ttsPhrase = "Caution: Cellular anomaly detected.",
+                    soundType = "RADAR_BEEP"
+                )
             }
         }
 
