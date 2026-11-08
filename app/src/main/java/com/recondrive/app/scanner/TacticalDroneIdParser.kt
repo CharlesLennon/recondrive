@@ -197,6 +197,8 @@ object TacticalDroneIdParser {
             return DroneTelemetry(
                 uasId = uasId,
                 uasType = uasType,
+                droneLat = droneLat,
+                droneLon = droneLon,
                 isAirborne = isAirborne,
                 altitudeAglMeters = altitudeAgl,
                 speedKmh = speedKmh,

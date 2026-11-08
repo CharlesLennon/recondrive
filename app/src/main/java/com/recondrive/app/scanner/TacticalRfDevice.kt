@@ -164,6 +164,8 @@ enum class RelativeMotionTrend {
 data class DroneTelemetry(
     val uasId: String? = null,
     val uasType: String = "QUADCOPTER",
+    val droneLat: Double? = null,
+    val droneLon: Double? = null,
     val isAirborne: Boolean = true,
     val altitudeAglMeters: Float? = null,
     val speedKmh: Float? = null,

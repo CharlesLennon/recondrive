@@ -1152,11 +1152,6 @@ class TacticalRfScannerManager(
             }
 
             val sweepCount = stationaryPinpointMap[address]?.sampleCount ?: 1
-            val targetDetails = if (isStationary && sweepCount > 1) {
-                "Pinpointed across $sweepCount sweeps • ${classification.details}"
-            } else {
-                classification.details
-            }
 
             val isDrone = droneTelemetry != null || classification.category == RfCategory.DRONE_UAV
             val targetName = when {
