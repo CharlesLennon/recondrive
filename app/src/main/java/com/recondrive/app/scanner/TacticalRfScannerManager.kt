@@ -118,8 +118,18 @@ class TacticalRfScannerManager(
     val publicCctvRepo: TacticalPublicCctvRepository = TacticalPublicCctvRepository(context)
     val imsiDetector: TacticalImsiCatcherDetector = TacticalImsiCatcherDetector(context, soundManager)
     val imsiDetectionState: StateFlow<ImsiDetectionState> = imsiDetector.state
+    val coTravelEngine: TacticalCoTravelEngine = TacticalCoTravelEngine()
 
     private var lastKnownSpeed: Float = 0f
+
+    fun dismissCoTravel(targetId: String) {
+        coTravelEngine.dismissTarget(targetId)
+        val existing = targetMap[targetId] ?: return
+        targetMap[targetId] = existing.copy(
+            coTravel = existing.coTravel?.copy(isDismissed = true, level = CoTravelLevel.INDEPENDENT)
+        )
+        syncTargetsToFlow()
+    }
 
     init {
         nfcManager.onVehicleKeyDetected = { scanned ->
@@ -1034,6 +1044,11 @@ class TacticalRfScannerManager(
             // Extract Service UUIDs (Tesla 0x0211, Drone Remote ID 0xFFFA, Tile 0xFEED)
             val serviceUuids = scanRecord?.serviceUuids?.map { it.uuid.toString() } ?: emptyList()
 
+            // OpenDroneID Direct Remote ID Telemetry Parsing (ASTM F3411 / ASD-STAN)
+            val serviceDataMap = scanRecord?.serviceData?.mapKeys { it.key.toString() }
+            val rawBytes = scanRecord?.bytes
+            val droneTelemetry = TacticalDroneIdParser.parse(serviceDataMap, manufacturerData, rawBytes)
+
             val classification = TacticalRfClassifier.classify(
                 ssidOrBleName = rawName,
                 macAddress = address,
@@ -1041,7 +1056,7 @@ class TacticalRfScannerManager(
                 serviceUuids = serviceUuids,
                 manufacturerId = manufacturerId,
                 manufacturerData = manufacturerData,
-                sourceTech = DetectionTechnology.BLE_ADVERTISING
+                sourceTech = if (droneTelemetry != null) DetectionTechnology.OPEN_DRONE_ID else DetectionTechnology.BLE_ADVERTISING
             )
 
             val dist = TacticalRfClassifier.estimateDistance(rssi, 2402)
@@ -1052,7 +1067,16 @@ class TacticalRfScannerManager(
             val relativeBearing: Float
             val effectiveDistance: Double
 
-            if (isStationary) {
+            if (droneTelemetry?.droneLat != null && droneTelemetry.droneLon != null) {
+                targetLat = droneTelemetry.droneLat
+                targetLon = droneTelemetry.droneLon
+                effectiveDistance = calculateDistanceMeters(lastKnownLat, lastKnownLon, targetLat, targetLon).coerceIn(1.0, 5000.0)
+                val dLatM = (targetLat - lastKnownLat) * 111320.0
+                val dLonM = (targetLon - lastKnownLon) * 111320.0 * cos(Math.toRadians(lastKnownLat))
+                var worldAngle = Math.toDegrees(atan2(dLonM, dLatM)).toFloat()
+                if (worldAngle < 0f) worldAngle += 360f
+                relativeBearing = (worldAngle - lastKnownHeading + 360f) % 360f
+            } else if (isStationary) {
                 val hashAngle = abs(address.hashCode() % 360).toFloat()
                 val angleRad = Math.toRadians(hashAngle.toDouble())
                 val deltaLat = (dist * cos(angleRad)) / 111320.0
@@ -1134,18 +1158,44 @@ class TacticalRfScannerManager(
                 classification.details
             }
 
+            val isDrone = droneTelemetry != null || classification.category == RfCategory.DRONE_UAV
+            val targetName = when {
+                droneTelemetry?.uasId != null -> "UAV [${droneTelemetry.uasType}] ${droneTelemetry.uasId}"
+                droneTelemetry != null -> "UAV [${droneTelemetry.uasType}] ${if (rawName.isNotBlank()) rawName else address.takeLast(8)}"
+                else -> classification.targetName
+            }
+            val targetCategory = if (isDrone) RfCategory.DRONE_UAV else classification.category
+            val targetTech = when {
+                droneTelemetry != null -> DetectionTechnology.OPEN_DRONE_ID
+                TacticalRfClassifier.isLocallyAdministeredMac(address) && rawName.isBlank() -> DetectionTechnology.MAC_SNIFFING
+                else -> DetectionTechnology.BLE_ADVERTISING
+            }
+            val targetProtocol = if (droneTelemetry != null) "OpenDroneID (ASTM F3411)" else (classification.protocolOverride ?: "BLE 5.2 / Bluetooth Low Energy")
+            val targetThreat = if (isDrone) "AIRSPACE UAV IN FLIGHT" else (if (isStationary && sweepCount >= 3) "PINPOINTED INFRASTRUCTURE" else classification.threatLevel)
+
+            val targetDetails = when {
+                droneTelemetry != null -> {
+                    val alt = droneTelemetry.altitudeAglMeters?.let { " • Alt: ${it.toInt()}m AGL" } ?: ""
+                    val spd = droneTelemetry.speedKmh?.let { " • Spd: ${it.toInt()} km/h" } ?: ""
+                    val pilot = droneTelemetry.pilotLat?.let { " • Pilot: ${droneTelemetry.pilotLocationType} (%.4f°N, %.4f°W)".format(it, abs(droneTelemetry.pilotLon ?: 0.0)) } ?: ""
+                    "Airborne UAV (Direct Remote ID)$alt$spd$pilot"
+                }
+                isStationary && sweepCount > 1 -> "Pinpointed across $sweepCount sweeps • ${classification.details}"
+                else -> classification.details
+            }
+
             val target = DetectedRfTarget(
                 id = address,
-                name = classification.targetName,
+                name = targetName,
                 rawSsidOrBleName = rawName,
                 macAddress = address,
                 vendor = classification.vendor,
-                category = classification.category,
+                category = targetCategory,
                 rssi = rssi,
                 estimatedDistanceMeters = effectiveDistance,
                 frequencyMhz = 2402,
-                protocol = classification.protocolOverride ?: "BLE 5.2 / Bluetooth Low Energy",
-                threatLevel = if (isStationary && sweepCount >= 3) "PINPOINTED INFRASTRUCTURE" else classification.threatLevel,
+                protocol = targetProtocol,
+                threatLevel = targetThreat,
                 details = targetDetails,
                 timestamp = now,
                 detectedLat = targetLat,
@@ -1154,11 +1204,8 @@ class TacticalRfScannerManager(
                 locationHistory = history.toList(),
                 motionTrend = motionTrend,
                 savedMetadata = saved,
-                detectionTech = if (TacticalRfClassifier.isLocallyAdministeredMac(address) && rawName.isBlank()) {
-                    DetectionTechnology.MAC_SNIFFING
-                } else {
-                    DetectionTechnology.BLE_ADVERTISING
-                }
+                detectionTech = targetTech,
+                droneTelemetry = droneTelemetry
             )
             targetMap[address] = target
             syncTargetsToFlow()
@@ -1495,22 +1542,43 @@ class TacticalRfScannerManager(
             }
         }
 
-        // Sort with keys, saved items, vehicles, and CCTV first, followed by signal strength
+        // Evaluate Co-Travel & Shared Corridor Proximity (Non-Stressful Multi-Factor Correlation)
+        val coTravelMap = coTravelEngine.evaluate(lastKnownLat, lastKnownLon, lastKnownHeading, lastKnownSpeed, targetMap.values.toList())
+        for ((id, target) in targetMap) {
+            val intel = coTravelMap[id]
+            if (intel != null && target.coTravel != intel) {
+                targetMap[id] = target.copy(coTravel = intel)
+            } else if (intel == null && target.coTravel != null && !target.coTravel.isDismissed) {
+                targetMap[id] = target.copy(coTravel = null)
+            }
+        }
+
+        // Sort with keys, saved items, persistent co-travel vehicles, vehicles, drones, and CCTV first
         val sorted = targetMap.values.toList().sortedWith(
             compareBy<DetectedRfTarget> {
                 if (it.savedMetadata != null) 0 else 1
             }.thenBy {
+                if (it.coTravel?.level == CoTravelLevel.PERSISTENT_ESCORT) 0 else 1
+            }.thenBy {
                 when (it.category) {
                     RfCategory.CAR_KEY -> 0
                     RfCategory.VEHICLE -> 1
-                    RfCategory.CCTV_SURVEILLANCE -> 2
-                    RfCategory.DRONE_UAV -> 3
+                    RfCategory.DRONE_UAV -> 2
+                    RfCategory.CCTV_SURVEILLANCE -> 3
                     RfCategory.ACCESS_POINT -> 4
                     RfCategory.CELL_TOWER -> 5
                 }
             }.thenByDescending { it.rssi }
         )
         _detectedTargets.value = sorted
+    }
+
+    private fun calculateDistanceMeters(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
+        val dLat = Math.toRadians(lat2 - lat1)
+        val dLon = Math.toRadians(lon2 - lon1)
+        val a = sin(dLat / 2).pow(2) + cos(Math.toRadians(lat1)) * cos(Math.toRadians(lat2)) * sin(dLon / 2).pow(2)
+        val c = 2 * atan2(sqrt(a), sqrt(1 - a))
+        return 6371000.0 * c
     }
 
     private fun startPeriodicSweep() {

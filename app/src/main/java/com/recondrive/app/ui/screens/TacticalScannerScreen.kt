@@ -1207,6 +1207,16 @@ fun TacticalScannerScreen(
                         },
                         onInspectTech = { tech ->
                             inspectingTech = tech
+                        },
+                        onDismissCoTravel = {
+                            scannerManager.dismissCoTravel(target.id)
+                        },
+                        onNavigateToPilot = {
+                            target.droneTelemetry?.let { dt ->
+                                if (dt.pilotLat != null && dt.pilotLon != null) {
+                                    onNavigateToLocation("PILOT GCS: ${target.displayName}", dt.pilotLat, dt.pilotLon)
+                                }
+                            }
                         }
                     )
                 }
@@ -1646,6 +1656,22 @@ private fun LiveScannerRoadMapCanvas(
                     )
                 }
 
+                // Drone-to-Pilot Tether Link & Pilot Ground Marker
+                val pilotLat = target.droneTelemetry?.pilotLat
+                val pilotLon = target.droneTelemetry?.pilotLon
+                if (pilotLat != null && pilotLon != null) {
+                    val pilotPos = project(pilotLat, pilotLon)
+                    drawLine(
+                        color = Color(0xFFE040FB).copy(alpha = 0.55f),
+                        start = blipPos,
+                        end = pilotPos,
+                        strokeWidth = 1.3f,
+                        pathEffect = PathEffect.dashPathEffect(floatArrayOf(4f, 4f))
+                    )
+                    drawCircle(color = Color(0xFFE040FB), radius = 4f, center = pilotPos)
+                    drawCircle(color = Color(0xFFE040FB).copy(alpha = 0.35f), radius = 8f, center = pilotPos, style = Stroke(1.2f))
+                }
+
                 // Target Blip Outer Glow
                 if (isSwept || isSelected) {
                     drawCircle(
@@ -1718,7 +1744,9 @@ private fun LiveScannerRoadMapCanvas(
                         target.category == RfCategory.ACCESS_POINT -> "📶 "
                         else -> "📡 "
                     }
-                    val tagTitle = "$titlePrefix${target.displayName}"
+                    val droneAltTag = if (target.droneTelemetry?.altitudeAglMeters != null) " [${target.droneTelemetry.altitudeAglMeters.toInt()}m AGL]" else ""
+                    val coTravelTag = if (target.coTravel != null && target.coTravel.level != CoTravelLevel.INDEPENDENT && !target.coTravel.isDismissed) " [CORRIDOR]" else ""
+                    val tagTitle = "$titlePrefix${target.displayName}$droneAltTag$coTravelTag"
                     val doorStr = if (!target.savedMetadata?.doorNumberOrAddress.isNullOrBlank()) " • ${target.savedMetadata?.doorNumberOrAddress}" else ""
                     val tagSub = "${target.rssi}dBm • ~${target.estimatedDistanceMeters.toInt()}m • $motionStr$doorStr"
 
@@ -1905,7 +1933,9 @@ private fun RfTargetHorizontalCard(
     onEditIntel: () -> Unit,
     onPinToMap: () -> Unit,
     onViewCctv: () -> Unit = {},
-    onInspectTech: (DetectionTechnology) -> Unit = {}
+    onInspectTech: (DetectionTechnology) -> Unit = {},
+    onDismissCoTravel: () -> Unit = {},
+    onNavigateToPilot: () -> Unit = {}
 ) {
     val isSaved = target.savedMetadata != null
     val isRogue = target.threatLevel.contains("ROGUE") || target.threatLevel.contains("INTERCEPTION")
@@ -2023,6 +2053,45 @@ private fun RfTargetHorizontalCard(
                                 modifier = Modifier.padding(horizontal = 3.dp, vertical = 0.5.dp)
                             )
                         }
+
+                        // Drone Altitude Badge
+                        if (target.droneTelemetry?.altitudeAglMeters != null) {
+                            Surface(
+                                color = Color(0xFFE040FB).copy(alpha = 0.16f),
+                                shape = RoundedCornerShape(3.dp),
+                                border = androidx.compose.foundation.BorderStroke(0.6.dp, Color(0xFFE040FB).copy(alpha = 0.6f))
+                            ) {
+                                Text(
+                                    text = "${target.droneTelemetry.altitudeAglMeters.toInt()}m AGL",
+                                    color = Color(0xFFE040FB),
+                                    fontSize = 6.5.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    fontFamily = FontFamily.Monospace,
+                                    modifier = Modifier.padding(horizontal = 3.dp, vertical = 0.5.dp)
+                                )
+                            }
+                        }
+
+                        // Co-Travel Corridor Badge (Non-stressful)
+                        val co = target.coTravel
+                        if (co != null && co.level != CoTravelLevel.INDEPENDENT && !co.isDismissed) {
+                            val isEscort = co.level == CoTravelLevel.PERSISTENT_ESCORT
+                            val coColor = if (isEscort) ReconAmber else ReconCyan
+                            Surface(
+                                color = coColor.copy(alpha = 0.16f),
+                                shape = RoundedCornerShape(3.dp),
+                                border = androidx.compose.foundation.BorderStroke(0.6.dp, coColor.copy(alpha = 0.6f))
+                            ) {
+                                Text(
+                                    text = if (isEscort) "${co.correlatedTurnsCount}T CO-TRAVEL" else "CORRIDOR ${"%.1f".format(co.coTravelDistanceMeters / 1000.0)}km",
+                                    color = coColor,
+                                    fontSize = 6.5.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    fontFamily = FontFamily.Monospace,
+                                    modifier = Modifier.padding(horizontal = 3.dp, vertical = 0.5.dp)
+                                )
+                            }
+                        }
                         val subDetails = target.savedMetadata?.doorNumberOrAddress?.takeIf { it.isNotBlank() }
                             ?: "${target.vendor} • ${target.protocol}"
                         Text(
@@ -2123,6 +2192,43 @@ private fun RfTargetHorizontalCard(
                                 Icon(imageVector = Icons.Default.Videocam, contentDescription = "Feed", tint = Color(0xFFFF5252), modifier = Modifier.size(10.dp))
                                 Text(text = "FEED", color = Color(0xFFFF5252), fontSize = 8.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
                             }
+                        }
+                    }
+
+                    // Pilot GCS Navigation Button
+                    if (target.droneTelemetry?.pilotLat != null && target.droneTelemetry?.pilotLon != null) {
+                        Surface(
+                            color = Color(0xFFE040FB).copy(alpha = 0.2f),
+                            shape = RoundedCornerShape(4.dp),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE040FB)),
+                            modifier = Modifier.clickable { onNavigateToPilot() }
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 4.dp, vertical = 3.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(2.dp)
+                            ) {
+                                Icon(imageVector = Icons.Default.PersonPinCircle, contentDescription = "Pilot", tint = Color(0xFFE040FB), modifier = Modifier.size(10.dp))
+                                Text(text = "PILOT", color = Color(0xFFE040FB), fontSize = 7.5.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
+                            }
+                        }
+                    }
+
+                    // Co-Travel Dismiss Button (Calm dismissal for normal traffic)
+                    if (target.coTravel != null && target.coTravel.level != CoTravelLevel.INDEPENDENT && !target.coTravel.isDismissed) {
+                        Surface(
+                            color = TacticalSurface,
+                            shape = RoundedCornerShape(4.dp),
+                            border = androidx.compose.foundation.BorderStroke(0.8.dp, TacticalBorder),
+                            modifier = Modifier.clickable { onDismissCoTravel() }
+                        ) {
+                            Text(
+                                text = "DISMISS",
+                                color = TextSecondary,
+                                fontSize = 7.5.sp,
+                                fontFamily = FontFamily.Monospace,
+                                modifier = Modifier.padding(horizontal = 4.dp, vertical = 3.dp)
+                            )
                         }
                     }
 

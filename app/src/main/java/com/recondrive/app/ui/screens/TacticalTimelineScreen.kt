@@ -40,6 +40,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import com.recondrive.app.map.OsmTileManager
+import com.recondrive.app.scanner.CoTravelLevel
 import com.recondrive.app.scanner.DetectedRfTarget
 import com.recondrive.app.scanner.DetectionTechnology
 import com.recondrive.app.scanner.RfCategory
@@ -959,6 +960,14 @@ fun TacticalTimelineScreen(
             onNavigate = {
                 onNavigateToTarget(snap.target.displayName, snap.displayLat, snap.displayLon)
                 selectedTarget = null
+            },
+            onNavigateToPilot = { pLat, pLon ->
+                onNavigateToTarget("PILOT GCS: ${snap.target.displayName}", pLat, pLon)
+                selectedTarget = null
+            },
+            onDismissCoTravel = {
+                scannerManager.dismissCoTravel(snap.target.id)
+                selectedTarget = null
             }
         )
     }
@@ -1079,6 +1088,46 @@ private fun TimelineTargetCard(
                                 modifier = Modifier.padding(horizontal = 4.dp, vertical = 0.5.dp)
                             )
                         }
+
+                        // Drone Altitude Badge
+                        if (snapshot.target.droneTelemetry?.altitudeAglMeters != null) {
+                            Surface(
+                                color = Color(0xFFE040FB).copy(alpha = 0.16f),
+                                shape = RoundedCornerShape(3.dp),
+                                border = androidx.compose.foundation.BorderStroke(0.6.dp, Color(0xFFE040FB).copy(alpha = 0.6f))
+                            ) {
+                                Text(
+                                    text = "${snapshot.target.droneTelemetry.altitudeAglMeters.toInt()}m AGL",
+                                    color = Color(0xFFE040FB),
+                                    fontSize = 7.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    fontFamily = FontFamily.Monospace,
+                                    modifier = Modifier.padding(horizontal = 3.dp, vertical = 0.5.dp)
+                                )
+                            }
+                        }
+
+                        // Non-Stressful Co-Travel / Shared Route Indicator
+                        val coTravel = snapshot.target.coTravel
+                        if (coTravel != null && coTravel.level != CoTravelLevel.INDEPENDENT && !coTravel.isDismissed) {
+                            val isEscort = coTravel.level == CoTravelLevel.PERSISTENT_ESCORT
+                            val badgeColor = if (isEscort) ReconAmber else ReconCyan
+                            Surface(
+                                color = badgeColor.copy(alpha = 0.16f),
+                                shape = RoundedCornerShape(3.dp),
+                                border = androidx.compose.foundation.BorderStroke(0.6.dp, badgeColor.copy(alpha = 0.6f))
+                            ) {
+                                Text(
+                                    text = if (isEscort) "${coTravel.correlatedTurnsCount} TURNS CO-TRAVEL" else "SHARED ROUTE ${"%.1f".format(coTravel.coTravelDistanceMeters / 1000.0)}km",
+                                    color = badgeColor,
+                                    fontSize = 7.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    fontFamily = FontFamily.Monospace,
+                                    modifier = Modifier.padding(horizontal = 3.dp, vertical = 0.5.dp)
+                                )
+                            }
+                        }
+
                         Text(
                             text = "${snapshot.target.macAddress} • ${snapshot.target.vendor}",
                             color = TextSecondary,
@@ -1114,7 +1163,9 @@ private fun TimelineTargetCard(
 private fun TimelineTargetDetailDialog(
     snapshot: TimelineTargetSnapshot,
     onDismiss: () -> Unit,
-    onNavigate: () -> Unit
+    onNavigate: () -> Unit,
+    onNavigateToPilot: (lat: Double, lon: Double) -> Unit = { _, _ -> },
+    onDismissCoTravel: () -> Unit = {}
 ) {
     val target = snapshot.target
     val catColor = getCategoryColor(target.category)
@@ -1221,13 +1272,112 @@ private fun TimelineTargetDetailDialog(
                         DetailRow("SIGNAL @ TIME", "${snapshot.displayRssi} dBm (${snapshot.displayDistanceMeters.toInt()}m away)")
                         DetailRow("BEARING", "${snapshot.relativeBearingDeg.toInt()}° relative")
                         DetailRow("COORDINATES", "%.4f°N, %.4f°W".format(snapshot.displayLat, abs(snapshot.displayLon)))
+
+                        // Drone Direct Remote ID Telemetry
+                        val drone = target.droneTelemetry
+                        if (drone != null) {
+                            DetailRow("UAS TYPE", drone.uasType)
+                            if (drone.uasId != null) {
+                                DetailRow("UAS SERIAL", drone.uasId)
+                            }
+                            if (drone.altitudeAglMeters != null) {
+                                DetailRow("ALTITUDE", "${drone.altitudeAglMeters.toInt()}m AGL (${(drone.altitudeAglMeters * 3.28084f).toInt()} ft)")
+                            }
+                            if (drone.speedKmh != null) {
+                                DetailRow("AIRSPEED", "${drone.speedKmh.toInt()} km/h (${(drone.speedKmh * 0.621371f).toInt()} mph)")
+                            }
+                            if (drone.pilotLat != null && drone.pilotLon != null) {
+                                DetailRow("PILOT GCS", "%.4f°N, %.4f°W (%s)".format(drone.pilotLat, abs(drone.pilotLon), drone.pilotLocationType))
+                            }
+                        }
+
+                        // Co-Travel & Shared Corridor Telemetry (Calm, non-stressful analysis)
+                        val coTravel = target.coTravel
+                        if (coTravel != null && coTravel.level != CoTravelLevel.INDEPENDENT && !coTravel.isDismissed) {
+                            val isEscort = coTravel.level == CoTravelLevel.PERSISTENT_ESCORT
+                            val coColor = if (isEscort) ReconAmber else ReconCyan
+                            Surface(
+                                color = coColor.copy(alpha = 0.12f),
+                                shape = RoundedCornerShape(4.dp),
+                                border = androidx.compose.foundation.BorderStroke(0.8.dp, coColor.copy(alpha = 0.5f)),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Column(modifier = Modifier.padding(6.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            text = if (isEscort) "PERSISTENT ROUTE CORRELATION" else "SHARED COMMUTE CORRIDOR",
+                                            color = coColor,
+                                            fontSize = 8.sp,
+                                            fontFamily = FontFamily.Monospace,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                        Text(
+                                            text = "${coTravel.confidenceScore}% CONF",
+                                            color = TextSecondary,
+                                            fontSize = 7.5.sp,
+                                            fontFamily = FontFamily.Monospace
+                                        )
+                                    }
+                                    Text(
+                                        text = coTravel.summary,
+                                        color = TextPrimary,
+                                        fontSize = 7.5.sp,
+                                        fontFamily = FontFamily.Monospace
+                                    )
+                                    Text(
+                                        text = if (isEscort) "Observed proximity through ${coTravel.correlatedTurnsCount} distinct turns." else "Normal commuter traffic sharing roadway. No action required.",
+                                        color = TextSecondary,
+                                        fontSize = 7.sp,
+                                        fontFamily = FontFamily.Monospace
+                                    )
+                                }
+                            }
+                        }
+
                         if (target.details.isNotBlank()) {
                             DetailRow("INTEL", target.details)
                         }
                     }
                 }
 
-                Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.End),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    // Instant Dismiss Notice Button for confirmed normal traffic
+                    if (target.coTravel != null && target.coTravel.level != CoTravelLevel.INDEPENDENT && !target.coTravel.isDismissed) {
+                        Button(
+                            onClick = onDismissCoTravel,
+                            colors = ButtonDefaults.buttonColors(containerColor = TacticalSurface),
+                            border = androidx.compose.foundation.BorderStroke(0.8.dp, TacticalBorder),
+                            shape = RoundedCornerShape(6.dp),
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+                        ) {
+                            Text(text = "DISMISS NOTICE", color = TextSecondary, fontSize = 8.sp, fontFamily = FontFamily.Monospace)
+                        }
+                    }
+
+                    // Navigate to Pilot GCS Button
+                    if (target.droneTelemetry?.pilotLat != null && target.droneTelemetry?.pilotLon != null) {
+                        Button(
+                            onClick = { onNavigateToPilot(target.droneTelemetry.pilotLat, target.droneTelemetry.pilotLon) },
+                            colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE040FB).copy(alpha = 0.22f)),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE040FB)),
+                            shape = RoundedCornerShape(6.dp),
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp)
+                        ) {
+                            Icon(imageVector = Icons.Default.PersonPinCircle, contentDescription = null, tint = Color(0xFFE040FB), modifier = Modifier.size(12.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text(text = "PILOT GCS", color = Color(0xFFE040FB), fontSize = 9.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
+                        }
+                    }
+
+                    // Standard Navigate Button
                     Button(
                         onClick = onNavigate,
                         colors = ButtonDefaults.buttonColors(containerColor = ReconCyan.copy(alpha = 0.22f)),

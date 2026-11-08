@@ -131,6 +131,15 @@ enum class DetectionTechnology(
         detectionPrinciple = "Real-time audio microphone FFT frequency domain peak tracking. Detects characteristic frequency modulation cycles of emergency vehicle sirens.",
         tacticalSignificance = "Early auditory warning of approaching police, ambulance, or fire emergency vehicles before visual or RF detection.",
         technicalDetails = "FFT spectral analysis checks for 10-18 cycles/min (wail) or 150-180 cycles/min (yelp) modulation profiles."
+    ),
+    OPEN_DRONE_ID(
+        code = "OPEN_DRONE_ID",
+        displayName = "OpenDroneID Broadcast Telemetry (ASTM F3411)",
+        shortName = "OpenDroneID",
+        frequencyBand = "2.402 GHz - 2.480 GHz (BLE Extended / Wi-Fi NAN)",
+        detectionPrinciple = "Decodes standardized ASTM F3411 / ASD-STAN direct Remote ID broadcast frames (Service UUID 0xFFFA). Extracts real-time UAV flight vector and operator pilot ground control coordinates.",
+        tacticalSignificance = "Provides real-time airspace situational awareness. Pinpoints the exact location of both airborne drones and their remote pilot ground controllers within radio range.",
+        technicalDetails = "Parses Basic ID (UAS Serial), Location/Vector (Latitude, Longitude, Altitude AGL/MSL, Ground Speed), and System Messages (Pilot Takeoff/GCS GPS coordinates) broadcast periodically by compliant UAVs."
     );
 
     companion object {
@@ -148,6 +157,44 @@ enum class RelativeMotionTrend {
     RECEDING,        // Signal decreasing / target moving away
     STATIONARY       // Distance steady / co-moving
 }
+
+/**
+ * Direct Remote ID (ASTM F3411 / OpenDroneID) telemetry decoded from airborne UAV broadcast frames.
+ */
+data class DroneTelemetry(
+    val uasId: String? = null,
+    val uasType: String = "QUADCOPTER",
+    val isAirborne: Boolean = true,
+    val altitudeAglMeters: Float? = null,
+    val speedKmh: Float? = null,
+    val headingDeg: Float? = null,
+    val pilotLat: Double? = null,
+    val pilotLon: Double? = null,
+    val pilotLocationType: String = "OPERATOR GCS",
+    val description: String? = null
+)
+
+/**
+ * Non-stressful classification of shared route / co-travel proximity between vehicles.
+ */
+enum class CoTravelLevel {
+    INDEPENDENT,        // Normal passing vehicle (<30% correlation)
+    SHARED_ROUTE,       // Same highway / corridor (>1.0 km, 0 turns) - calm, informational
+    PERSISTENT_ESCORT   // High confidence: followed through >=2 distinct course turns over >1.5 km
+}
+
+/**
+ * Co-travel intelligence metrics evaluating shared corridor proximity.
+ */
+data class CoTravelIntel(
+    val coTravelDistanceMeters: Double = 0.0,
+    val durationMs: Long = 0L,
+    val correlatedTurnsCount: Int = 0,
+    val confidenceScore: Int = 0, // 0 - 100%
+    val level: CoTravelLevel = CoTravelLevel.INDEPENDENT,
+    val summary: String = "",
+    val isDismissed: Boolean = false
+)
 
 /**
  * Single observation breadcrumb of a target relative to host device location.
@@ -206,7 +253,9 @@ data class DetectedRfTarget(
     val locationHistory: List<DeviceBreadcrumb> = emptyList(), // History trail of observations relative to host
     val motionTrend: RelativeMotionTrend = RelativeMotionTrend.STATIONARY,
     val savedMetadata: SavedRfDevice? = null, // Saved notes, number plate, door number, group
-    val detectionTech: DetectionTechnology = DetectionTechnology.WIFI_BEACON // Technology utilized for detection
+    val detectionTech: DetectionTechnology = DetectionTechnology.WIFI_BEACON, // Technology utilized for detection
+    val droneTelemetry: DroneTelemetry? = null, // OpenDroneID flight and pilot telemetry
+    val coTravel: CoTravelIntel? = null // Co-travel correlation and shared route intelligence
 ) {
     /**
      * Display name taking into account custom user nickname or number plate if saved
