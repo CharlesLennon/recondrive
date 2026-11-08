@@ -295,8 +295,9 @@ class MainActivity : ComponentActivity() {
                                             text = "HUD",
                                             color = if (selectedTab == 0) ReconCyan else TextSecondary,
                                             fontFamily = FontFamily.Monospace,
-                                            fontSize = 10.sp,
-                                            fontWeight = FontWeight.Bold
+                                            fontSize = 8.5.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            maxLines = 1
                                         )
                                     }
                                 )
@@ -316,8 +317,9 @@ class MainActivity : ComponentActivity() {
                                             text = "MAP",
                                             color = if (selectedTab == 1) ReconCyan else TextSecondary,
                                             fontFamily = FontFamily.Monospace,
-                                            fontSize = 9.sp,
-                                            fontWeight = FontWeight.Bold
+                                            fontSize = 8.5.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            maxLines = 1
                                         )
                                     }
                                 )
@@ -337,8 +339,31 @@ class MainActivity : ComponentActivity() {
                                             text = "SCANNER",
                                             color = if (selectedTab == 2) ReconCyan else TextSecondary,
                                             fontFamily = FontFamily.Monospace,
-                                            fontSize = 9.sp,
-                                            fontWeight = FontWeight.Bold
+                                            fontSize = 8.5.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            maxLines = 1
+                                        )
+                                    }
+                                )
+
+                                NavigationBarItem(
+                                    selected = selectedTab == 3,
+                                    onClick = { selectedTab = 3 },
+                                    icon = {
+                                        Icon(
+                                            imageVector = Icons.Default.Timelapse,
+                                            contentDescription = "TIMELINE",
+                                            tint = if (selectedTab == 3) ReconCyan else TextSecondary
+                                        )
+                                    },
+                                    label = {
+                                        Text(
+                                            text = "TIMELINE",
+                                            color = if (selectedTab == 3) ReconCyan else TextSecondary,
+                                            fontFamily = FontFamily.Monospace,
+                                            fontSize = 8.5.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            maxLines = 1
                                         )
                                     }
                                 )
@@ -358,8 +383,9 @@ class MainActivity : ComponentActivity() {
                                             text = "SKINS",
                                             color = TextSecondary,
                                             fontFamily = FontFamily.Monospace,
-                                            fontSize = 10.sp,
-                                            fontWeight = FontWeight.Bold
+                                            fontSize = 8.5.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            maxLines = 1
                                         )
                                     }
                                 )
@@ -379,8 +405,9 @@ class MainActivity : ComponentActivity() {
                                             text = "OFFLINE",
                                             color = TextSecondary,
                                             fontFamily = FontFamily.Monospace,
-                                            fontSize = 10.sp,
-                                            fontWeight = FontWeight.Bold
+                                            fontSize = 8.5.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            maxLines = 1
                                         )
                                     }
                                 )
@@ -598,6 +625,28 @@ class MainActivity : ComponentActivity() {
                                         Toast.makeText(
                                             this@MainActivity,
                                             "RF Target locked: $name. Opening Tactical Map...",
+                                            Toast.LENGTH_SHORT
+                                        ).show()
+                                    }
+                                )
+                            }
+                            3 -> {
+                                com.recondrive.app.ui.screens.TacticalTimelineScreen(
+                                    timelineManager = ReconApplication.instance.locationTimelineManager,
+                                    scannerManager = ReconApplication.instance.rfScannerManager,
+                                    osmTileManager = ReconApplication.instance.osmTileManager,
+                                    skinManager = ReconApplication.instance.skinManager,
+                                    currentLat = currentLat,
+                                    currentLon = currentLon,
+                                    currentHeading = currentHeading,
+                                    currentSpeedKmh = currentSpeedKmh,
+                                    onNavigateToTarget = { name, destLat, destLon ->
+                                        targetWaypoint = destLat to destLon
+                                        targetWaypointName = name
+                                        selectedTab = 1
+                                        Toast.makeText(
+                                            this@MainActivity,
+                                            "Target locked from Timeline: $name. Opening Tactical Map...",
                                             Toast.LENGTH_SHORT
                                         ).show()
                                     }
