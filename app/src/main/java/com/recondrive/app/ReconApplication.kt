@@ -59,6 +59,9 @@ class ReconApplication : Application() {
     lateinit var psaObdManager: com.recondrive.app.obd.PsaObdManager
         private set
 
+    lateinit var bfi3dEngine: com.recondrive.app.scanner.TacticalBfi3dEngine
+        private set
+
     override fun onCreate() {
         super.onCreate()
         
@@ -98,6 +101,11 @@ class ReconApplication : Application() {
         psaObdManager = com.recondrive.app.obd.PsaObdManager(
             context = this,
             scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Default)
+        )
+        bfi3dEngine = com.recondrive.app.scanner.TacticalBfi3dEngine(
+            context = this,
+            csiEngine = csiSensingEngine,
+            soundManager = tacticalSoundManager
         )
     }
 

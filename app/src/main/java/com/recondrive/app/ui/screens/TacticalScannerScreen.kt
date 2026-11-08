@@ -69,7 +69,8 @@ fun TacticalScannerScreen(
     currentHeading: Float = 0f,
     deviceHeading: Float = currentHeading,
     currentSpeedKmh: Float = 0f,
-    onNavigateToLocation: (name: String, lat: Double, lon: Double) -> Unit = { _, _, _ -> }
+    onNavigateToLocation: (name: String, lat: Double, lon: Double) -> Unit = { _, _, _ -> },
+    onOpenBfiSpatialScanner: () -> Unit = {}
 ) {
     val detectedTargets by scannerManager.detectedTargets.collectAsState()
     val isScanning by scannerManager.isScanning.collectAsState()
@@ -274,6 +275,36 @@ fun TacticalScannerScreen(
                     Text(
                         text = if (isScannerPaused) "PAUSED" else "ACTIVE",
                         color = if (isScannerPaused) ReconAmber else ReconGreen,
+                        fontSize = 8.5.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.width(4.dp))
+
+            // 3D Beamforming Spatial Scanner Quick Launch Button
+            Surface(
+                color = TacticalSurface,
+                shape = RoundedCornerShape(12.dp),
+                border = androidx.compose.foundation.BorderStroke(1.dp, ReconCyan),
+                modifier = Modifier.clickable { onOpenBfiSpatialScanner() }
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(3.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.ViewInAr,
+                        contentDescription = "3D Beam",
+                        tint = ReconCyan,
+                        modifier = Modifier.size(10.dp)
+                    )
+                    Text(
+                        text = "3D BEAM",
+                        color = ReconCyan,
                         fontSize = 8.5.sp,
                         fontWeight = FontWeight.Bold,
                         fontFamily = FontFamily.Monospace

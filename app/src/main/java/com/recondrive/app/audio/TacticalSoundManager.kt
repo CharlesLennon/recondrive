@@ -417,6 +417,50 @@ class TacticalSoundManager(
         }
     }
 
+    /**
+     * Synthesizes rapid acoustic Geiger clicks for 3D RF beam mapping
+     * or low-frequency warning thumps when entering a dead zone.
+     */
+    fun playBfiGeigerClick(isDeadZone: Boolean) {
+        val prefs = soundPreferences ?: com.recondrive.app.ReconApplication.instance.soundPreferences
+        if (!prefs.isMasterSoundEnabled.value) return
+
+        scope.launch {
+            try {
+                val sampleRate = 44100
+                if (isDeadZone) {
+                    // Low ominous warning thump (300Hz)
+                    val durationMs = 60
+                    val numSamples = (sampleRate * (durationMs / 1000.0)).toInt()
+                    val buffer = ShortArray(numSamples)
+                    val freq = 320.0
+                    for (i in 0 until numSamples) {
+                        val time = i.toDouble() / sampleRate
+                        val envelope = exp(-i.toDouble() / (sampleRate * 0.025))
+                        val sinVal = sin(2.0 * Math.PI * freq * time)
+                        buffer[i] = (sinVal * envelope * Short.MAX_VALUE * 0.70).toInt().toShort()
+                    }
+                    playPcmBuffer(buffer, sampleRate)
+                } else {
+                    // Crisp high-frequency Geiger ping (2600Hz)
+                    val durationMs = 18
+                    val numSamples = (sampleRate * (durationMs / 1000.0)).toInt()
+                    val buffer = ShortArray(numSamples)
+                    val freq = 2600.0
+                    for (i in 0 until numSamples) {
+                        val time = i.toDouble() / sampleRate
+                        val envelope = exp(-i.toDouble() / (sampleRate * 0.005))
+                        val sinVal = sin(2.0 * Math.PI * freq * time)
+                        buffer[i] = (sinVal * envelope * Short.MAX_VALUE * 0.45).toInt().toShort()
+                    }
+                    playPcmBuffer(buffer, sampleRate)
+                }
+            } catch (e: Exception) {
+                Timber.w(e, "Error synthesizing BFI Geiger click")
+            }
+        }
+    }
+
     private fun playPcmBuffer(buffer: ShortArray, sampleRate: Int) {
         try {
             val audioTrack = AudioTrack.Builder()

@@ -203,6 +203,7 @@ class MainActivity : ComponentActivity() {
                 var hasDismissedStartupSync by remember { mutableStateOf(false) }
                 var targetWaypoint by remember { mutableStateOf<Pair<Double, Double>?>(null) }
                 var targetWaypointName by remember { mutableStateOf<String?>(null) }
+                var showBfiSpatialScanner by remember { mutableStateOf(false) }
 
                 LaunchedEffect(Unit) {
                     ReconApplication.instance.rfScannerManager.nfcManager.onAutoDockTriggered = {
@@ -265,6 +266,13 @@ class MainActivity : ComponentActivity() {
                             showTimelineSheet = false
                         },
                         onDismiss = { showTimelineSheet = false }
+                    )
+                }
+
+                if (showBfiSpatialScanner) {
+                    com.recondrive.app.ui.screens.Bfi3dSpatialScreen(
+                        bfiEngine = ReconApplication.instance.bfi3dEngine,
+                        onClose = { showBfiSpatialScanner = false }
                     )
                 }
 
@@ -627,7 +635,8 @@ class MainActivity : ComponentActivity() {
                                             "RF Target locked: $name. Opening Tactical Map...",
                                             Toast.LENGTH_SHORT
                                         ).show()
-                                    }
+                                    },
+                                    onOpenBfiSpatialScanner = { showBfiSpatialScanner = true }
                                 )
                             }
                             3 -> {
@@ -665,7 +674,8 @@ class MainActivity : ComponentActivity() {
                                     fogPreferences = ReconApplication.instance.fogPreferences,
                                     offlineTileRepository = ReconApplication.instance.offlineTileRepository,
                                     onOpenSkins = { showSkinsDialog = true },
-                                    onOpenOfflinePacks = { showOfflineDialog = true }
+                                    onOpenOfflinePacks = { showOfflineDialog = true },
+                                    onOpenBfiSpatialScanner = { showBfiSpatialScanner = true }
                                 )
                             }
                         }

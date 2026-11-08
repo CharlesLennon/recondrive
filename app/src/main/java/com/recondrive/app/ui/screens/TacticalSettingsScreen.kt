@@ -40,9 +40,16 @@ fun TacticalSettingsScreen(
     fogPreferences: FogPreferences,
     offlineTileRepository: OfflineTileRepository,
     onOpenSkins: () -> Unit,
-    onOpenOfflinePacks: () -> Unit
+    onOpenOfflinePacks: () -> Unit,
+    onOpenBfiSpatialScanner: () -> Unit = {}
 ) {
+    val context = androidx.compose.ui.platform.LocalContext.current
     val scrollState = rememberScrollState()
+
+    val sharedPrefs = remember { context.getSharedPreferences("recondrive_tactical_prefs", android.content.Context.MODE_PRIVATE) }
+    var isBfiUnlocked by remember { mutableStateOf(sharedPrefs.getBoolean("bfi_3d_scanner_unlocked", false)) }
+    var tapCount by remember { mutableIntStateOf(0) }
+    var lastTapTimeMs by remember { mutableLongStateOf(0L) }
 
     // Master Sound Telemetry
     val isMasterSoundOn by soundPreferences.isMasterSoundEnabled.collectAsState()
@@ -554,13 +561,123 @@ fun TacticalSettingsScreen(
         }
 
         // =====================================================================
-        // 7. SYSTEM TELEMETRY & BUILD INFO
+        // 7. BLACK OPS CLASSIFIED MODE: BFI 3D SPATIAL SCANNER (IF UNLOCKED)
+        // =====================================================================
+        if (isBfiUnlocked) {
+            Surface(
+                color = TacticalSurface,
+                shape = RoundedCornerShape(12.dp),
+                border = androidx.compose.foundation.BorderStroke(1.2.dp, AlertRed),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(text = "⚡", fontSize = 18.sp)
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Column {
+                                Text(
+                                    text = "BLACK OPS: BFI 3D SPATIAL SCANNER",
+                                    color = AlertRed,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    fontFamily = FontFamily.Monospace,
+                                    letterSpacing = 1.sp
+                                )
+                                Text(
+                                    text = "3D volumetric pedestrian dead-reckoning & RF beam mapper",
+                                    color = TextSecondary,
+                                    fontSize = 9.sp,
+                                    fontFamily = FontFamily.Monospace
+                                )
+                            }
+                        }
+                        Surface(
+                            shape = RoundedCornerShape(4.dp),
+                            color = AlertRed.copy(alpha = 0.18f),
+                            border = androidx.compose.foundation.BorderStroke(0.8.dp, AlertRed)
+                        ) {
+                            Text(
+                                text = "UNLOCKED",
+                                color = AlertRed,
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Bold,
+                                fontFamily = FontFamily.Monospace,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
+                    }
+
+                    Text(
+                        text = "Walk around any room to map out 802.11ac/ax Wi-Fi beamforming lobes and discover physical 3D dead zones in real time.",
+                        color = TextPrimary,
+                        fontSize = 10.5.sp,
+                        fontFamily = FontFamily.Monospace
+                    )
+
+                    Button(
+                        onClick = onOpenBfiSpatialScanner,
+                        colors = ButtonDefaults.buttonColors(containerColor = AlertRed),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(imageVector = Icons.Default.ViewInAr, contentDescription = null, tint = TacticalObsidian, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            text = "LAUNCH 3D BEAM MAPPER",
+                            color = TacticalObsidian,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.Monospace
+                        )
+                    }
+                }
+            }
+        }
+
+        // =====================================================================
+        // 8. SYSTEM TELEMETRY & BUILD INFO (TAP 5X TO UNLOCK HIDDEN MODE)
         // =====================================================================
         Surface(
             color = TacticalSurface,
             shape = RoundedCornerShape(12.dp),
-            border = androidx.compose.foundation.BorderStroke(1.dp, TacticalBorder),
-            modifier = Modifier.fillMaxWidth()
+            border = androidx.compose.foundation.BorderStroke(1.dp, if (isBfiUnlocked) AlertRed.copy(alpha = 0.5f) else TacticalBorder),
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable {
+                    val now = System.currentTimeMillis()
+                    if (now - lastTapTimeMs < 800) {
+                        tapCount++
+                    } else {
+                        tapCount = 1
+                    }
+                    lastTapTimeMs = now
+
+                    if (tapCount >= 5) {
+                        if (!isBfiUnlocked) {
+                            isBfiUnlocked = true
+                            sharedPrefs.edit().putBoolean("bfi_3d_scanner_unlocked", true).apply()
+                            soundManager.playInterceptionAlert()
+                            android.widget.Toast.makeText(
+                                context,
+                                "⚡ ACCESS GRANTED: CLASSIFIED BFI 3D SPATIAL SCANNER UNLOCKED",
+                                android.widget.Toast.LENGTH_LONG
+                            ).show()
+                        } else {
+                            onOpenBfiSpatialScanner()
+                        }
+                    } else if (tapCount in 2..4 && !isBfiUnlocked) {
+                        android.widget.Toast.makeText(
+                            context,
+                            "Tap ${5 - tapCount} more times to unlock Black Ops Mode...",
+                            android.widget.Toast.LENGTH_SHORT
+                        ).show()
+                    }
+                }
         ) {
             Column(
                 modifier = Modifier.padding(14.dp),
@@ -569,7 +686,7 @@ fun TacticalSettingsScreen(
             ) {
                 Text(
                     text = "RECONDRIVE TACTICAL OPERATING SUITE",
-                    color = ReconCyan,
+                    color = if (isBfiUnlocked) AlertRed else ReconCyan,
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Bold,
                     fontFamily = FontFamily.Monospace
@@ -585,6 +702,13 @@ fun TacticalSettingsScreen(
                     color = TextSecondary.copy(alpha = 0.7f),
                     fontSize = 8.5.sp,
                     fontFamily = FontFamily.Monospace
+                )
+                Text(
+                    text = if (isBfiUnlocked) "⚡ BLACK OPS MODE ACTIVE • TAP TO LAUNCH 3D BEAM MAPPER" else "Tap 5 times to unlock classified 3D beam mapping",
+                    color = if (isBfiUnlocked) AlertRed else TextSecondary.copy(alpha = 0.5f),
+                    fontSize = 8.5.sp,
+                    fontFamily = FontFamily.Monospace,
+                    fontWeight = if (isBfiUnlocked) FontWeight.Bold else FontWeight.Normal
                 )
             }
         }
