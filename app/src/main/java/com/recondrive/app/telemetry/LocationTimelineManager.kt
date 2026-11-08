@@ -40,8 +40,16 @@ class LocationTimelineManager(private val context: Context) {
     private var speedSumKmh = 0.0
     private var speedCount = 0
 
+    // Anti-jitter & road alignment tracking
+    private var smoothedLat: Double = 0.0
+    private var smoothedLon: Double = 0.0
+    private var stationaryAnchorLocation: Location? = null
+    private var lastStableBearing: Float = 0f
+
     /**
      * Ingest a new location fix combined with current device heading.
+     * Applies high-accuracy gating, stationary deadband, and road-smoothing filter
+     * so timeline tracks never jitter or criss-cross across roads.
      */
     fun recordTelemetryPoint(
         location: Location,
@@ -49,29 +57,80 @@ class LocationTimelineManager(private val context: Context) {
     ) {
         if (!_isLoggingEnabled.value) return
 
-        val speedKmh = location.speed * 3.6f
-        val gpsBearing = if (location.hasBearing()) location.bearing else deviceHeading
+        // 1. Strict Accuracy Gate: Discard low-accuracy fixes that jump across roads/buildings
+        if (location.hasAccuracy() && location.accuracy > 20.0f) {
+            return
+        }
 
-        // Don't flood timeline if vehicle hasn't moved and speed is 0, except every 5 seconds heartbeat
-        val lastLoc = lastRecordedLocation
+        val speedKmh = location.speed * 3.6f
         val now = System.currentTimeMillis()
+        val lastLoc = lastRecordedLocation
+
+        // 2. Teleport / Multipath Glitch Rejection & Stationary Deadband
         if (lastLoc != null) {
             val dist = lastLoc.distanceTo(location)
             val timeDiffMs = now - (buffer.peekFirst()?.timestamp ?: 0L)
-            if (dist < 1.0f && speedKmh < 0.5f && timeDiffMs < 5000L) {
-                return // Throttle duplicate stationary fixes
+            val dtSec = (timeDiffMs / 1000.0).coerceAtLeast(0.1)
+            val impliedSpeedKmh = (dist / dtSec) * 3.6
+            if (impliedSpeedKmh > 140.0) {
+                // Impossible jump (e.g. cellular tower triangulation jump), reject
+                return
             }
-            if (dist > 0.5f) {
-                _totalDistanceMeters.value += dist
+
+            // 3. Automotive Stationary Deadband (Prevents criss-crossing roads while stopped)
+            if (speedKmh < 1.8f) {
+                val anchor = stationaryAnchorLocation ?: lastLoc.also { stationaryAnchorLocation = it }
+                val distFromAnchor = anchor.distanceTo(location)
+                if (distFromAnchor < 12.0f) {
+                    // Within stationary jitter radius; suppress jitter points that bounce across road lanes
+                    return
+                } else {
+                    // Vehicle genuinely moved > 12m away from stationary anchor
+                    stationaryAnchorLocation = null
+                }
+            } else {
+                stationaryAnchorLocation = null
             }
+
+            // 4. Moving Throttle: Throttle micro-points within 2.5m to keep track clean
+            if (dist < 2.5f && timeDiffMs < 2000L) {
+                return
+            }
+
+            if (dist > 1.0f) {
+                _totalDistanceMeters.value += dist.toDouble()
+            }
+        } else {
+            stationaryAnchorLocation = location
         }
+
         lastRecordedLocation = location
+
+        // 5. Exponential Coordinate Filter (Smooths road trajectory, eliminates lateral antenna wobble)
+        if (smoothedLat == 0.0 || smoothedLon == 0.0) {
+            smoothedLat = location.latitude
+            smoothedLon = location.longitude
+        } else {
+            val alpha = if (speedKmh > 5.0f) 0.75 else 0.40
+            smoothedLat = alpha * location.latitude + (1.0 - alpha) * smoothedLat
+            smoothedLon = alpha * location.longitude + (1.0 - alpha) * smoothedLon
+        }
+
+        // 6. Bearing Stability (Hold road heading when stopped instead of spinning across lanes)
+        val gpsBearing = when {
+            location.hasBearing() && speedKmh > 2.5f -> {
+                lastStableBearing = location.bearing
+                location.bearing
+            }
+            lastStableBearing != 0f -> lastStableBearing
+            else -> deviceHeading
+        }
 
         val entry = LocationTimelineEntry(
             id = now,
             timestamp = now,
-            latitude = location.latitude,
-            longitude = location.longitude,
+            latitude = smoothedLat,
+            longitude = smoothedLon,
             altitudeMeters = if (location.hasAltitude()) location.altitude else 0.0,
             speedKmh = speedKmh,
             gpsBearing = gpsBearing,
@@ -115,6 +174,10 @@ class LocationTimelineManager(private val context: Context) {
         speedSumKmh = 0.0
         speedCount = 0
         lastRecordedLocation = null
+        smoothedLat = 0.0
+        smoothedLon = 0.0
+        stationaryAnchorLocation = null
+        lastStableBearing = 0f
         Timber.i("Location timeline cleared")
     }
 

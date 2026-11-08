@@ -144,26 +144,63 @@ fun TacticalTimelineScreen(
         }
     }
 
-    // 3. Current Scrubbed Fix Calculation
+    // 3. Current Scrubbed Fix Calculation (with smooth road interpolation)
     val currentIndex = remember(sliderProgress, effectiveEntries.size) {
         if (effectiveEntries.isEmpty()) 0
         else ((effectiveEntries.size - 1) * sliderProgress).toInt().coerceIn(0, effectiveEntries.size - 1)
     }
 
-    val scrubFix = remember(currentIndex, effectiveEntries) {
-        if (effectiveEntries.isNotEmpty()) effectiveEntries[currentIndex]
-        else LocationTimelineEntry(
-            id = System.currentTimeMillis(),
-            timestamp = System.currentTimeMillis(),
-            latitude = currentLat,
-            longitude = currentLon,
-            altitudeMeters = 0.0,
-            speedKmh = currentSpeedKmh,
-            gpsBearing = currentHeading,
-            deviceHeading = currentHeading,
-            accuracyMeters = 4f,
-            source = "LIVE GPS"
-        )
+    val scrubFix = remember(currentIndex, effectiveEntries, sliderProgress) {
+        if (effectiveEntries.isEmpty()) {
+            LocationTimelineEntry(
+                id = System.currentTimeMillis(),
+                timestamp = System.currentTimeMillis(),
+                latitude = currentLat,
+                longitude = currentLon,
+                altitudeMeters = 0.0,
+                speedKmh = currentSpeedKmh,
+                gpsBearing = currentHeading,
+                deviceHeading = currentHeading,
+                accuracyMeters = 4f,
+                source = "LIVE GPS"
+            )
+        } else if (effectiveEntries.size == 1) {
+            effectiveEntries[0]
+        } else {
+            // Smooth sub-fix interpolation along the road between baseIndex and nextIndex
+            val floatIndex = (effectiveEntries.size - 1) * sliderProgress
+            val baseIndex = floatIndex.toInt().coerceIn(0, effectiveEntries.size - 1)
+            val nextIndex = (baseIndex + 1).coerceAtMost(effectiveEntries.size - 1)
+            val frac = floatIndex - baseIndex
+
+            val curr = effectiveEntries[baseIndex]
+            val next = effectiveEntries[nextIndex]
+
+            val dist = calculateDistanceMeters(curr.latitude, curr.longitude, next.latitude, next.longitude)
+            if (frac > 0.001f && baseIndex != nextIndex && dist in 0.5..65.0) {
+                // Smooth interpolation along the road segment
+                val interpLat = curr.latitude + (next.latitude - curr.latitude) * frac
+                val interpLon = curr.longitude + (next.longitude - curr.longitude) * frac
+                val interpTime = (curr.timestamp + ((next.timestamp - curr.timestamp) * frac)).toLong()
+                val interpBearing = if (dist > 1.5) {
+                    val dLatM = (next.latitude - curr.latitude) * 111320.0
+                    val dLonM = (next.longitude - curr.longitude) * 111320.0 * cos(Math.toRadians(curr.latitude))
+                    var b = Math.toDegrees(atan2(dLonM, dLatM)).toFloat()
+                    if (b < 0f) b += 360f
+                    b
+                } else curr.gpsBearing
+
+                curr.copy(
+                    timestamp = interpTime,
+                    latitude = interpLat,
+                    longitude = interpLon,
+                    gpsBearing = interpBearing,
+                    speedKmh = curr.speedKmh + (next.speedKmh - curr.speedKmh) * frac.toFloat()
+                )
+            } else {
+                curr
+            }
+        }
     }
 
     val scrubTimeMs = scrubFix.timestamp
@@ -429,27 +466,32 @@ fun TacticalTimelineScreen(
                 val p1m = project(scrubFix.latitude, scrubFix.longitude + deltaLon1m)
                 val pixelsPerMeter = abs(p1m.x - vehiclePos.x).coerceAtLeast(0.001f)
 
-                // C. Traveled Path up to scrubbed point (Illuminated cyber corridor)
+                // C. Traveled Path up to scrubbed point (Illuminated road corridor)
                 if (effectiveEntries.size >= 2 && currentIndex > 0) {
                     val traveledPath = Path()
-                    var started = false
                     var prevLat = effectiveEntries[0].latitude
                     var prevLon = effectiveEntries[0].longitude
-                    val startPt = project(prevLat, prevLon)
-                    traveledPath.moveTo(startPt.x, startPt.y)
-                    started = true
+                    var prevPt = project(prevLat, prevLon)
+                    traveledPath.moveTo(prevPt.x, prevPt.y)
 
                     for (i in 1..currentIndex) {
                         val e = effectiveEntries[i]
                         val dist = calculateDistanceMeters(prevLat, prevLon, e.latitude, e.longitude)
                         val pt = project(e.latitude, e.longitude)
-                        if (dist <= 250.0) {
+
+                        if (dist in 1.5..65.0) {
+                            // Smooth road turn with midpoint quadratic curve to avoid cutting corners
+                            val midX = (prevPt.x + pt.x) / 2f
+                            val midY = (prevPt.y + pt.y) / 2f
+                            traveledPath.quadraticBezierTo(prevPt.x, prevPt.y, midX, midY)
                             traveledPath.lineTo(pt.x, pt.y)
-                        } else {
+                        } else if (dist > 65.0) {
+                            // Break path on large gaps/tunnels to prevent straight diagonal lines cutting across town
                             traveledPath.moveTo(pt.x, pt.y)
                         }
                         prevLat = e.latitude
                         prevLon = e.longitude
+                        prevPt = pt
                     }
 
                     // Traveled Path Glow & Core Line
@@ -834,6 +876,28 @@ fun TacticalTimelineScreen(
                             fontWeight = FontWeight.Bold,
                             fontFamily = FontFamily.Monospace,
                             modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp)
+                        )
+                    }
+
+                    // Reset / Clear History Button
+                    Surface(
+                        color = TacticalObsidian,
+                        shape = RoundedCornerShape(6.dp),
+                        border = androidx.compose.foundation.BorderStroke(0.8.dp, TacticalBorder),
+                        modifier = Modifier.clickable {
+                            timelineManager.clearTimeline()
+                            sliderProgress = 1.0f
+                            isLiveMode = true
+                            isPlaying = false
+                        }
+                    ) {
+                        Text(
+                            text = "RESET",
+                            color = TextSecondary,
+                            fontSize = 8.5.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.Monospace,
+                            modifier = Modifier.padding(horizontal = 5.dp, vertical = 3.dp)
                         )
                     }
                 }
