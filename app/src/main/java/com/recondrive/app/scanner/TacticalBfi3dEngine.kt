@@ -80,6 +80,11 @@ data class Bfi3dSnapshot(
     val headingDeg: Float = 0.0f,
     val pitchDeg: Float = 0.0f,
     val rollDeg: Float = 0.0f,
+    val rotationMatrix: FloatArray = floatArrayOf(
+        1f, 0f, 0f,
+        0f, 1f, 0f,
+        0f, 0f, 1f
+    ),
     val currentRssi: Int = -60,
     val currentBfiScore: Int = 85,
     val currentLinkSpeedMbps: Int = 433,
@@ -498,6 +503,7 @@ class TacticalBfi3dEngine(
                 headingDeg = currentHeading,
                 pitchDeg = currentPitch,
                 rollDeg = currentRoll,
+                rotationMatrix = rotationMatrix.clone(),
                 currentRssi = clampedRssi,
                 currentBfiScore = bfiScore,
                 currentLinkSpeedMbps = linkSpeed,
@@ -679,7 +685,8 @@ class TacticalBfi3dEngine(
             posZ = posZ,
             headingDeg = currentHeading,
             pitchDeg = currentPitch,
-            rollDeg = currentRoll
+            rollDeg = currentRoll,
+            rotationMatrix = rotationMatrix.clone()
         )
     }
 

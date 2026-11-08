@@ -401,52 +401,117 @@ fun Bfi3dSpatialScreen(
             }
 
             // -----------------------------------------------------------------
-            // G. Draw Real-Time User / Phone 3D Avatar
+            // G. Draw Real-Time 3D Smartphone Model & Orientation Ray
             // -----------------------------------------------------------------
-            val userProj = project(snapshot.posX, snapshot.posY, snapshot.posZ)
+            val R = snapshot.rotationMatrix
+            val pw = 0.16f // phone half-width (0.32m width in 3D room)
+            val pl = 0.32f // phone half-length (0.64m length in 3D room)
+            val pt = 0.025f // phone half-thickness (0.05m depth)
+
+            // Transform local phone coords (xd, yd, zd) into world space (wx, wy, wz)
+            fun phoneToWorld(xd: Float, yd: Float, zd: Float): Triple<Float, Float, Float> {
+                val wx = snapshot.posX + (R[0] * xd + R[1] * yd + R[2] * zd)
+                val wy = snapshot.posY + (R[3] * xd + R[4] * yd + R[5] * zd)
+                val wz = snapshot.posZ + (R[6] * xd + R[7] * yd + R[8] * zd)
+                return Triple(wx, wy, wz)
+            }
+
+            // Vertical drop line to floor shadow
             val userFloorProj = project(snapshot.posX, snapshot.posY, 0f)
-
-            if (userProj != null) {
-                val userScreen = Offset(userProj.screenX, userProj.screenY)
-
-                // Vertical drop line to floor shadow
-                if (userFloorProj != null) {
-                    val floorScreen = Offset(userFloorProj.screenX, userFloorProj.screenY)
-                    drawLine(
-                        color = ReconCyan.copy(alpha = 0.5f),
-                        start = userScreen,
-                        end = floorScreen,
-                        strokeWidth = 1.5.dp.toPx(),
-                        cap = StrokeCap.Round
-                    )
-                    // Floor shadow circle
-                    drawCircle(ReconCyan.copy(alpha = 0.35f), radius = 8.dp.toPx(), center = floorScreen)
-                }
-
-                // Phone heading arrow in 3D
-                val headingRad = Math.toRadians(snapshot.headingDeg.toDouble())
-                val tipX = snapshot.posX + (sin(headingRad) * 0.55f).toFloat()
-                val tipY = snapshot.posY + (cos(headingRad) * 0.55f).toFloat()
-                val tipProj = project(tipX, tipY, snapshot.posZ)
-
-                if (tipProj != null) {
-                    drawLine(
-                        color = ReconCyan,
-                        start = userScreen,
-                        end = Offset(tipProj.screenX, tipProj.screenY),
-                        strokeWidth = 3.dp.toPx(),
-                        cap = StrokeCap.Round
-                    )
-                }
-
-                // Outer tactical phone reticle
-                drawCircle(
-                    color = ReconCyan,
-                    radius = 12.dp.toPx(),
-                    center = userScreen,
-                    style = Stroke(width = 2.dp.toPx())
+            val phoneCenterProj = project(snapshot.posX, snapshot.posY, snapshot.posZ)
+            if (userFloorProj != null && phoneCenterProj != null) {
+                drawLine(
+                    color = ReconCyan.copy(alpha = 0.45f),
+                    start = Offset(phoneCenterProj.screenX, phoneCenterProj.screenY),
+                    end = Offset(userFloorProj.screenX, userFloorProj.screenY),
+                    strokeWidth = 1.5.dp.toPx(),
+                    cap = StrokeCap.Round
                 )
-                drawCircle(color = ReconCyan, radius = 4.dp.toPx(), center = userScreen)
+                drawCircle(ReconCyan.copy(alpha = 0.35f), radius = 8.dp.toPx(), center = Offset(userFloorProj.screenX, userFloorProj.screenY))
+            }
+
+            // Project 8 Vertices of 3D Phone Cuboid
+            val pFrontTR = phoneToWorld(pw, pl, pt).let { project(it.first, it.second, it.third) }
+            val pFrontTL = phoneToWorld(-pw, pl, pt).let { project(it.first, it.second, it.third) }
+            val pFrontBL = phoneToWorld(-pw, -pl, pt).let { project(it.first, it.second, it.third) }
+            val pFrontBR = phoneToWorld(pw, -pl, pt).let { project(it.first, it.second, it.third) }
+
+            val pBackTR = phoneToWorld(pw, pl, -pt).let { project(it.first, it.second, it.third) }
+            val pBackTL = phoneToWorld(-pw, pl, -pt).let { project(it.first, it.second, it.third) }
+            val pBackBL = phoneToWorld(-pw, -pl, -pt).let { project(it.first, it.second, it.third) }
+            val pBackBR = phoneToWorld(pw, -pl, -pt).let { project(it.first, it.second, it.third) }
+
+            // 1. Draw Back Chassis Face
+            if (pBackTR != null && pBackTL != null && pBackBL != null && pBackBR != null) {
+                val backPath = Path().apply {
+                    moveTo(pBackTL.screenX, pBackTL.screenY)
+                    lineTo(pBackTR.screenX, pBackTR.screenY)
+                    lineTo(pBackBR.screenX, pBackBR.screenY)
+                    lineTo(pBackBL.screenX, pBackBL.screenY)
+                    close()
+                }
+                drawPath(backPath, color = Color(0xFF101924).copy(alpha = 0.92f))
+                drawPath(backPath, color = TacticalBorder, style = Stroke(width = 1.5.dp.toPx()))
+            }
+
+            // 2. Draw Side Bevel Edges
+            if (pBackTR != null && pFrontTR != null) {
+                drawLine(ReconCyan.copy(alpha = 0.65f), Offset(pBackTR.screenX, pBackTR.screenY), Offset(pFrontTR.screenX, pFrontTR.screenY), strokeWidth = 1.5.dp.toPx())
+            }
+            if (pBackTL != null && pFrontTL != null) {
+                drawLine(ReconCyan.copy(alpha = 0.65f), Offset(pBackTL.screenX, pBackTL.screenY), Offset(pFrontTL.screenX, pFrontTL.screenY), strokeWidth = 1.5.dp.toPx())
+            }
+            if (pBackBL != null && pFrontBL != null) {
+                drawLine(ReconCyan.copy(alpha = 0.65f), Offset(pBackBL.screenX, pBackBL.screenY), Offset(pFrontBL.screenX, pFrontBL.screenY), strokeWidth = 1.5.dp.toPx())
+            }
+            if (pBackBR != null && pFrontBR != null) {
+                drawLine(ReconCyan.copy(alpha = 0.65f), Offset(pBackBR.screenX, pBackBR.screenY), Offset(pFrontBR.screenX, pFrontBR.screenY), strokeWidth = 1.5.dp.toPx())
+            }
+
+            // 3. Draw Front Glass Screen Face
+            if (pFrontTR != null && pFrontTL != null && pFrontBL != null && pFrontBR != null) {
+                val frontPath = Path().apply {
+                    moveTo(pFrontTL.screenX, pFrontTL.screenY)
+                    lineTo(pFrontTR.screenX, pFrontTR.screenY)
+                    lineTo(pFrontBR.screenX, pFrontBR.screenY)
+                    lineTo(pFrontBL.screenX, pFrontBL.screenY)
+                    close()
+                }
+                // Glowing OLED screen glass
+                drawPath(frontPath, color = ReconCyan.copy(alpha = 0.32f))
+                // Neon cyan screen bezel
+                drawPath(frontPath, color = ReconCyan, style = Stroke(width = 2.dp.toPx()))
+
+                // Camera pill notch at top edge of screen
+                val notchLeft = Offset(
+                    pFrontTL.screenX * 0.58f + pFrontTR.screenX * 0.42f,
+                    pFrontTL.screenY * 0.58f + pFrontTR.screenY * 0.42f
+                )
+                val notchRight = Offset(
+                    pFrontTL.screenX * 0.42f + pFrontTR.screenX * 0.58f,
+                    pFrontTL.screenY * 0.42f + pFrontTR.screenY * 0.58f
+                )
+                drawLine(Color.White, notchLeft, notchRight, strokeWidth = 3.dp.toPx(), cap = StrokeCap.Round)
+            }
+
+            // 4. Directional Targeting Laser / Antenna Beam (Shooting out of top of phone)
+            val tipWorld = phoneToWorld(0f, pl + 1.2f, 0f)
+            val topCenterWorld = phoneToWorld(0f, pl, 0f)
+            val tipProj = project(tipWorld.first, tipWorld.second, tipWorld.third)
+            val topCenterProj = project(topCenterWorld.first, topCenterWorld.second, topCenterWorld.third)
+
+            if (tipProj != null && topCenterProj != null) {
+                // Forward targeting laser ray
+                drawLine(
+                    color = ReconCyan,
+                    start = Offset(topCenterProj.screenX, topCenterProj.screenY),
+                    end = Offset(tipProj.screenX, tipProj.screenY),
+                    strokeWidth = 2.5.dp.toPx(),
+                    cap = StrokeCap.Round
+                )
+                // Pulsing targeting reticle at ray tip
+                drawCircle(ReconCyan.copy(alpha = 0.4f), radius = 6.dp.toPx(), center = Offset(tipProj.screenX, tipProj.screenY))
+                drawCircle(ReconCyan, radius = 2.5.dp.toPx(), center = Offset(tipProj.screenX, tipProj.screenY))
             }
         }
 
