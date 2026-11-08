@@ -22,10 +22,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.ClipOp
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.asComposePath
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.clipPath
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontFamily
@@ -511,12 +514,6 @@ fun InteractiveMapScreen(
 
                 // 1. Base Fog Shroud Fill (Density dynamically driven by fogOpacity 15% to 100%)
                 val effectiveOpacity = (fogSkin.shroudOpacity * (0.35f + fogOpacity * 0.65f)).coerceIn(0.25f, 0.98f)
-                val shroudPaint = android.graphics.Paint().apply {
-                    color = fogSkin.shroudColor
-                    alpha = (effectiveOpacity * 255).toInt().coerceIn(0, 255)
-                    style = android.graphics.Paint.Style.FILL
-                    isAntiAlias = true
-                }
 
                 // 2. Build Holes Path for Unmasking Visited Paths and Explored Cells
                 // Path.Op.DIFFERENCE is 100% crash-safe and avoids Compose nativeCanvas saveLayer underflow
@@ -574,34 +571,89 @@ fun InteractiveMapScreen(
                 }
 
                 // Unmask All Explored Spatial Cells from Persistent Database
-                val cellScreenRadius = (pixelsPerMeter * 35f).coerceIn(10f, 150f)
                 for (cell in allExploredCells) {
                     val cp = project(cell.centerLat, cell.centerLon)
+                    val cellMeters = if (cell.zoomLevel >= 20) (fogRange * 0.7f).coerceIn(24f, 100f) else 150f
+                    val cellScreenRadius = (pixelsPerMeter * cellMeters).coerceAtLeast(10f)
                     if (cp.x in -cellScreenRadius..(width + cellScreenRadius) && cp.y in -cellScreenRadius..(height + cellScreenRadius)) {
                         holesPath.addCircle(cp.x, cp.y, cellScreenRadius, android.graphics.Path.Direction.CW)
                     }
                 }
 
-                // 3. Shroud Cutout (Shroud minus holes)
-                val shroudPath = android.graphics.Path().apply {
-                    addRect(0f, 0f, width, height, android.graphics.Path.Direction.CW)
-                }
-                val finalFogPath = android.graphics.Path()
-                val opSuccess = try {
-                    finalFogPath.op(shroudPath, holesPath, android.graphics.Path.Op.DIFFERENCE)
+                // 3. Shroud Cutout (Hardware-accelerated clipPath Difference)
+                // Punch transparent holes cleanly through the fog shroud for vehicle radar, traveled corridors,
+                // and persistent database explored cells with ZERO boolean CSG failure and ZERO EVEN_ODD inversion.
+                holesPath.fillType = android.graphics.Path.FillType.WINDING
+                val composeHoles = holesPath.asComposePath()
+
+                try {
+                    clipPath(
+                        path = composeHoles,
+                        clipOp = ClipOp.Difference
+                    ) {
+                        drawRect(
+                            color = Color(fogSkin.shroudColor).copy(alpha = effectiveOpacity),
+                            size = size
+                        )
+                    }
                 } catch (t: Throwable) {
-                    false
+                    timber.log.Timber.w(t, "InteractiveMapScreen: clipPath shroud cutout failed, rendering fallback")
+                    drawRect(
+                        color = Color(fogSkin.shroudColor).copy(alpha = effectiveOpacity * 0.45f),
+                        size = size
+                    )
                 }
 
-                if (opSuccess) {
-                    nativeCanvas.drawPath(finalFogPath, shroudPaint)
-                } else {
-                    val fallbackPath = android.graphics.Path().apply {
-                        fillType = android.graphics.Path.FillType.EVEN_ODD
-                        addRect(0f, 0f, width, height, android.graphics.Path.Direction.CW)
-                        addPath(holesPath)
+                // 4. Tactical Traveled Trajectory Glow (Luminous route trail along unmasked road)
+                if (timelineEntries.size >= 2) {
+                    val chronological = timelineEntries.asReversed()
+                    for (i in 0 until chronological.size - 1) {
+                        val p1 = project(chronological[i].latitude, chronological[i].longitude)
+                        val p2 = project(chronological[i + 1].latitude, chronological[i + 1].longitude)
+                        val distMeters = UkOsmDataEngine.calculateDistanceKm(
+                            chronological[i].latitude, chronological[i].longitude,
+                            chronological[i + 1].latitude, chronological[i + 1].longitude
+                        ) * 1000.0
+                        if (distMeters <= (fogRange * 2.5).coerceAtLeast(200.0)) {
+                            drawLine(
+                                color = Color(fogSkin.perimeterGlowColor).copy(alpha = 0.50f),
+                                start = p1,
+                                end = p2,
+                                strokeWidth = 3f,
+                                cap = StrokeCap.Round
+                            )
+                        }
                     }
-                    nativeCanvas.drawPath(fallbackPath, shroudPaint)
+                    val lastEntry = chronological.last()
+                    val finalDistMeters = UkOsmDataEngine.calculateDistanceKm(
+                        lastEntry.latitude, lastEntry.longitude,
+                        currentLat, currentLon
+                    ) * 1000.0
+                    if (finalDistMeters <= (fogRange * 2.5).coerceAtLeast(200.0)) {
+                        val pLast = project(lastEntry.latitude, lastEntry.longitude)
+                        drawLine(
+                            color = Color(fogSkin.perimeterGlowColor).copy(alpha = 0.50f),
+                            start = pLast,
+                            end = vehicleScreenPos,
+                            strokeWidth = 3f,
+                            cap = StrokeCap.Round
+                        )
+                    }
+                }
+
+                // Subtle tactical radar markers for persistent explored cells
+                if (zoom >= 13.0f && allExploredCells.isNotEmpty()) {
+                    val pipColor = Color(fogSkin.perimeterGlowColor).copy(alpha = 0.25f)
+                    for (cell in allExploredCells) {
+                        val cp = project(cell.centerLat, cell.centerLon)
+                        if (cp.x in 0f..width && cp.y in 0f..height) {
+                            drawCircle(
+                                color = pipColor,
+                                radius = 2.5f,
+                                center = cp
+                            )
+                        }
+                    }
                 }
 
                 // 3. Vignette Transition Shadow (Atmospheric boundary separating cleared sector from dense shroud)

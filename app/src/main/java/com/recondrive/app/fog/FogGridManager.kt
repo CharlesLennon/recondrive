@@ -22,7 +22,7 @@ class FogGridManager(
         context.applicationContext,
         FogDatabase::class.java,
         "tactical_fog.db"
-    ).build()
+    ).fallbackToDestructiveMigration().build()
     private val dao = db.fogDao()
 
     private val _stats = MutableStateFlow(ExplorationStats())
@@ -38,9 +38,9 @@ class FogGridManager(
     private var currentStreakMeters = 0.0
     private var totalDistanceMeters = 0.0
 
-    // Zoom 16 tile resolution is ~25 meters at 50° latitude
-    private val zoomLevel = 16
-    private val approxCellAreaKm2 = 0.000625 // approx 25m * 25m in km²
+    // Zoom 20 tile resolution is ~24 meters at 50° latitude (~566 m² per cell)
+    private val zoomLevel = 20
+    private val approxCellAreaKm2 = 0.000566
 
     init {
         // Load initial count on startup
@@ -86,11 +86,10 @@ class FogGridManager(
             val centerTileX = lonToTileX(location.longitude, zoomLevel)
             val centerTileY = latToTileY(location.latitude, zoomLevel)
 
-            // Radius in tile units (approx 25m per tile)
-            val tileRadius = ceil(scanRadiusMeters / 25.0).toInt()
+            // Radius in tile units (approx 24m per tile)
+            val tileRadius = ceil(scanRadiusMeters / 24.0).toInt().coerceIn(1, 28)
 
-            val newCells = mutableListOf<ExploredCell>()
-            var newlyUncoveredCount = 0
+            val candidateCells = mutableListOf<ExploredCell>()
 
             for (dx in -tileRadius..tileRadius) {
                 for (dy in -tileRadius..tileRadius) {
@@ -108,53 +107,59 @@ class FogGridManager(
 
                     if (dist <= scanRadiusMeters) {
                         val cellId = packCellId(zoomLevel, tx, ty)
-                        val cell = ExploredCell(
-                            cellId = cellId,
-                            zoomLevel = zoomLevel,
-                            tileX = tx,
-                            tileY = ty,
-                            centerLat = cellCenterLat,
-                            centerLon = cellCenterLon
+                        candidateCells.add(
+                            ExploredCell(
+                                cellId = cellId,
+                                zoomLevel = zoomLevel,
+                                tileX = tx,
+                                tileY = ty,
+                                centerLat = cellCenterLat,
+                                centerLon = cellCenterLon
+                            )
                         )
-
-                        val insertResult = dao.insertCell(cell)
-                        if (insertResult != -1L) {
-                            newlyUncoveredCount++
-                            newCells.add(cell)
-                        } else {
-                            dao.incrementVisit(cellId)
-                        }
                     }
                 }
             }
 
-            // Streak tracking: if newly uncovered cells exist, streak continues
-            if (newlyUncoveredCount > 0) {
-                currentStreakMeters += distanceDelta
-                _recentlyUncovered.emit(newCells)
-            } else if (distanceDelta > 15.0) {
-                // Driving in already-explored territory resets current streak
-                currentStreakMeters = 0.0
-            }
+            if (candidateCells.isNotEmpty()) {
+                val insertResults = dao.insertCells(candidateCells)
+                val newlyUncovered = mutableListOf<ExploredCell>()
+                for (i in candidateCells.indices) {
+                    if (insertResults[i] != -1L) {
+                        newlyUncovered.add(candidateCells[i])
+                    }
+                }
 
-            // Update stats
-            val currentCount = _stats.value.totalCellsExplored + newlyUncoveredCount
-            val areaKm2 = currentCount * approxCellAreaKm2
-            
-            _stats.update {
-                it.copy(
-                    totalCellsExplored = currentCount,
-                    totalAreaKm2 = areaKm2,
-                    currentUnchartedStreakKm = currentStreakMeters / 1000.0,
-                    totalExplorationDistanceKm = totalDistanceMeters / 1000.0,
-                    explorationRank = TacticalRank.fromArea(areaKm2),
-                    lastDiscoveredCellLat = location.latitude,
-                    lastDiscoveredCellLon = location.longitude
-                )
-            }
+                val newlyUncoveredCount = newlyUncovered.size
 
-            if (newlyUncoveredCount > 0) {
-                Timber.d("Tactical Fog: Uncovered $newlyUncoveredCount new cells! Area: %.2f km²".format(areaKm2))
+                // Streak tracking: if newly uncovered cells exist, streak continues
+                if (newlyUncoveredCount > 0) {
+                    currentStreakMeters += distanceDelta
+                    _recentlyUncovered.emit(newlyUncovered)
+                } else if (distanceDelta > 15.0) {
+                    // Driving in already-explored territory resets current streak
+                    currentStreakMeters = 0.0
+                }
+
+                // Update stats
+                val currentCount = _stats.value.totalCellsExplored + newlyUncoveredCount
+                val areaKm2 = currentCount * approxCellAreaKm2
+
+                _stats.update {
+                    it.copy(
+                        totalCellsExplored = currentCount,
+                        totalAreaKm2 = areaKm2,
+                        currentUnchartedStreakKm = currentStreakMeters / 1000.0,
+                        totalExplorationDistanceKm = totalDistanceMeters / 1000.0,
+                        explorationRank = TacticalRank.fromArea(areaKm2),
+                        lastDiscoveredCellLat = location.latitude,
+                        lastDiscoveredCellLon = location.longitude
+                    )
+                }
+
+                if (newlyUncoveredCount > 0) {
+                    Timber.d("Tactical Fog: Uncovered $newlyUncoveredCount new cells! Total: $currentCount, Area: %.2f km²".format(areaKm2))
+                }
             }
         }
     }
@@ -175,11 +180,11 @@ class FogGridManager(
         }
 
         fun tileXToLon(x: Int, zoom: Int): Double {
-            return x.toDouble() / (1 shl zoom) * 360.0 - 180.0
+            return (x.toDouble() + 0.5) / (1 shl zoom) * 360.0 - 180.0
         }
 
         fun tileYToLat(y: Int, zoom: Int): Double {
-            val n = Math.PI - 2.0 * Math.PI * y.toDouble() / (1 shl zoom)
+            val n = Math.PI - 2.0 * Math.PI * (y.toDouble() + 0.5) / (1 shl zoom)
             return Math.toDegrees(atan(sinh(n)))
         }
 

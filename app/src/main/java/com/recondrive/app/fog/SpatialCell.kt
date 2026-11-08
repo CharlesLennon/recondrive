@@ -11,7 +11,7 @@ import kotlinx.coroutines.flow.Flow
 data class ExploredCell(
     @PrimaryKey
     val cellId: Long,              // Packed tile index: (zoom shl 32) or (x shl 16) or y
-    val zoomLevel: Int = 16,
+    val zoomLevel: Int = 20,
     val tileX: Int,
     val tileY: Int,
     val centerLat: Double,
@@ -33,6 +33,9 @@ interface FogDao {
 
     @Query("SELECT COUNT(*) FROM explored_cells")
     suspend fun getExploredCellCountSync(): Int
+
+    @Insert(onConflict = OnConflictStrategy.IGNORE)
+    suspend fun insertCells(cells: List<ExploredCell>): List<Long>
 
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertCell(cell: ExploredCell): Long
