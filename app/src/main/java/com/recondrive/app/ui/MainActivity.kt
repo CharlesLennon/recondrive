@@ -369,6 +369,28 @@ class MainActivity : ComponentActivity() {
                                 )
 
                                 NavigationBarItem(
+                                    selected = selectedTab == 4,
+                                    onClick = { selectedTab = 4 },
+                                    icon = {
+                                        Icon(
+                                            imageVector = Icons.Default.DirectionsCar,
+                                            contentDescription = "VEHICLE",
+                                            tint = if (selectedTab == 4) ReconCyan else TextSecondary
+                                        )
+                                    },
+                                    label = {
+                                        Text(
+                                            text = "VEHICLE",
+                                            color = if (selectedTab == 4) ReconCyan else TextSecondary,
+                                            fontFamily = FontFamily.Monospace,
+                                            fontSize = 8.5.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            maxLines = 1
+                                        )
+                                    }
+                                )
+
+                                NavigationBarItem(
                                     selected = false,
                                     onClick = { showSkinsDialog = true },
                                     icon = {
@@ -650,6 +672,11 @@ class MainActivity : ComponentActivity() {
                                             Toast.LENGTH_SHORT
                                         ).show()
                                     }
+                                )
+                            }
+                            4 -> {
+                                com.recondrive.app.ui.screens.VehicleDiagnosticsScreen(
+                                    obdManager = ReconApplication.instance.psaObdManager
                                 )
                             }
                         }

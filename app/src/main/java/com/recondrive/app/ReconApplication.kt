@@ -53,6 +53,9 @@ class ReconApplication : Application() {
     lateinit var rfScannerManager: com.recondrive.app.scanner.TacticalRfScannerManager
         private set
 
+    lateinit var psaObdManager: com.recondrive.app.obd.PsaObdManager
+        private set
+
     override fun onCreate() {
         super.onCreate()
         
@@ -87,6 +90,10 @@ class ReconApplication : Application() {
             savedDeviceRepository = savedRfDeviceRepository,
             soundManager = tacticalSoundManager,
             csiEngine = csiSensingEngine
+        )
+        psaObdManager = com.recondrive.app.obd.PsaObdManager(
+            context = this,
+            scope = kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.SupervisorJob() + kotlinx.coroutines.Dispatchers.Default)
         )
     }
 
