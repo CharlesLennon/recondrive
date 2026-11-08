@@ -296,14 +296,11 @@ class TacticalRfScannerManager(
         if (!hasReceivedRealLocation || distMoved > 40.0) {
             if (!hasReceivedRealLocation) {
                 hasReceivedRealLocation = true
-                // Prune any default startup coordinates (e.g. Brighton placeholder)
+                // Prune any default startup coordinates
                 targetMap.clear()
                 stationaryPinpointMap.clear()
             }
             ingestPublicCctvCameras(lat, lon, heading)
-            if (_isSimulationEnabled.value) {
-                populateTacticalSimulationTargets(lat, lon)
-            }
         }
     }
 
@@ -426,25 +423,21 @@ class TacticalRfScannerManager(
     }
 
     /**
-     * Toggles simulation demo mode. Default is false (Pure LIVE hardware sniffing).
+     * Toggles simulation demo mode. Strictly kept false (Pure LIVE hardware sniffing only).
      */
     fun toggleSimulation() {
-        _isSimulationEnabled.value = !_isSimulationEnabled.value
-        if (_isSimulationEnabled.value) {
-            populateTacticalSimulationTargets(lastKnownLat, lastKnownLon)
-        } else {
-            listOf(
-                "4C:FC:AA:8B:19:2E", "00:26:7E:44:91:FA", "9C:8E:99:A2:4B:11",
-                "C0:56:E3:7A:02:D4", "00:62:EC:3F:89:AB", "B4:FB:E4:11:80:55",
-                "60:60:1F:B1:33:09", "UWB_BMW_DIGITAL_KEY_3", "TESLA_KEY_SIM_0211", "NIR_OPTICAL_ILLUMINATOR",
-                "CELL_ROGUE_2G_STINGRAY"
-            ).forEach {
-                targetMap.remove(it)
-                stationaryPinpointMap.remove(it)
-            }
-            imsiDetector.simulateAttack(false)
-            syncTargetsToFlow()
+        _isSimulationEnabled.value = false
+        listOf(
+            "4C:FC:AA:8B:19:2E", "00:26:7E:44:91:FA", "9C:8E:99:A2:4B:11",
+            "C0:56:E3:7A:02:D4", "00:62:EC:3F:89:AB", "B4:FB:E4:11:80:55",
+            "60:60:1F:B1:33:09", "UWB_BMW_DIGITAL_KEY_3", "TESLA_KEY_SIM_0211", "NIR_OPTICAL_ILLUMINATOR",
+            "CELL_ROGUE_2G_STINGRAY"
+        ).forEach {
+            targetMap.remove(it)
+            stationaryPinpointMap.remove(it)
         }
+        imsiDetector.simulateAttack(false)
+        syncTargetsToFlow()
     }
 
     /**
@@ -462,39 +455,11 @@ class TacticalRfScannerManager(
         Timber.i("Tactical siren listener toggled: ${_isSirenDetectorEnabled.value}")
     }
 
-    /**
-     * Injects synthetic Stingray / rogue base station attack for testing and drills.
-     */
     fun simulateImsiAttack(enable: Boolean) {
-        imsiDetector.simulateAttack(enable)
-        if (enable) {
-            val rogueTarget = DetectedRfTarget(
-                id = "CELL_ROGUE_2G_STINGRAY",
-                name = "⚠️ ROGUE CELL (TEST_PLMN_001_01)",
-                rawSsidOrBleName = "TEST_PLMN_001_01",
-                macAddress = "CELL_ROGUE_2G_STINGRAY",
-                vendor = "Portable SDR Interceptor",
-                category = RfCategory.CELL_TOWER,
-                rssi = -46,
-                estimatedDistanceMeters = 35.0,
-                frequencyMhz = 900,
-                protocol = "UNENCRYPTED 2G CELLULAR TRAP",
-                threatLevel = "⚠️ ROGUE BASE STATION / INTERCEPTION RISK",
-                details = "⚠️ ACTIVE INTERCEPTION DRILL • Forced 2G Downgrade • A5/0 Cipher Stripping • LAC: 9999 • -46dBm",
-                timestamp = System.currentTimeMillis(),
-                detectedLat = lastKnownLat + 0.0003,
-                detectedLon = lastKnownLon + 0.0003,
-                relativeBearingDeg = 45f,
-                locationHistory = emptyList(),
-                motionTrend = RelativeMotionTrend.STATIONARY,
-                savedMetadata = null
-            )
-            targetMap["CELL_ROGUE_2G_STINGRAY"] = rogueTarget
-            syncTargetsToFlow()
-        } else {
-            targetMap.remove("CELL_ROGUE_2G_STINGRAY")
-            syncTargetsToFlow()
-        }
+        // Disabled; pure live cellular audit only
+        targetMap.remove("CELL_ROGUE_2G_STINGRAY")
+        imsiDetector.simulateAttack(false)
+        syncTargetsToFlow()
     }
 
     // =========================================================================
@@ -1552,208 +1517,5 @@ class TacticalRfScannerManager(
         }
     }
 
-    /**
-     * Seeds tactical RF targets (Tesla vehicle, DJI drone, CCTV cameras, Dashcam, Ford)
-     * anchored tightly around user's GPS position (within 8m - 38m) ONLY when user manually enables DEMO SIM mode.
-     */
-    fun populateTacticalSimulationTargets(userLat: Double, userLon: Double) {
-        val now = System.currentTimeMillis()
 
-        // Offsets in meters converted to precise lat/lon delta
-        fun getCoord(distMeters: Double, angleDeg: Double): Pair<Double, Double> {
-            val rad = Math.toRadians(angleDeg)
-            val dLat = (distMeters * cos(rad)) / 111320.0
-            val dLon = (distMeters * sin(rad)) / (111320.0 * cos(Math.toRadians(userLat)).coerceAtLeast(0.1))
-            return (userLat + dLat) to (userLon + dLon)
-        }
-
-        val teslaCoord = getCoord(12.4, 45.0)
-        val fordCoord = getCoord(18.2, 120.0)
-        val viofoCoord = getCoord(14.5, 210.0)
-        val hikvisionCoord = getCoord(22.2, 315.0)
-        val ringCoord = getCoord(11.8, 80.0)
-        val anprCoord = getCoord(38.0, 5.0)
-        val droneCoord = getCoord(28.5, 175.0)
-
-        fun createBreadcrumbs(c: Pair<Double, Double>, dist: Double, rssi: Int, b: Float): List<DeviceBreadcrumb> {
-            return listOf(
-                DeviceBreadcrumb(now - 6000, userLat - 0.0001, userLon, b, dist + 3.0, rssi - 3, c.first, c.second),
-                DeviceBreadcrumb(now - 3000, userLat - 0.00005, userLon, b, dist + 1.5, rssi - 1, c.first, c.second),
-                DeviceBreadcrumb(now, userLat, userLon, b, dist, rssi, c.first, c.second)
-            )
-        }
-
-        // Pin stationary surveillance devices to their physical world coordinates
-        listOf(
-            Triple("C0:56:E3:7A:02:D4", hikvisionCoord.first, hikvisionCoord.second),
-            Triple("00:62:EC:3F:89:AB", ringCoord.first, ringCoord.second),
-            Triple("B4:FB:E4:11:80:55", anprCoord.first, anprCoord.second)
-        ).forEach { (id, pLat, pLon) ->
-            stationaryPinpointMap.putIfAbsent(id, DevicePinpoint(
-                id = id,
-                sampleCount = 3,
-                totalWeight = 30.0,
-                weightedSumLat = pLat * 30.0,
-                weightedSumLon = pLon * 30.0,
-                pinnedLat = pLat,
-                pinnedLon = pLon,
-                bestRssi = -65
-            ))
-        }
-
-        val targets = listOf(
-            DetectedRfTarget(
-                id = "4C:FC:AA:8B:19:2E",
-                name = "TESLA MODEL 3 (CONNECTED)",
-                rawSsidOrBleName = "Tesla_Guest_9182",
-                macAddress = "4C:FC:AA:8B:19:2E",
-                vendor = "Tesla Motors, Inc.",
-                category = RfCategory.VEHICLE,
-                rssi = -58,
-                estimatedDistanceMeters = 12.4,
-                frequencyMhz = 5180,
-                protocol = "Wi-Fi 6 (802.11ax) + BLE Key",
-                threatLevel = "CONNECTED VEHICLE TELEMETRY",
-                details = "Tesla in-cabin infotainment hotspot & BLE phone-key link in range.",
-                timestamp = now,
-                detectedLat = teslaCoord.first,
-                detectedLon = teslaCoord.second,
-                relativeBearingDeg = 45f,
-                locationHistory = createBreadcrumbs(teslaCoord, 12.4, -58, 45f),
-                motionTrend = RelativeMotionTrend.APPROACHING,
-                savedMetadata = savedDeviceRepository.getDevice("4C:FC:AA:8B:19:2E")
-            ),
-            DetectedRfTarget(
-                id = "00:26:7E:44:91:FA",
-                name = "FORD SYNC VEHICLE INFOTAINMENT",
-                rawSsidOrBleName = "Ford Audio_SYNC3",
-                macAddress = "00:26:7E:44:91:FA",
-                vendor = "Ford Motor Company",
-                category = RfCategory.VEHICLE,
-                rssi = -68,
-                estimatedDistanceMeters = 18.2,
-                frequencyMhz = 2412,
-                protocol = "Wi-Fi 802.11n + Bluetooth",
-                threatLevel = "CONNECTED VEHICLE TELEMETRY",
-                details = "In-vehicle SYNC cockpit infotainment network.",
-                timestamp = now,
-                detectedLat = fordCoord.first,
-                detectedLon = fordCoord.second,
-                relativeBearingDeg = 120f,
-                locationHistory = createBreadcrumbs(fordCoord, 18.2, -68, 120f),
-                motionTrend = RelativeMotionTrend.STATIONARY,
-                savedMetadata = savedDeviceRepository.getDevice("00:26:7E:44:91:FA")
-            ),
-            DetectedRfTarget(
-                id = "9C:8E:99:A2:4B:11",
-                name = "VIOFO 4K AUTOMOTIVE DASHCAM",
-                rawSsidOrBleName = "VIOFO_A129PRO_4B11",
-                macAddress = "9C:8E:99:A2:4B:11",
-                vendor = "VIOFO Ltd.",
-                category = RfCategory.VEHICLE,
-                rssi = -64,
-                estimatedDistanceMeters = 14.5,
-                frequencyMhz = 5240,
-                protocol = "Wi-Fi 5GHz (802.11ac)",
-                threatLevel = "SURVEILLANCE OPTIC",
-                details = "Vehicle forward-facing optic streaming video.",
-                timestamp = now,
-                detectedLat = viofoCoord.first,
-                detectedLon = viofoCoord.second,
-                relativeBearingDeg = 210f,
-                locationHistory = createBreadcrumbs(viofoCoord, 14.5, -64, 210f),
-                motionTrend = RelativeMotionTrend.RECEDING,
-                savedMetadata = savedDeviceRepository.getDevice("9C:8E:99:A2:4B:11")
-            ),
-            DetectedRfTarget(
-                id = "C0:56:E3:7A:02:D4",
-                name = "HIKVISION IP SURVEILLANCE CCTV",
-                rawSsidOrBleName = "HIKVISION_DS2CD2043",
-                macAddress = "C0:56:E3:7A:02:D4",
-                vendor = "Hangzhou Hikvision Digital Tech",
-                category = RfCategory.CCTV_SURVEILLANCE,
-                rssi = -72,
-                estimatedDistanceMeters = 22.2,
-                frequencyMhz = 2437,
-                protocol = "Wi-Fi 802.11n",
-                threatLevel = "FIXED SURVEILLANCE OPTIC",
-                details = "Commercial optic security camera actively streaming.",
-                timestamp = now,
-                detectedLat = hikvisionCoord.first,
-                detectedLon = hikvisionCoord.second,
-                relativeBearingDeg = 315f,
-                locationHistory = createBreadcrumbs(hikvisionCoord, 22.2, -72, 315f),
-                motionTrend = RelativeMotionTrend.STATIONARY,
-                savedMetadata = savedDeviceRepository.getDevice("C0:56:E3:7A:02:D4")
-            ),
-            DetectedRfTarget(
-                id = "00:62:EC:3F:89:AB",
-                name = "AMAZON RING SMART DOORBELL / CAM",
-                rawSsidOrBleName = "Ring-Setup-89ab",
-                macAddress = "00:62:EC:3F:89:AB",
-                vendor = "Amazon Ring LLC",
-                category = RfCategory.CCTV_SURVEILLANCE,
-                rssi = -61,
-                estimatedDistanceMeters = 11.8,
-                frequencyMhz = 2462,
-                protocol = "Wi-Fi 802.11n",
-                threatLevel = "PERIMETER SURVEILLANCE",
-                details = "HD optic camera monitoring entry perimeter.",
-                timestamp = now,
-                detectedLat = ringCoord.first,
-                detectedLon = ringCoord.second,
-                relativeBearingDeg = 80f,
-                locationHistory = createBreadcrumbs(ringCoord, 11.8, -61, 80f),
-                motionTrend = RelativeMotionTrend.APPROACHING,
-                savedMetadata = savedDeviceRepository.getDevice("00:62:EC:3F:89:AB")
-            ),
-            DetectedRfTarget(
-                id = "B4:FB:E4:11:80:55",
-                name = "MUNICIPAL ANPR / SPEED CAMERA",
-                rawSsidOrBleName = "ANPR_SURVEILLANCE_NODE_4",
-                macAddress = "B4:FB:E4:11:80:55",
-                vendor = "Highways & Traffic Enforcement",
-                category = RfCategory.CCTV_SURVEILLANCE,
-                rssi = -82,
-                estimatedDistanceMeters = 38.0,
-                frequencyMhz = 5745,
-                protocol = "Wi-Fi 802.11a/n",
-                threatLevel = "HIGHWAY ENFORCEMENT OPTIC",
-                details = "Automatic Number Plate Recognition / Speed Radar telemetry.",
-                timestamp = now,
-                detectedLat = anprCoord.first,
-                detectedLon = anprCoord.second,
-                relativeBearingDeg = 5f,
-                locationHistory = createBreadcrumbs(anprCoord, 38.0, -82, 5f),
-                motionTrend = RelativeMotionTrend.STATIONARY,
-                savedMetadata = savedDeviceRepository.getDevice("B4:FB:E4:11:80:55")
-            ),
-            DetectedRfTarget(
-                id = "60:60:1F:B1:33:09",
-                name = "DJI AERIAL DRONE (DIRECT REMOTE ID)",
-                rawSsidOrBleName = "DJI-Mini3Pro-RemoteID",
-                macAddress = "60:60:1F:B1:33:09",
-                vendor = "DJI Innovations",
-                category = RfCategory.DRONE_UAV,
-                rssi = -76,
-                estimatedDistanceMeters = 28.5,
-                frequencyMhz = 2412,
-                protocol = "BLE 5.0 Broadcast",
-                threatLevel = "AERIAL UAV IN AIRSPACE",
-                details = "Active airborne drone broadcasting FAA/CAA Remote ID.",
-                timestamp = now,
-                detectedLat = droneCoord.first,
-                detectedLon = droneCoord.second,
-                relativeBearingDeg = 175f,
-                locationHistory = createBreadcrumbs(droneCoord, 28.5, -76, 175f),
-                motionTrend = RelativeMotionTrend.RECEDING,
-                savedMetadata = savedDeviceRepository.getDevice("60:60:1F:B1:33:09")
-            )
-        )
-
-        for (t in targets) {
-            targetMap[t.id] = t
-        }
-        syncTargetsToFlow()
-    }
 }

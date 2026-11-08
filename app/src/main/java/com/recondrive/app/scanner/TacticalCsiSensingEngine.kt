@@ -117,13 +117,8 @@ class TacticalCsiSensingEngine(private val context: Context) {
                     0f
                 }
 
-                // 2. Synthesize biological Doppler & respiration dynamics
-                // Cycles every 18 seconds: Vacant (6s) -> Respiration (6s) -> Human Walking Transit (6s)
-                val cyclePos = (simulationTimer % 18000L) / 1000.0
-
+                // 2. Evaluate biological Doppler & respiration dynamics strictly from live hardware samples
                 val hasRealSamples = rssiList.size >= 5
-                val isSimulatedWalking = !hasRealSamples && (cyclePos in 12.0..17.5)
-                val isSimulatedBreathing = !hasRealSamples && (cyclePos in 5.5..11.8)
 
                 val biologicalState: HumanPresenceState
                 val rawPerturbation: Float
@@ -132,7 +127,7 @@ class TacticalCsiSensingEngine(private val context: Context) {
                 val bpm: Int
 
                 when {
-                    liveVariance > 0.35f || isSimulatedWalking -> {
+                    hasRealSamples && liveVariance > 0.35f -> {
                         biologicalState = HumanPresenceState.ACTIVE_HUMAN_TRANSIT
                         val walkFreq = 1.8 // 1.8 Hz footstep Doppler modulation
                         phaseAngle += 0.35
@@ -143,7 +138,7 @@ class TacticalCsiSensingEngine(private val context: Context) {
                         distance = (2.4 + sin(phaseAngle * 0.5) * 1.2).toFloat().coerceIn(0f, 4f)
                         bpm = 0
                     }
-                    liveVariance > 0.12f || isSimulatedBreathing -> {
+                    hasRealSamples && liveVariance > 0.12f -> {
                         biologicalState = HumanPresenceState.RESPIRATION_MICRO_MOTION
                         val breathFreq = 0.28 // ~17 breaths per minute
                         phaseAngle += 0.08

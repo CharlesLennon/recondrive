@@ -103,9 +103,6 @@ class TacticalImsiCatcherDetector(
     private var lastAlertTimestamp: Long = 0L
     private var consecutiveCleanScans: Int = 0
 
-    // Simulation toggle
-    private var isSimulatingAttack: Boolean = false
-
     /**
      * Evaluates a live cell environment scan against all known IMSI-catcher heuristic rules.
      */
@@ -116,11 +113,6 @@ class TacticalImsiCatcherDetector(
         speedKmh: Float
     ): ImsiDetectionState {
         val now = System.currentTimeMillis()
-
-        // If simulated attack is active, inject synthetic Stingray payload
-        if (isSimulatingAttack) {
-            return generateSimulatedState(now, hostLat, hostLon)
-        }
 
         if (cellList.isEmpty()) {
             return _state.value.copy(lastAuditTimestamp = now)
@@ -387,48 +379,6 @@ class TacticalImsiCatcherDetector(
     }
 
     /**
-     * Toggles synthetic IMSI-Catcher simulation attack for drills and diagnostics.
-     */
-    fun simulateAttack(enable: Boolean) {
-        isSimulatingAttack = enable
-        val now = System.currentTimeMillis()
-        if (enable) {
-            anomalyHistory.clear()
-            anomalyHistory.add(
-                ImsiAnomalyEvent(
-                    type = AnomalyType.FORCED_2G_DOWNGRADE,
-                    title = "SIMULATED FORCED 2G DOWNGRADE",
-                    description = "Simulated rogue base station forced phone off 5G NR onto 2G GSM (Cell: CELL_ROGUE_2G_STINGRAY). A5/0 cipher stripping drill.",
-                    timestamp = now,
-                    severityPoints = 50,
-                    associatedCellId = "CELL_ROGUE_2G_STINGRAY",
-                    signalDbm = -46
-                )
-            )
-            anomalyHistory.add(
-                ImsiAnomalyEvent(
-                    type = AnomalyType.RAPID_LAC_TAC_SPOOF,
-                    title = "SIMULATED TAC/LAC SPOOF",
-                    description = "Simulated Location Area Code shift to LAC 9999 while vehicle is stationary. Paging broadcast trigger active.",
-                    timestamp = now - 5000L,
-                    severityPoints = 35,
-                    associatedCellId = "CELL_ROGUE_2G_STINGRAY",
-                    signalDbm = -46
-                )
-            )
-            soundManager?.playInterceptionAlert()
-            soundManager?.playVoiceAlert("Warning: Simulated rogue base station detected. High interception risk.")
-        } else {
-            anomalyHistory.clear()
-            _state.value = ImsiDetectionState(
-                threatLevel = ImsiThreatLevel.CLEAR,
-                threatScore = 0,
-                cipherStatus = "AES-128 / SNOW-3G (SECURE)"
-            )
-        }
-    }
-
-    /**
      * Resets active anomaly history.
      */
     fun clearAnomalies() {
@@ -440,22 +390,8 @@ class TacticalImsiCatcherDetector(
         )
     }
 
-    private fun generateSimulatedState(now: Long, hostLat: Double, hostLon: Double): ImsiDetectionState {
-        return ImsiDetectionState(
-            threatLevel = ImsiThreatLevel.CRITICAL_INTERCEPTION_RISK,
-            threatScore = 88,
-            activeServingTech = "2G GSM (ROGUE TRAP)",
-            activeServingCellId = "CELL_ROGUE_2G_STINGRAY",
-            activeServingTacOrLac = 9999,
-            activeServingOperator = "TEST_PLMN_001_01",
-            activeServingDbm = -46,
-            is2gDowngraded = true,
-            cipherStatus = "UNENCRYPTED A5/0 (VULNERABLE)",
-            recentAnomalies = anomalyHistory.toList(),
-            totalAnomaliesDetected = anomalyHistory.size,
-            lastAuditTimestamp = now,
-            isShieldEnabled = true,
-            isSimulationActive = true
-        )
+    fun simulateAttack(enable: Boolean) {
+        // Dummy simulation disabled; strictly live hardware analysis
+        clearAnomalies()
     }
 }

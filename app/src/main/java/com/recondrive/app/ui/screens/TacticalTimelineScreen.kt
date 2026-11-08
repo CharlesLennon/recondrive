@@ -90,13 +90,26 @@ fun TacticalTimelineScreen(
     val isScanning by scannerManager.isScanning.collectAsState()
     val tileRevision by osmTileManager.revision.collectAsState()
 
-    // 1. Effective Timeline Entries (sorted chronologically: oldest at 0, newest at last)
+    // 1. Effective Timeline Entries (strictly genuine recorded GPS fixes)
     val effectiveEntries = remember(rawEntries, currentLat, currentLon, currentHeading, currentSpeedKmh) {
-        if (rawEntries.size >= 2) {
+        if (rawEntries.isNotEmpty()) {
             rawEntries.sortedBy { it.timestamp }
         } else {
-            // Synthesize realistic 15-minute historical approach trace when sitting stationary or just launched
-            synthesizeInitialTimeline(currentLat, currentLon, currentHeading, currentSpeedKmh)
+            // Strictly genuine single current fix when sitting stationary with no accumulated history
+            listOf(
+                LocationTimelineEntry(
+                    id = System.currentTimeMillis(),
+                    timestamp = System.currentTimeMillis(),
+                    latitude = currentLat,
+                    longitude = currentLon,
+                    altitudeMeters = 0.0,
+                    speedKmh = currentSpeedKmh,
+                    gpsBearing = currentHeading,
+                    deviceHeading = currentHeading,
+                    accuracyMeters = 4f,
+                    source = "LIVE GPS"
+                )
+            )
         }
     }
 
@@ -1184,47 +1197,7 @@ private fun computeTargetsAtTime(
     return results.sortedBy { it.displayDistanceMeters }
 }
 
-/**
- * Generates an initial realistic 15-minute drive trajectory when sitting stationary.
- */
-private fun synthesizeInitialTimeline(
-    lat: Double,
-    lon: Double,
-    heading: Float,
-    speedKmh: Float
-): List<LocationTimelineEntry> {
-    val now = System.currentTimeMillis()
-    val list = mutableListOf<LocationTimelineEntry>()
-    val count = 24
-    val durationMs = 15 * 60 * 1000L // 15 mins
-    val stepMs = durationMs / count
 
-    for (i in 0 until count) {
-        val progress = i.toDouble() / (count - 1) // 0.0 to 1.0
-        val t = now - ((count - 1 - i) * stepMs)
-        val offsetM = (1.0 - progress) * 1200.0
-        val angleRad = Math.toRadians((heading + 180.0 + (1.0 - progress) * 35.0))
-        val pLat = lat + (offsetM * cos(angleRad)) / 111320.0
-        val pLon = lon + (offsetM * sin(angleRad)) / (111320.0 * cos(Math.toRadians(lat)).coerceAtLeast(0.1))
-        val spd = (24f + 16f * sin(progress * Math.PI).toFloat()).coerceAtLeast(0f)
-
-        list.add(
-            LocationTimelineEntry(
-                id = t,
-                timestamp = t,
-                latitude = pLat,
-                longitude = pLon,
-                altitudeMeters = 35.0,
-                speedKmh = if (progress >= 0.95) speedKmh else spd,
-                gpsBearing = (heading + (1.0 - progress) * 15.0).toFloat() % 360f,
-                deviceHeading = heading,
-                accuracyMeters = 4.0f,
-                source = "GPS TIMELINE REPLAY"
-            )
-        )
-    }
-    return list
-}
 
 private fun calculateDistanceMeters(lat1: Double, lon1: Double, lat2: Double, lon2: Double): Double {
     val dLat = Math.toRadians(lat2 - lat1)

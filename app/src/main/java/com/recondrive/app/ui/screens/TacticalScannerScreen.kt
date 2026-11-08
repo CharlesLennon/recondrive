@@ -282,12 +282,11 @@ fun TacticalScannerScreen(
 
             Spacer(modifier = Modifier.width(5.dp))
 
-            // Live / Demo Mode Toggle Pill
+            // Pure Live Hardware Sniffing Status Pill
             Surface(
                 color = TacticalSurface,
                 shape = RoundedCornerShape(12.dp),
-                border = androidx.compose.foundation.BorderStroke(1.dp, if (isSimulation) ReconAmber else ReconGreen),
-                modifier = Modifier.clickable { scannerManager.toggleSimulation() }
+                border = androidx.compose.foundation.BorderStroke(1.dp, ReconGreen)
             ) {
                 Row(
                     modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
@@ -298,11 +297,11 @@ fun TacticalScannerScreen(
                         modifier = Modifier
                             .size(5.dp)
                             .clip(CircleShape)
-                            .background(if (isSimulation) ReconAmber else ReconGreen)
+                            .background(ReconGreen)
                     )
                     Text(
-                        text = if (isSimulation) "DEMO" else "LIVE",
-                        color = if (isSimulation) ReconAmber else ReconGreen,
+                        text = "LIVE",
+                        color = ReconGreen,
                         fontSize = 8.5.sp,
                         fontWeight = FontWeight.Bold,
                         fontFamily = FontFamily.Monospace
@@ -2721,24 +2720,6 @@ private fun CellularIntegrityBanner(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
-                if (isSimulation) {
-                    Surface(
-                        color = if (imsiState.isSimulationActive) Color(0xFFFF1744).copy(alpha = 0.25f) else TacticalObsidian,
-                        shape = RoundedCornerShape(4.dp),
-                        border = androidx.compose.foundation.BorderStroke(1.dp, if (imsiState.isSimulationActive) Color(0xFFFF1744) else ReconCyan),
-                        modifier = Modifier.clickable { onTriggerDrill() }
-                    ) {
-                        Text(
-                            text = if (imsiState.isSimulationActive) "STOP DRILL" else "TEST DRILL",
-                            color = if (imsiState.isSimulationActive) Color(0xFFFF1744) else ReconCyan,
-                            fontSize = 7.5.sp,
-                            fontWeight = FontWeight.Bold,
-                            fontFamily = FontFamily.Monospace,
-                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
-                        )
-                    }
-                }
-
                 Surface(
                     color = TacticalObsidian,
                     shape = RoundedCornerShape(4.dp),
@@ -2976,27 +2957,6 @@ private fun ImsiForensicsDialog(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
                 ) {
-                    if (isSimulation) {
-                        Surface(
-                            color = if (imsiState.isSimulationActive) Color(0xFFFF1744).copy(alpha = 0.2f) else TacticalSurface,
-                            shape = RoundedCornerShape(6.dp),
-                            border = androidx.compose.foundation.BorderStroke(1.dp, if (imsiState.isSimulationActive) Color(0xFFFF1744) else ReconCyan),
-                            modifier = Modifier
-                                .weight(1f)
-                                .clickable { onTriggerSimulatedAttack(!imsiState.isSimulationActive) }
-                        ) {
-                            Text(
-                                text = if (imsiState.isSimulationActive) "STOP ATTACK" else "DRILL ATTACK",
-                                color = if (imsiState.isSimulationActive) Color(0xFFFF1744) else ReconCyan,
-                                fontSize = 8.sp,
-                                fontWeight = FontWeight.Bold,
-                                fontFamily = FontFamily.Monospace,
-                                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                                modifier = Modifier.padding(vertical = 8.dp)
-                            )
-                        }
-                    }
-
                     if (imsiState.recentAnomalies.isNotEmpty()) {
                         Surface(
                             color = TacticalSurface,
