@@ -131,7 +131,8 @@ object TacticalRfClassifier {
         bluetoothClass: BluetoothClass? = null,
         serviceUuids: List<String> = emptyList(),
         manufacturerId: Int? = null,
-        manufacturerData: ByteArray? = null
+        manufacturerData: ByteArray? = null,
+        sourceTech: DetectionTechnology? = null
     ): ClassificationResult {
         val s = ssidOrBleName.trim()
         val sLower = s.lowercase(Locale.ROOT)
@@ -562,13 +563,19 @@ object TacticalRfClassifier {
         val targetName = when {
             s.isNotBlank() -> s
             knownVendor != null -> "$knownVendor Emitter"
-            isRandomMac -> "BLE EMITTER [MAC ${macAddress.takeLast(8)} • RANDOM]"
+            sourceTech == DetectionTechnology.WIFI_BEACON -> "WI-FI AP [MAC ${macAddress.takeLast(8)}${if (isRandomMac) " • RANDOM" else ""}]"
+            sourceTech == DetectionTechnology.BLE_ADVERTISING -> "BLE EMITTER [MAC ${macAddress.takeLast(8)}${if (isRandomMac) " • RANDOM" else ""}]"
+            sourceTech == DetectionTechnology.BT_CLASSIC_INQUIRY -> "BLUETOOTH DEVICE [MAC ${macAddress.takeLast(8)}]"
+            sourceTech == DetectionTechnology.WIFI_DIRECT_P2P -> "WI-FI DIRECT PEER [MAC ${macAddress.takeLast(8)}]"
+            isRandomMac -> "RF EMITTER [MAC ${macAddress.takeLast(8)} • RANDOM]"
             else -> "RF EMITTER [MAC ${macAddress.takeLast(8)}]"
         }
 
         val threatLevel = if (isRandomMac) "RANDOMIZED MAC" else "INFORMATIONAL"
         val details = when {
             knownVendor != null -> "Detected hardware from $knownVendor."
+            sourceTech == DetectionTechnology.WIFI_BEACON -> if (isRandomMac) "Privacy-randomized Wi-Fi access point / hotspot beacon." else "Local Wi-Fi 802.11 access point."
+            sourceTech == DetectionTechnology.BLE_ADVERTISING -> if (isRandomMac) "Privacy-randomized Bluetooth Low Energy advertisement emitter." else "Bluetooth Low Energy peripheral beacon."
             isRandomMac -> "Privacy-randomized MAC address emitting live radio frames."
             else -> "Local spectrum radio emitter."
         }
@@ -585,8 +592,20 @@ object TacticalRfClassifier {
     /**
      * Backward-compatible overload.
      */
-    fun classify(ssidOrBleName: String, macAddress: String): ClassificationResult {
-        return classify(ssidOrBleName, macAddress, null, emptyList(), null, null)
+    fun classify(
+        ssidOrBleName: String,
+        macAddress: String,
+        sourceTech: DetectionTechnology? = null
+    ): ClassificationResult {
+        return classify(ssidOrBleName, macAddress, null, emptyList(), null, null, sourceTech)
+    }
+
+    /**
+     * Checks if a MAC address has a known registered OUI in the tactical database.
+     */
+    fun isKnownOui(mac: String): Boolean {
+        val macPrefix = mac.uppercase(Locale.ROOT).take(8)
+        return OUI_MAP.containsKey(macPrefix)
     }
 
     /**

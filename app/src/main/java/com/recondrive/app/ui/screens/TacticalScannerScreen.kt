@@ -93,6 +93,7 @@ fun TacticalScannerScreen(
     var editingTarget by remember { mutableStateOf<DetectedRfTarget?>(null) }
     var viewingCctvCamera by remember { mutableStateOf<PublicCctvCamera?>(null) }
     var showImsiForensicsDialog by remember { mutableStateOf(false) }
+    var inspectingTech by remember { mutableStateOf<DetectionTechnology?>(null) }
 
     // Map viewport state
     var cameraLat by remember { mutableDoubleStateOf(currentLat) }
@@ -1203,10 +1204,21 @@ fun TacticalScannerScreen(
                                     liveImageUrl = extractedUrl
                                 )
                             viewingCctvCamera = cam
+                        },
+                        onInspectTech = { tech ->
+                            inspectingTech = tech
                         }
                     )
                 }
             }
+        }
+
+        // Technology Details & Operational Principles Dialog
+        inspectingTech?.let { tech ->
+            TacticalTechInfoDialog(
+                tech = tech,
+                onDismiss = { inspectingTech = null }
+            )
         }
     }
 }
@@ -1892,7 +1904,8 @@ private fun RfTargetHorizontalCard(
     onSelect: () -> Unit,
     onEditIntel: () -> Unit,
     onPinToMap: () -> Unit,
-    onViewCctv: () -> Unit = {}
+    onViewCctv: () -> Unit = {},
+    onInspectTech: (DetectionTechnology) -> Unit = {}
 ) {
     val isSaved = target.savedMetadata != null
     val isRogue = target.threatLevel.contains("ROGUE") || target.threatLevel.contains("INTERCEPTION")
@@ -1992,15 +2005,34 @@ private fun RfTargetHorizontalCard(
                         )
                     }
 
-                    val subDetails = target.savedMetadata?.doorNumberOrAddress?.takeIf { it.isNotBlank() }
-                        ?: "${target.vendor} • ${target.protocol}"
-                    Text(
-                        text = subDetails,
-                        color = TextSecondary,
-                        fontSize = 8.sp,
-                        fontFamily = FontFamily.Monospace,
-                        maxLines = 1
-                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Surface(
+                            color = ReconCyan.copy(alpha = 0.16f),
+                            shape = RoundedCornerShape(3.dp),
+                            border = androidx.compose.foundation.BorderStroke(0.6.dp, ReconCyan.copy(alpha = 0.5f))
+                        ) {
+                            Text(
+                                text = target.detectionTech.shortName.uppercase(),
+                                color = ReconCyan,
+                                fontSize = 6.5.sp,
+                                fontWeight = FontWeight.Bold,
+                                fontFamily = FontFamily.Monospace,
+                                modifier = Modifier.padding(horizontal = 3.dp, vertical = 0.5.dp)
+                            )
+                        }
+                        val subDetails = target.savedMetadata?.doorNumberOrAddress?.takeIf { it.isNotBlank() }
+                            ?: "${target.vendor} • ${target.protocol}"
+                        Text(
+                            text = subDetails,
+                            color = TextSecondary,
+                            fontSize = 8.sp,
+                            fontFamily = FontFamily.Monospace,
+                            maxLines = 1
+                        )
+                    }
                 }
 
                 Spacer(modifier = Modifier.width(4.dp))
@@ -2091,6 +2123,21 @@ private fun RfTargetHorizontalCard(
                                 Icon(imageVector = Icons.Default.Videocam, contentDescription = "Feed", tint = Color(0xFFFF5252), modifier = Modifier.size(10.dp))
                                 Text(text = "FEED", color = Color(0xFFFF5252), fontSize = 8.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
                             }
+                        }
+                    }
+
+                    // Tech Info Button
+                    Surface(
+                        color = TacticalSurface,
+                        shape = RoundedCornerShape(4.dp),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, ReconCyan.copy(alpha = 0.45f)),
+                        modifier = Modifier.clickable { onInspectTech(target.detectionTech) }
+                    ) {
+                        Box(
+                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 3.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(imageVector = Icons.Default.Info, contentDescription = "Tech Spec", tint = ReconCyan, modifier = Modifier.size(10.dp))
                         }
                     }
 

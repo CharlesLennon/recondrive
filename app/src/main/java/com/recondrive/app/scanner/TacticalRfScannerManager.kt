@@ -346,7 +346,8 @@ class TacticalRfScannerManager(
                 relativeBearingDeg = relBearing,
                 locationHistory = emptyList(),
                 motionTrend = RelativeMotionTrend.APPROACHING,
-                savedMetadata = savedDeviceRepository.getDevice(cam.id)
+                savedMetadata = savedDeviceRepository.getDevice(cam.id),
+                detectionTech = DetectionTechnology.PUBLIC_CCTV_STREAM
             )
             targetMap[cam.id] = target
         }
@@ -816,7 +817,8 @@ class TacticalRfScannerManager(
                     relativeBearingDeg = relativeBearing,
                     locationHistory = emptyList(),
                     motionTrend = RelativeMotionTrend.STATIONARY,
-                    savedMetadata = null
+                    savedMetadata = null,
+                    detectionTech = DetectionTechnology.CELLULAR_RADIO_AUDIT
                 )
 
                 targetMap[cellId] = target
@@ -849,7 +851,7 @@ class TacticalRfScannerManager(
 
                 csiEngine?.feedLiveSample(rssi)
 
-                val classification = TacticalRfClassifier.classify(ssid, bssid)
+                val classification = TacticalRfClassifier.classify(ssid, bssid, sourceTech = DetectionTechnology.WIFI_BEACON)
                 val dist = TacticalRfClassifier.estimateDistance(rssi, freq)
                 val isStationary = classification.category == RfCategory.ACCESS_POINT || classification.category == RfCategory.CCTV_SURVEILLANCE
 
@@ -988,7 +990,13 @@ class TacticalRfScannerManager(
                     relativeBearingDeg = relativeBearing,
                     locationHistory = history.toList(),
                     motionTrend = motionTrend,
-                    savedMetadata = saved
+                    savedMetadata = saved,
+                    detectionTech = if (TacticalRfClassifier.isLocallyAdministeredMac(bssid) || 
+                        (TacticalRfClassifier.isKnownOui(bssid) && (classification.vendor.contains("Flock") || classification.vendor.contains("Axon") || classification.vendor.contains("Hikvision") || classification.vendor.contains("Dahua")))) {
+                        DetectionTechnology.MAC_SNIFFING
+                    } else {
+                        DetectionTechnology.WIFI_BEACON
+                    }
                 )
 
                 targetMap[bssid] = target
@@ -1032,7 +1040,8 @@ class TacticalRfScannerManager(
                 bluetoothClass = device.bluetoothClass,
                 serviceUuids = serviceUuids,
                 manufacturerId = manufacturerId,
-                manufacturerData = manufacturerData
+                manufacturerData = manufacturerData,
+                sourceTech = DetectionTechnology.BLE_ADVERTISING
             )
 
             val dist = TacticalRfClassifier.estimateDistance(rssi, 2402)
@@ -1144,7 +1153,12 @@ class TacticalRfScannerManager(
                 relativeBearingDeg = relativeBearing,
                 locationHistory = history.toList(),
                 motionTrend = motionTrend,
-                savedMetadata = saved
+                savedMetadata = saved,
+                detectionTech = if (TacticalRfClassifier.isLocallyAdministeredMac(address) && rawName.isBlank()) {
+                    DetectionTechnology.MAC_SNIFFING
+                } else {
+                    DetectionTechnology.BLE_ADVERTISING
+                }
             )
             targetMap[address] = target
             syncTargetsToFlow()
@@ -1167,7 +1181,8 @@ class TacticalRfScannerManager(
         val classification = TacticalRfClassifier.classify(
             ssidOrBleName = rawName,
             macAddress = address,
-            bluetoothClass = bluetoothClass
+            bluetoothClass = bluetoothClass,
+            sourceTech = DetectionTechnology.BT_CLASSIC_INQUIRY
         )
 
         val dist = TacticalRfClassifier.estimateDistance(rssi, 2402)
@@ -1229,7 +1244,8 @@ class TacticalRfScannerManager(
             relativeBearingDeg = relBearing,
             locationHistory = history.toList(),
             motionTrend = motionTrend,
-            savedMetadata = saved
+            savedMetadata = saved,
+            detectionTech = DetectionTechnology.BT_CLASSIC_INQUIRY
         )
 
         targetMap[address] = target
@@ -1241,7 +1257,7 @@ class TacticalRfScannerManager(
         for (peer in peers.deviceList) {
             val address = peer.deviceAddress ?: continue
             val rawName = peer.deviceName ?: "DIRECT-DEVICE"
-            val classification = TacticalRfClassifier.classify(rawName, address)
+            val classification = TacticalRfClassifier.classify(rawName, address, sourceTech = DetectionTechnology.WIFI_DIRECT_P2P)
 
             val dist = 12.0 // Typical peer-to-peer Wi-Fi Direct line of sight
             val hashAngle = abs(address.hashCode() % 360).toFloat()
@@ -1285,7 +1301,8 @@ class TacticalRfScannerManager(
                 relativeBearingDeg = relBearing,
                 locationHistory = emptyList(),
                 motionTrend = RelativeMotionTrend.STATIONARY,
-                savedMetadata = saved
+                savedMetadata = saved,
+                detectionTech = DetectionTechnology.WIFI_DIRECT_P2P
             )
 
             targetMap[address] = target
@@ -1337,7 +1354,8 @@ class TacticalRfScannerManager(
                     relativeBearingDeg = 90f,
                     locationHistory = emptyList(),
                     motionTrend = RelativeMotionTrend.APPROACHING,
-                    savedMetadata = null
+                    savedMetadata = null,
+                    detectionTech = DetectionTechnology.GEOMAGNETIC_MAD
                 )
 
                 targetMap[madId] = target
@@ -1397,7 +1415,8 @@ class TacticalRfScannerManager(
             relativeBearingDeg = relBearing,
             locationHistory = emptyList(),
             motionTrend = RelativeMotionTrend.APPROACHING,
-            savedMetadata = savedDeviceRepository.getDevice(session.sessionId)
+            savedMetadata = savedDeviceRepository.getDevice(session.sessionId),
+            detectionTech = DetectionTechnology.UWB_PULSE_RANGING
         )
 
         targetMap[session.sessionId] = target
@@ -1427,7 +1446,8 @@ class TacticalRfScannerManager(
             relativeBearingDeg = 0f,
             locationHistory = emptyList(),
             motionTrend = RelativeMotionTrend.STATIONARY,
-            savedMetadata = null
+            savedMetadata = null,
+            detectionTech = DetectionTechnology.NEAR_INFRARED_OPTICAL
         )
         targetMap[irId] = target
         syncTargetsToFlow()
@@ -1454,7 +1474,8 @@ class TacticalRfScannerManager(
             relativeBearingDeg = 0f,
             locationHistory = emptyList(),
             motionTrend = RelativeMotionTrend.APPROACHING,
-            savedMetadata = savedDeviceRepository.getDevice(targetId)
+            savedMetadata = savedDeviceRepository.getDevice(targetId),
+            detectionTech = DetectionTechnology.NFC_SMARTCARD
         )
 
         targetMap[targetId] = target

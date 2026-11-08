@@ -9,6 +9,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
@@ -40,6 +41,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import com.recondrive.app.map.OsmTileManager
 import com.recondrive.app.scanner.DetectedRfTarget
+import com.recondrive.app.scanner.DetectionTechnology
 import com.recondrive.app.scanner.RfCategory
 import com.recondrive.app.scanner.TacticalRfScannerManager
 import com.recondrive.app.skin.SkinManager
@@ -1059,13 +1061,32 @@ private fun TimelineTargetCard(
                         fontFamily = FontFamily.Monospace,
                         maxLines = 1
                     )
-                    Text(
-                        text = "${snapshot.target.macAddress} • ${snapshot.target.vendor} • ${snapshot.target.protocol}",
-                        color = TextSecondary,
-                        fontSize = 8.sp,
-                        fontFamily = FontFamily.Monospace,
-                        maxLines = 1
-                    )
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Surface(
+                            color = ReconCyan.copy(alpha = 0.16f),
+                            shape = RoundedCornerShape(3.dp),
+                            border = androidx.compose.foundation.BorderStroke(0.6.dp, ReconCyan.copy(alpha = 0.6f))
+                        ) {
+                            Text(
+                                text = snapshot.target.detectionTech.shortName.uppercase(),
+                                color = ReconCyan,
+                                fontSize = 7.5.sp,
+                                fontWeight = FontWeight.Bold,
+                                fontFamily = FontFamily.Monospace,
+                                modifier = Modifier.padding(horizontal = 4.dp, vertical = 0.5.dp)
+                            )
+                        }
+                        Text(
+                            text = "${snapshot.target.macAddress} • ${snapshot.target.vendor}",
+                            color = TextSecondary,
+                            fontSize = 8.sp,
+                            fontFamily = FontFamily.Monospace,
+                            maxLines = 1
+                        )
+                    }
                 }
             }
 
@@ -1097,6 +1118,7 @@ private fun TimelineTargetDetailDialog(
 ) {
     val target = snapshot.target
     val catColor = getCategoryColor(target.category)
+    var inspectingTech by remember { mutableStateOf<DetectionTechnology?>(null) }
 
     Dialog(onDismissRequest = onDismiss) {
         Surface(
@@ -1134,7 +1156,65 @@ private fun TimelineTargetDetailDialog(
                     border = androidx.compose.foundation.BorderStroke(1.dp, TacticalBorder),
                     modifier = Modifier.fillMaxWidth()
                 ) {
-                    Column(modifier = Modifier.padding(8.dp), verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                    Column(modifier = Modifier.padding(8.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        // Prominent Detection Technology Attribution with Clickable Info Icon
+                        Surface(
+                            color = ReconCyan.copy(alpha = 0.10f),
+                            shape = RoundedCornerShape(4.dp),
+                            border = androidx.compose.foundation.BorderStroke(0.8.dp, ReconCyan.copy(alpha = 0.45f)),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { inspectingTech = target.detectionTech }
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 6.dp, vertical = 4.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    Text(
+                                        text = "DETECTION TECH",
+                                        color = ReconCyan,
+                                        fontSize = 8.sp,
+                                        fontFamily = FontFamily.Monospace,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    Text(
+                                        text = target.detectionTech.displayName,
+                                        color = TextPrimary,
+                                        fontSize = 8.sp,
+                                        fontFamily = FontFamily.Monospace,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                    Box(
+                                        modifier = Modifier
+                                            .size(16.dp)
+                                            .clip(CircleShape)
+                                            .background(ReconCyan.copy(alpha = 0.25f))
+                                            .border(0.8.dp, ReconCyan, CircleShape),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Info,
+                                            contentDescription = "Inspect Tech",
+                                            tint = ReconCyan,
+                                            modifier = Modifier.size(11.dp)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
                         DetailRow("MAC / BSSID", target.macAddress)
                         DetailRow("MANUFACTURER", target.vendor)
                         DetailRow("PROTOCOL", target.protocol)
@@ -1162,6 +1242,14 @@ private fun TimelineTargetDetailDialog(
                 }
             }
         }
+    }
+
+    // Technology Specs and Operational Mechanics Dialog
+    inspectingTech?.let { tech ->
+        TacticalTechInfoDialog(
+            tech = tech,
+            onDismiss = { inspectingTech = null }
+        )
     }
 }
 
@@ -1269,4 +1357,174 @@ private fun calculateDistanceMeters(lat1: Double, lon1: Double, lat2: Double, lo
     val a = sin(dLat / 2).pow(2) + cos(Math.toRadians(lat1)) * cos(Math.toRadians(lat2)) * sin(dLon / 2).pow(2)
     val c = 2 * atan2(sqrt(a), sqrt(1 - a))
     return 6371000.0 * c
+}
+
+@Composable
+fun TacticalTechInfoDialog(
+    tech: DetectionTechnology,
+    onDismiss: () -> Unit
+) {
+    Dialog(onDismissRequest = onDismiss) {
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(12.dp))
+                .border(1.2.dp, ReconCyan, RoundedCornerShape(12.dp)),
+            color = TacticalObsidian
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(14.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                // Header
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(24.dp)
+                                .clip(CircleShape)
+                                .background(ReconCyan.copy(alpha = 0.2f))
+                                .border(1.dp, ReconCyan, CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Info,
+                                contentDescription = null,
+                                tint = ReconCyan,
+                                modifier = Modifier.size(14.dp)
+                            )
+                        }
+                        Text(
+                            text = "DETECTION TECHNOLOGY",
+                            color = ReconCyan,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.Monospace
+                        )
+                    }
+                    IconButton(onClick = onDismiss, modifier = Modifier.size(22.dp)) {
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = "Close",
+                            tint = TextSecondary,
+                            modifier = Modifier.size(15.dp)
+                        )
+                    }
+                }
+
+                // Tech Display Name Banner
+                Surface(
+                    color = TacticalSurface,
+                    shape = RoundedCornerShape(6.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, ReconCyan.copy(alpha = 0.5f)),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(10.dp)) {
+                        Text(
+                            text = tech.displayName.uppercase(),
+                            color = TextPrimary,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.Monospace
+                        )
+                        Spacer(modifier = Modifier.height(3.dp))
+                        Text(
+                            text = "FREQUENCY / SPECTRUM: ${tech.frequencyBand}",
+                            color = ReconAmber,
+                            fontSize = 8.5.sp,
+                            fontFamily = FontFamily.Monospace,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                }
+
+                // Section 1: How ReconDrive Detects It
+                TechSpecSection(
+                    title = "DETECTION PRINCIPLE (HOW IT WORKS)",
+                    body = tech.detectionPrinciple,
+                    accentColor = ReconCyan
+                )
+
+                // Section 2: Tactical Significance
+                TechSpecSection(
+                    title = "TACTICAL UTILITY & INTELLIGENCE",
+                    body = tech.tacticalSignificance,
+                    accentColor = Color(0xFF00E5FF)
+                )
+
+                // Section 3: Technical Details & Formulas
+                TechSpecSection(
+                    title = "PHYSICS & SPECTRUM ANALYSIS",
+                    body = tech.technicalDetails,
+                    accentColor = ReconGreen
+                )
+
+                // Dismiss Button
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.End
+                ) {
+                    Button(
+                        onClick = onDismiss,
+                        colors = ButtonDefaults.buttonColors(containerColor = ReconCyan.copy(alpha = 0.22f)),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, ReconCyan),
+                        shape = RoundedCornerShape(6.dp),
+                        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp)
+                    ) {
+                        Text(
+                            text = "DISMISS",
+                            color = ReconCyan,
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.Monospace
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun TechSpecSection(
+    title: String,
+    body: String,
+    accentColor: Color
+) {
+    Surface(
+        color = TacticalSurface.copy(alpha = 0.85f),
+        shape = RoundedCornerShape(6.dp),
+        border = androidx.compose.foundation.BorderStroke(0.8.dp, TacticalBorder),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(
+            modifier = Modifier.padding(8.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Text(
+                text = title,
+                color = accentColor,
+                fontSize = 8.5.sp,
+                fontWeight = FontWeight.Bold,
+                fontFamily = FontFamily.Monospace
+            )
+            Text(
+                text = body,
+                color = TextSecondary,
+                fontSize = 8.sp,
+                fontFamily = FontFamily.Monospace,
+                lineHeight = 11.sp
+            )
+        }
+    }
 }
