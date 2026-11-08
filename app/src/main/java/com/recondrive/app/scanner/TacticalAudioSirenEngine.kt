@@ -30,29 +30,31 @@ data class SirenTelemetry(
 /**
  * Tactical Audio Siren Engine
  * Listens to ambient acoustics via microphone array to detect incoming Emergency Vehicles:
- * 1. Analyzes acoustic harmonics in emergency siren bands (600 Hz - 1600 Hz).
- * 2. Classifies Siren Signatures: Police Yelp (180-240 cpm), Police Wail (slow sweep), European Hi-Lo (two-tone), Piercer.
- * 3. Doppler Direction Finding: Measures carrier frequency slope (df/dt) over modulation cycles to determine
+ * 1. Multi-rate probing (44.1 kHz, 48 kHz, 16 kHz, 22.05 kHz) ensuring universal CDD compatibility.
+ * 2. Analyzes acoustic harmonics in emergency siren bands (600 Hz - 1600 Hz).
+ * 3. Classifies Siren Signatures: Police Yelp (180-240 cpm), Police Wail (slow sweep), European Hi-Lo (two-tone), Piercer.
+ * 4. Doppler Direction Finding: Measures carrier frequency slope (df/dt) over modulation cycles to determine
  *    if the emergency cruiser is APPROACHING (incoming threat) or RECEDING (moving away).
+ * 5. Crash-resilient IO coroutine lifecycle: releases AudioRecord exclusively on thread exit to avoid native SIGSEGV.
  */
 class TacticalAudioSirenEngine(private val context: Context) {
 
-    private val scope = CoroutineScope(Dispatchers.Default + SupervisorJob())
+    private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
 
     private val _telemetry = MutableStateFlow(SirenTelemetry())
     val telemetry: StateFlow<SirenTelemetry> = _telemetry.asStateFlow()
 
-    private var audioRecord: AudioRecord? = null
-    private var processingJob: Job? = null
+    @Volatile
     private var isRunning = false
+    private var processingJob: Job? = null
 
-    private val sampleRate = 22050 // Sufficient for sirens up to 11 kHz (Nyquist)
-    private val bufferSize = 2048   // ~92.8ms temporal resolution
+    private val bufferSize = 2048   // ~46.4ms temporal resolution at 44.1 kHz
 
     // Peak Frequency Rolling History for Siren Modulation & Doppler Drift
     private data class PitchSample(val timestampMs: Long, val peakHz: Float, val snr: Float)
     private val pitchHistory = ConcurrentLinkedDeque<PitchSample>()
 
+    @Synchronized
     fun start() {
         if (isRunning) return
         val hasMic = ContextCompat.checkSelfPermission(
@@ -66,93 +68,120 @@ class TacticalAudioSirenEngine(private val context: Context) {
             return
         }
 
-        try {
-            initAudioRecord()
-            if (audioRecord?.state == AudioRecord.STATE_INITIALIZED) {
-                isRunning = true
-                _telemetry.update { it.copy(isListening = true, alertMessage = "MONITORING SIREN SPECTRUM (600-1600 Hz)") }
-                startProcessingLoop()
-                Timber.i("TacticalAudioSirenEngine: Acoustic siren listener active (22,050 Hz)")
-            } else {
-                isRunning = false
-                _telemetry.update { it.copy(isListening = false, alertMessage = "AUDIO SENSOR NOT READY") }
-                Timber.w("TacticalAudioSirenEngine: AudioRecord failed to initialize")
-            }
-        } catch (e: Throwable) {
-            isRunning = false
-            _telemetry.update { it.copy(isListening = false, alertMessage = "AUDIO SENSOR ERROR") }
-            Timber.e(e, "TacticalAudioSirenEngine: Failed to initialize audio recording")
+        isRunning = true
+        _telemetry.update { it.copy(isListening = true, alertMessage = "INITIALIZING ACOUSTIC LISTENER...") }
+
+        processingJob?.cancel()
+        processingJob = scope.launch {
+            startAcousticWorker()
         }
     }
 
+    @Synchronized
     fun stop() {
         isRunning = false
         processingJob?.cancel()
         processingJob = null
-        try {
-            audioRecord?.stop()
-            audioRecord?.release()
-        } catch (e: Exception) {
-            Timber.w(e, "TacticalAudioSirenEngine: Note stopping audio record")
-        }
-        audioRecord = null
-        _telemetry.update { it.copy(isListening = false, isSirenDetected = false) }
+        pitchHistory.clear()
+        _telemetry.update { it.copy(isListening = false, isSirenDetected = false, alertMessage = "ACOUSTIC SENSOR STANDBY") }
         Timber.i("TacticalAudioSirenEngine: Acoustic listener stopped")
     }
 
     @SuppressLint("MissingPermission")
-    private fun initAudioRecord() {
+    private suspend fun startAcousticWorker() {
+        var record: AudioRecord? = null
+        var activeRate = 44100
         try {
-            val minBuf = AudioRecord.getMinBufferSize(
-                sampleRate,
-                AudioFormat.CHANNEL_IN_MONO,
-                AudioFormat.ENCODING_PCM_16BIT
-            )
-            val finalBuf = max(minBuf, bufferSize * 2)
-
-            audioRecord = AudioRecord(
-                MediaRecorder.AudioSource.MIC,
-                sampleRate,
-                AudioFormat.CHANNEL_IN_MONO,
-                AudioFormat.ENCODING_PCM_16BIT,
-                finalBuf
-            )
-            if (audioRecord?.state == AudioRecord.STATE_INITIALIZED) {
-                audioRecord?.startRecording()
+            val (rec, rate) = createAudioRecordCandidate()
+            if (rec == null || rec.state != AudioRecord.STATE_INITIALIZED) {
+                Timber.w("TacticalAudioSirenEngine: AudioRecord initialization failed on all candidate rates")
+                _telemetry.update { it.copy(isListening = false, alertMessage = "AUDIO HARDWARE UNAVAILABLE") }
+                isRunning = false
+                return
             }
-        } catch (t: Throwable) {
-            Timber.e(t, "TacticalAudioSirenEngine: Error in initAudioRecord")
-            try {
-                audioRecord?.release()
-            } catch (_: Throwable) {}
-            audioRecord = null
-        }
-    }
+            record = rec
+            activeRate = rate
 
-    private fun startProcessingLoop() {
-        processingJob = scope.launch {
+            try {
+                record.startRecording()
+            } catch (t: Throwable) {
+                Timber.e(t, "TacticalAudioSirenEngine: Exception starting recording")
+                _telemetry.update { it.copy(isListening = false, alertMessage = "RECORDING START FAILED") }
+                isRunning = false
+                return
+            }
+
+            _telemetry.update { it.copy(isListening = true, alertMessage = "MONITORING SIREN SPECTRUM (${activeRate}Hz)") }
+            Timber.i("TacticalAudioSirenEngine: Acoustic siren listener active at $activeRate Hz")
+
             val audioBuffer = ShortArray(bufferSize)
 
-            while (isActive && isRunning) {
+            while (coroutineContext.isActive && isRunning) {
                 try {
-                    val record = audioRecord ?: break
-                    if (record.state != AudioRecord.STATE_INITIALIZED) break
                     val readCount = record.read(audioBuffer, 0, bufferSize)
-
                     if (readCount > 0) {
-                        processAudioPcm(audioBuffer, readCount)
+                        processAudioPcm(audioBuffer, readCount, activeRate)
+                    } else if (readCount == AudioRecord.ERROR_INVALID_OPERATION || readCount == AudioRecord.ERROR_BAD_VALUE) {
+                        Timber.w("TacticalAudioSirenEngine: AudioRecord error read code: $readCount")
+                        delay(200)
                     } else {
                         delay(50)
                     }
                 } catch (t: Throwable) {
-                    Timber.w(t, "TacticalAudioSirenEngine: Audio loop reading exception")
+                    Timber.w(t, "TacticalAudioSirenEngine: Exception during audio read loop")
                     delay(100)
                 }
             }
+        } catch (t: Throwable) {
+            Timber.e(t, "TacticalAudioSirenEngine: Acoustic worker encountered fatal exception")
+        } finally {
+            isRunning = false
+            try {
+                if (record?.recordingState == AudioRecord.RECORDSTATE_RECORDING) {
+                    record.stop()
+                }
+            } catch (_: Throwable) {}
+            try {
+                record?.release()
+            } catch (_: Throwable) {}
+            _telemetry.update { it.copy(isListening = false, isSirenDetected = false, alertMessage = "ACOUSTIC SENSOR STANDBY") }
+            Timber.i("TacticalAudioSirenEngine: Acoustic hardware cleanly released")
         }
     }
 
-    private fun processAudioPcm(samples: ShortArray, count: Int) {
+    @SuppressLint("MissingPermission")
+    private fun createAudioRecordCandidate(): Pair<AudioRecord?, Int> {
+        val candidateRates = listOf(44100, 48000, 16000, 22050)
+        for (rate in candidateRates) {
+            try {
+                val minBuf = AudioRecord.getMinBufferSize(
+                    rate,
+                    AudioFormat.CHANNEL_IN_MONO,
+                    AudioFormat.ENCODING_PCM_16BIT
+                )
+                if (minBuf <= 0) continue
+
+                val finalBuf = max(minBuf, bufferSize * 2)
+                val record = AudioRecord(
+                    MediaRecorder.AudioSource.MIC,
+                    rate,
+                    AudioFormat.CHANNEL_IN_MONO,
+                    AudioFormat.ENCODING_PCM_16BIT,
+                    finalBuf
+                )
+                if (record.state == AudioRecord.STATE_INITIALIZED) {
+                    return Pair(record, rate)
+                } else {
+                    try { record.release() } catch (_: Throwable) {}
+                }
+            } catch (t: Throwable) {
+                Timber.w("TacticalAudioSirenEngine: Probe rate $rate failed: ${t.message}")
+            }
+        }
+        return Pair(null, 44100)
+    }
+
+    private fun processAudioPcm(samples: ShortArray, count: Int, currentSampleRate: Int) {
         try {
             val now = System.currentTimeMillis()
 
@@ -187,7 +216,7 @@ class TacticalAudioSirenEngine(private val context: Context) {
 
             var testHz = 600.0
             while (testHz <= 1600.0) {
-                val energy = computeGoertzelEnergy(samples, count, testHz, sampleRate.toDouble())
+                val energy = computeGoertzelEnergy(samples, count, testHz, currentSampleRate.toDouble())
                 totalSirenBandEnergy += energy
                 if (energy > maxEnergy) {
                     maxEnergy = energy
@@ -197,8 +226,8 @@ class TacticalAudioSirenEngine(private val context: Context) {
             }
 
             // Check road noise band (100 Hz to 350 Hz): vehicles and wind rumble reside here
-            val roadNoiseEnergy = computeGoertzelEnergy(samples, count, 180.0, sampleRate.toDouble()) +
-                    computeGoertzelEnergy(samples, count, 260.0, sampleRate.toDouble())
+            val roadNoiseEnergy = computeGoertzelEnergy(samples, count, 180.0, currentSampleRate.toDouble()) +
+                    computeGoertzelEnergy(samples, count, 260.0, currentSampleRate.toDouble())
 
             val snr = (maxEnergy / (roadNoiseEnergy + 1.0)).toFloat()
 

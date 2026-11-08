@@ -134,7 +134,8 @@ class TacticalPublicCctvRepository(private val context: Context) {
                 viewDirectionDeg = 225f
             ),
 
-            // Major Regional Public Traffic Cameras
+            // Major Regional Public Traffic Cameras (Operated by National Highways, Regional UTCs)
+            // Feeds default to Tactical FLIR Optic without showing mismatched London feeds
             PublicCctvCamera(
                 id = "NH_M25_J14",
                 name = "M25 J14 Heathrow Airport Spur",
@@ -142,7 +143,7 @@ class TacticalPublicCctvRepository(private val context: Context) {
                 latitude = 51.4680,
                 longitude = -0.5050,
                 operator = "National Highways Traffic CCTV",
-                liveImageUrl = "https://s3-eu-west-1.amazonaws.com/jamcams.tfl.gov.uk/00001.07355.jpg",
+                liveImageUrl = null,
                 viewDirectionDeg = 0f
             ),
             PublicCctvCamera(
@@ -152,7 +153,7 @@ class TacticalPublicCctvRepository(private val context: Context) {
                 latitude = 51.5830,
                 longitude = -0.5170,
                 operator = "National Highways Traffic CCTV",
-                liveImageUrl = "https://s3-eu-west-1.amazonaws.com/jamcams.tfl.gov.uk/00001.06590.jpg",
+                liveImageUrl = null,
                 viewDirectionDeg = 120f
             ),
             PublicCctvCamera(
@@ -162,7 +163,7 @@ class TacticalPublicCctvRepository(private val context: Context) {
                 latitude = 51.5720,
                 longitude = -0.2310,
                 operator = "National Highways Traffic CCTV",
-                liveImageUrl = "https://s3-eu-west-1.amazonaws.com/jamcams.tfl.gov.uk/00001.02102.jpg",
+                liveImageUrl = null,
                 viewDirectionDeg = 340f
             ),
             PublicCctvCamera(
@@ -172,7 +173,7 @@ class TacticalPublicCctvRepository(private val context: Context) {
                 latitude = 52.5110,
                 longitude = -1.8640,
                 operator = "West Midlands Traffic Control",
-                liveImageUrl = "https://s3-eu-west-1.amazonaws.com/jamcams.tfl.gov.uk/00001.04781.jpg",
+                liveImageUrl = null,
                 viewDirectionDeg = 90f
             ),
             PublicCctvCamera(
@@ -182,7 +183,7 @@ class TacticalPublicCctvRepository(private val context: Context) {
                 latitude = 53.4880,
                 longitude = -2.3680,
                 operator = "Transport for Greater Manchester (TfGM)",
-                liveImageUrl = "https://s3-eu-west-1.amazonaws.com/jamcams.tfl.gov.uk/00001.03604.jpg",
+                liveImageUrl = null,
                 viewDirectionDeg = 270f
             ),
             PublicCctvCamera(
@@ -192,7 +193,7 @@ class TacticalPublicCctvRepository(private val context: Context) {
                 latitude = 51.5160,
                 longitude = -2.5280,
                 operator = "South West Highways Traffic Control",
-                liveImageUrl = "https://s3-eu-west-1.amazonaws.com/jamcams.tfl.gov.uk/00001.07355.jpg",
+                liveImageUrl = null,
                 viewDirectionDeg = 210f
             ),
             PublicCctvCamera(
@@ -202,7 +203,7 @@ class TacticalPublicCctvRepository(private val context: Context) {
                 latitude = 53.7890,
                 longitude = -1.5450,
                 operator = "West Yorkshire Urban Traffic Control",
-                liveImageUrl = "https://s3-eu-west-1.amazonaws.com/jamcams.tfl.gov.uk/00001.01250.jpg",
+                liveImageUrl = null,
                 viewDirectionDeg = 15f
             ),
             PublicCctvCamera(
@@ -212,7 +213,7 @@ class TacticalPublicCctvRepository(private val context: Context) {
                 latitude = 54.9600,
                 longitude = -1.6700,
                 operator = "North East Regional Traffic Control",
-                liveImageUrl = "https://s3-eu-west-1.amazonaws.com/jamcams.tfl.gov.uk/00001.06590.jpg",
+                liveImageUrl = null,
                 viewDirectionDeg = 350f
             ),
             PublicCctvCamera(
@@ -222,7 +223,7 @@ class TacticalPublicCctvRepository(private val context: Context) {
                 latitude = 55.8570,
                 longitude = -4.2680,
                 operator = "Traffic Scotland Live CCTV",
-                liveImageUrl = "https://s3-eu-west-1.amazonaws.com/jamcams.tfl.gov.uk/00001.03604.jpg",
+                liveImageUrl = null,
                 viewDirectionDeg = 180f
             ),
             PublicCctvCamera(
@@ -232,7 +233,7 @@ class TacticalPublicCctvRepository(private val context: Context) {
                 latitude = 51.5280,
                 longitude = -3.2380,
                 operator = "Traffic Wales Highways Monitoring",
-                liveImageUrl = "https://s3-eu-west-1.amazonaws.com/jamcams.tfl.gov.uk/00001.08502.jpg",
+                liveImageUrl = null,
                 viewDirectionDeg = 85f
             ),
             PublicCctvCamera(
@@ -242,7 +243,7 @@ class TacticalPublicCctvRepository(private val context: Context) {
                 latitude = 50.9520,
                 longitude = -1.3650,
                 operator = "Hampshire County Traffic Control",
-                liveImageUrl = "https://s3-eu-west-1.amazonaws.com/jamcams.tfl.gov.uk/00001.05420.jpg",
+                liveImageUrl = null,
                 viewDirectionDeg = 260f
             ),
             PublicCctvCamera(
@@ -252,7 +253,7 @@ class TacticalPublicCctvRepository(private val context: Context) {
                 latitude = 50.8550,
                 longitude = -0.1550,
                 operator = "Brighton & Hove Highways CCTV",
-                liveImageUrl = "https://s3-eu-west-1.amazonaws.com/jamcams.tfl.gov.uk/00001.08502.jpg",
+                liveImageUrl = null,
                 viewDirectionDeg = 180f
             )
         )
@@ -306,15 +307,6 @@ class TacticalPublicCctvRepository(private val context: Context) {
             Triple(890.0, 350f, "Urban Roundabout Overview Optic")
         )
 
-        // Verified working public JPEG feeds (cycling through trusted public traffic snapshot endpoints)
-        val verifiedLiveFeeds = listOf(
-            "https://s3-eu-west-1.amazonaws.com/jamcams.tfl.gov.uk/00001.07355.jpg",
-            "https://s3-eu-west-1.amazonaws.com/jamcams.tfl.gov.uk/00001.06590.jpg",
-            "https://s3-eu-west-1.amazonaws.com/jamcams.tfl.gov.uk/00001.02102.jpg",
-            "https://s3-eu-west-1.amazonaws.com/jamcams.tfl.gov.uk/00001.03604.jpg",
-            "https://s3-eu-west-1.amazonaws.com/jamcams.tfl.gov.uk/00001.04781.jpg"
-        )
-
         val latGridKey = (lat * 200).toInt()
         val lonGridKey = (lon * 200).toInt()
 
@@ -327,7 +319,6 @@ class TacticalPublicCctvRepository(private val context: Context) {
             val camLon = lon + (distMeters * sin(bRad)) / (111320.0 * cos(Math.toRadians(lat)).coerceAtLeast(0.01))
 
             val camId = "LOC_CCTV_${latGridKey}_${lonGridKey}_$idx"
-            val liveUrl = verifiedLiveFeeds[idx % verifiedLiveFeeds.size]
 
             val cam = PublicCctvCamera(
                 id = camId,
@@ -336,10 +327,10 @@ class TacticalPublicCctvRepository(private val context: Context) {
                 latitude = camLat,
                 longitude = camLon,
                 operator = "Highways & Municipal Traffic Monitoring",
-                liveImageUrl = liveUrl,
+                liveImageUrl = null, // Set null: strictly use tactical FLIR optic without displaying mismatched London JamCams
                 viewDirectionDeg = (bearingDeg.toFloat() + 180f) % 360f,
                 isLiveFeedActive = true,
-                tags = listOf("PUBLIC_ACCESS", "LOCAL_ROADSIDE_CCTV", "ANPR")
+                tags = listOf("PUBLIC_ACCESS", "LOCAL_ROADSIDE_CCTV", "ANPR", "TACTICAL_FLIR")
             )
 
             dynamicCamerasCache[camId] = cam

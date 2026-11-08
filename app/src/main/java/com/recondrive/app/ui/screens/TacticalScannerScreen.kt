@@ -75,6 +75,7 @@ fun TacticalScannerScreen(
     val isScanning by scannerManager.isScanning.collectAsState()
     val isScannerPaused by scannerManager.isScannerPaused.collectAsState()
     val isSimulation by scannerManager.isSimulationEnabled.collectAsState()
+    val isSirenDetectorEnabled by scannerManager.isSirenDetectorEnabled.collectAsState()
     val csiSnapshot by csiSensingEngine.snapshot.collectAsState()
     val isPersonDetectionEnabled by csiSensingEngine.isEnabled.collectAsState()
     val tileRevision by osmTileManager.revision.collectAsState()
@@ -302,6 +303,36 @@ fun TacticalScannerScreen(
                     Text(
                         text = if (isSimulation) "DEMO" else "LIVE",
                         color = if (isSimulation) ReconAmber else ReconGreen,
+                        fontSize = 8.5.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.width(5.dp))
+
+            // Siren Doppler Acoustic Detector Toggle Pill (Safe user-controlled microphone listener)
+            Surface(
+                color = TacticalSurface,
+                shape = RoundedCornerShape(12.dp),
+                border = androidx.compose.foundation.BorderStroke(1.dp, if (isSirenDetectorEnabled) ReconGreen else TextSecondary),
+                modifier = Modifier.clickable { scannerManager.toggleSirenDetector() }
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(3.dp)
+                ) {
+                    Icon(
+                        imageVector = if (isSirenDetectorEnabled) Icons.Default.Mic else Icons.Default.MicOff,
+                        contentDescription = "Acoustic Siren Doppler Listener",
+                        tint = if (isSirenDetectorEnabled) ReconGreen else TextSecondary,
+                        modifier = Modifier.size(10.dp)
+                    )
+                    Text(
+                        text = if (isSirenDetectorEnabled) "SIREN: ON" else "SIREN: OFF",
+                        color = if (isSirenDetectorEnabled) ReconGreen else TextSecondary,
                         fontSize = 8.5.sp,
                         fontWeight = FontWeight.Bold,
                         fontFamily = FontFamily.Monospace
@@ -2135,10 +2166,11 @@ private fun PublicCctvLiveViewerDialog(
     onDismiss: () -> Unit,
     onNavigate: () -> Unit
 ) {
+    val hasLiveFeed = !camera.liveImageUrl.isNullOrBlank() && camera.liveImageUrl.startsWith("http")
     var refreshNonce by remember { mutableLongStateOf(System.currentTimeMillis()) }
-    var isImageLoading by remember { mutableStateOf(camera.liveImageUrl?.startsWith("http") == true) }
+    var isImageLoading by remember { mutableStateOf(hasLiveFeed) }
     var isImageSuccess by remember { mutableStateOf(false) }
-    var opticMode by remember { mutableStateOf(if (camera.liveImageUrl?.startsWith("http") == true) "LIVE" else "FLIR") }
+    var opticMode by remember { mutableStateOf(if (hasLiveFeed) "LIVE" else "FLIR") }
 
     val infiniteTransition = rememberInfiniteTransition(label = "cctv_live_pulse")
     val liveAlpha by infiniteTransition.animateFloat(
@@ -2365,38 +2397,40 @@ private fun PublicCctvLiveViewerDialog(
         },
         confirmButton = {
             Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                // Mode Toggle Button (LIVE vs FLIR)
-                Button(
-                    onClick = {
-                        opticMode = if (opticMode == "LIVE") "FLIR" else "LIVE"
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = TacticalSurface),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, if (opticMode == "FLIR") ReconAmber else ReconCyan),
-                    shape = RoundedCornerShape(6.dp),
-                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
-                ) {
-                    Text(
-                        text = if (opticMode == "LIVE") "VIEW FLIR" else "VIEW LIVE",
-                        color = if (opticMode == "FLIR") ReconAmber else ReconCyan,
-                        fontSize = 9.sp,
-                        fontFamily = FontFamily.Monospace
-                    )
-                }
+                // Mode Toggle Button (LIVE vs FLIR) - only available when real live feed URL exists
+                if (hasLiveFeed) {
+                    Button(
+                        onClick = {
+                            opticMode = if (opticMode == "LIVE") "FLIR" else "LIVE"
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = TacticalSurface),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, if (opticMode == "FLIR") ReconAmber else ReconCyan),
+                        shape = RoundedCornerShape(6.dp),
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+                    ) {
+                        Text(
+                            text = if (opticMode == "LIVE") "VIEW FLIR" else "VIEW LIVE",
+                            color = if (opticMode == "FLIR") ReconAmber else ReconCyan,
+                            fontSize = 9.sp,
+                            fontFamily = FontFamily.Monospace
+                        )
+                    }
 
-                // Refresh Stream Button
-                Button(
-                    onClick = {
-                        refreshNonce = System.currentTimeMillis()
-                        isImageLoading = true
-                    },
-                    colors = ButtonDefaults.buttonColors(containerColor = TacticalSurface),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, ReconCyan),
-                    shape = RoundedCornerShape(6.dp),
-                    contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
-                ) {
-                    Icon(imageVector = Icons.Default.Refresh, contentDescription = "Refresh", tint = ReconCyan, modifier = Modifier.size(12.dp))
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(text = "REFRESH", color = ReconCyan, fontSize = 9.sp, fontFamily = FontFamily.Monospace)
+                    // Refresh Stream Button
+                    Button(
+                        onClick = {
+                            refreshNonce = System.currentTimeMillis()
+                            isImageLoading = true
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = TacticalSurface),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, ReconCyan),
+                        shape = RoundedCornerShape(6.dp),
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)
+                    ) {
+                        Icon(imageVector = Icons.Default.Refresh, contentDescription = "Refresh", tint = ReconCyan, modifier = Modifier.size(12.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text(text = "REFRESH", color = ReconCyan, fontSize = 9.sp, fontFamily = FontFamily.Monospace)
+                    }
                 }
 
                 // Navigate / Pin Button

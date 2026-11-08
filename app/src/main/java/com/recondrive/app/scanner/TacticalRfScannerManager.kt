@@ -84,6 +84,10 @@ class TacticalRfScannerManager(
     private val _isSimulationEnabled = MutableStateFlow(false)
     val isSimulationEnabled: StateFlow<Boolean> = _isSimulationEnabled.asStateFlow()
 
+    // Microphone Acoustic Siren Doppler detector toggle (Strictly user-controlled to prevent background audio crash)
+    private val _isSirenDetectorEnabled = MutableStateFlow(false)
+    val isSirenDetectorEnabled: StateFlow<Boolean> = _isSirenDetectorEnabled.asStateFlow()
+
     private val targetMap = ConcurrentHashMap<String, DetectedRfTarget>()
     private val breadcrumbHistory = ConcurrentHashMap<String, MutableList<DeviceBreadcrumb>>()
     private val stationaryPinpointMap = ConcurrentHashMap<String, DevicePinpoint>()
@@ -321,6 +325,7 @@ class TacticalRfScannerManager(
             if (worldAngle < 0f) worldAngle += 360f
             val relBearing = (worldAngle - heading + 360f) % 360f
 
+            val hasLive = !cam.liveImageUrl.isNullOrBlank() && cam.liveImageUrl.startsWith("http")
             val target = DetectedRfTarget(
                 id = cam.id,
                 name = "📷 ${cam.name}",
@@ -331,9 +336,13 @@ class TacticalRfScannerManager(
                 rssi = (-45 - (dist / 20.0).toInt()).coerceIn(-95, -30),
                 estimatedDistanceMeters = dist,
                 frequencyMhz = 2412,
-                protocol = "PUBLIC ACCESS CCTV (LIVE STREAM)",
+                protocol = if (hasLive) "PUBLIC ACCESS CCTV (LIVE STREAM)" else "PUBLIC ACCESS CCTV (TACTICAL OPTIC)",
                 threatLevel = "OPEN PUBLIC TRAFFIC & SECURITY CAMERA",
-                details = "${cam.locationDesc} • Operator: ${cam.operator} • URL: ${cam.liveImageUrl ?: ""}",
+                details = if (hasLive) {
+                    "${cam.locationDesc} • Operator: ${cam.operator} • URL: ${cam.liveImageUrl}"
+                } else {
+                    "${cam.locationDesc} • Operator: ${cam.operator} • TACTICAL OPTIC / FLIR"
+                },
                 timestamp = System.currentTimeMillis(),
                 detectedLat = cam.latitude,
                 detectedLon = cam.longitude,
@@ -360,7 +369,9 @@ class TacticalRfScannerManager(
         registerMagnetometer()
 
         try { barometerEngine.start() } catch (t: Throwable) { Timber.w(t, "Barometer failed to start") }
-        try { sirenEngine.start() } catch (t: Throwable) { Timber.w(t, "Siren engine failed to start") }
+        if (_isSirenDetectorEnabled.value) {
+            try { sirenEngine.start() } catch (t: Throwable) { Timber.w(t, "Siren engine failed to start") }
+        }
         try { imuEngine.start() } catch (t: Throwable) { Timber.w(t, "IMU engine failed to start") }
         try { gnssEngine.start() } catch (t: Throwable) { Timber.w(t, "GNSS engine failed to start") }
         try { wifiRttEngine.start() } catch (t: Throwable) { Timber.w(t, "WiFi RTT engine failed to start") }
@@ -434,6 +445,21 @@ class TacticalRfScannerManager(
             imsiDetector.simulateAttack(false)
             syncTargetsToFlow()
         }
+    }
+
+    /**
+     * Toggles acoustic emergency siren listener.
+     * Default is false to strictly prevent unauthorized/unwanted background microphone capture.
+     */
+    fun toggleSirenDetector(enable: Boolean? = null) {
+        val target = enable ?: !_isSirenDetectorEnabled.value
+        _isSirenDetectorEnabled.value = target
+        if (target) {
+            try { sirenEngine.start() } catch (t: Throwable) { Timber.w(t, "Failed to start siren detector") }
+        } else {
+            sirenEngine.stop()
+        }
+        Timber.i("Tactical siren listener toggled: ${_isSirenDetectorEnabled.value}")
     }
 
     /**
