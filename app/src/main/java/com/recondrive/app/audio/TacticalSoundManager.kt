@@ -47,6 +47,7 @@ class TacticalSoundManager(private val context: Context) {
             "SONAR_PING" -> playSonarPing()
             "TACTICAL_CHIRP" -> playTacticalChirp()
             "RADAR_BEEP" -> playRadarBeep()
+            "INTERCEPTION_ALERT" -> playInterceptionAlert()
             "VOICE_ALERT" -> playVoiceAlert(spokenPhrase.ifBlank { "Tactical target in range" })
             "SILENT" -> { /* No audio */ }
             else -> playSonarPing()
@@ -137,6 +138,37 @@ class TacticalSoundManager(private val context: Context) {
                 playPcmBuffer(buffer, sampleRate)
             } catch (e: Exception) {
                 Timber.w(e, "Error synthesizing radar beep")
+            }
+        }
+    }
+
+    /**
+     * High-priority tactical interception alarm (alternating 2200Hz and 1400Hz warble).
+     */
+    fun playInterceptionAlert() {
+        scope.launch {
+            try {
+                val sampleRate = 44100
+                val durationMs = 500
+                val numSamples = (sampleRate * (durationMs / 1000.0)).toInt()
+                val buffer = ShortArray(numSamples)
+                val freq1 = 2200.0
+                val freq2 = 1400.0
+
+                for (i in 0 until numSamples) {
+                    val time = i.toDouble() / sampleRate
+                    // Alternating warble every 100ms
+                    val isHigh = (i / (sampleRate * 0.10).toInt()) % 2 == 0
+                    val currentFreq = if (isHigh) freq1 else freq2
+                    val sinVal = sin(2.0 * Math.PI * currentFreq * time)
+                    // Add harsh square-ish overtone for urgent warning
+                    val overtone = 0.3 * sin(2.0 * Math.PI * (currentFreq * 2.0) * time)
+                    buffer[i] = ((sinVal + overtone) * 0.85 * Short.MAX_VALUE).toInt().toShort()
+                }
+
+                playPcmBuffer(buffer, sampleRate)
+            } catch (e: Exception) {
+                Timber.w(e, "Error synthesizing interception alert")
             }
         }
     }

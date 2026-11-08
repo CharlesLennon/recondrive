@@ -8,6 +8,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.detectTransformGestures
@@ -83,12 +84,14 @@ fun TacticalScannerScreen(
     val nfcTelemetry by scannerManager.nfcManager.telemetry.collectAsState()
     val gnssTelemetry by scannerManager.gnssEngine.telemetry.collectAsState()
     val wifiRttTelemetry by scannerManager.wifiRttEngine.telemetry.collectAsState()
+    val imsiState by scannerManager.imsiDetectionState.collectAsState()
 
     var selectedFilterCategory by remember { mutableStateOf<RfCategory?>(null) } // null = ALL
     var filterSavedOnly by remember { mutableStateOf(false) }
     var selectedTargetId by remember { mutableStateOf<String?>(null) }
     var editingTarget by remember { mutableStateOf<DetectedRfTarget?>(null) }
     var viewingCctvCamera by remember { mutableStateOf<PublicCctvCamera?>(null) }
+    var showImsiForensicsDialog by remember { mutableStateOf(false) }
 
     // Map viewport state
     var cameraLat by remember { mutableDoubleStateOf(currentLat) }
@@ -130,9 +133,9 @@ fun TacticalScannerScreen(
         }
     }
 
-    // Sync user location with scanner manager and anchor targets relative to vehicle
-    LaunchedEffect(currentLat, currentLon, currentHeading) {
-        scannerManager.updateLastKnownLocation(currentLat, currentLon, currentHeading)
+    // Sync user location and speed with scanner manager and anchor targets relative to vehicle
+    LaunchedEffect(currentLat, currentLon, currentHeading, currentSpeedKmh) {
+        scannerManager.updateLastKnownLocation(currentLat, currentLon, currentHeading, currentSpeedKmh)
     }
 
     // Follow vehicle position when not manually panned
@@ -200,6 +203,18 @@ fun TacticalScannerScreen(
                 onNavigateToLocation(cam.name, cam.latitude, cam.longitude)
                 viewingCctvCamera = null
             }
+        )
+    }
+
+    // IMSI-Catcher & Cellular Integrity Forensics Dialog
+    if (showImsiForensicsDialog) {
+        ImsiForensicsDialog(
+            imsiState = imsiState,
+            isSimulation = isSimulation,
+            onDismiss = { showImsiForensicsDialog = false },
+            onToggleShield = { scannerManager.imsiDetector.toggleShield() },
+            onClearAnomalies = { scannerManager.imsiDetector.clearAnomalies() },
+            onTriggerSimulatedAttack = { scannerManager.simulateImsiAttack(it) }
         )
     }
 
@@ -312,6 +327,21 @@ fun TacticalScannerScreen(
                 )
             }
         }
+
+        Spacer(modifier = Modifier.height(4.dp))
+
+        // =====================================================================
+        // 1B. CELLULAR INTEGRITY & IMSI-CATCHER DEFENSE SHIELD BANNER
+        // =====================================================================
+        CellularIntegrityBanner(
+            imsiState = imsiState,
+            isSimulation = isSimulation,
+            onClick = { showImsiForensicsDialog = true },
+            onTriggerDrill = {
+                val next = !imsiState.isSimulationActive
+                scannerManager.simulateImsiAttack(next)
+            }
+        )
 
         Spacer(modifier = Modifier.height(4.dp))
 
@@ -1524,7 +1554,9 @@ private fun LiveScannerRoadMapCanvas(
                 val blipPos = project(tLat, tLon)
 
                 val isSaved = target.savedMetadata != null
+                val isRogue = target.threatLevel.contains("ROGUE") || target.threatLevel.contains("INTERCEPTION")
                 val categoryColor = when {
+                    isRogue -> Color(0xFFFF1744)
                     isSaved -> ReconAmber
                     target.category == RfCategory.CAR_KEY -> Color(0xFFFFD600)
                     target.category == RfCategory.VEHICLE -> ReconCyan
@@ -1611,6 +1643,7 @@ private fun LiveScannerRoadMapCanvas(
                     }
                     val subPaint = android.graphics.Paint().apply {
                         color = when {
+                            isRogue -> android.graphics.Color.parseColor("#FF1744")
                             isSaved -> android.graphics.Color.parseColor("#FFD54F")
                             target.category == RfCategory.CAR_KEY -> android.graphics.Color.parseColor("#FFD600")
                             target.category == RfCategory.VEHICLE -> android.graphics.Color.parseColor("#00E5FF")
@@ -1632,6 +1665,7 @@ private fun LiveScannerRoadMapCanvas(
 
                     val savedPlate = target.savedMetadata?.numberPlate
                     val titlePrefix = when {
+                        isRogue -> "🚨 "
                         !savedPlate.isNullOrBlank() -> "[$savedPlate] "
                         isSaved -> "⭐ "
                         target.category == RfCategory.CAR_KEY -> "🔑 "
@@ -1831,7 +1865,9 @@ private fun RfTargetHorizontalCard(
     onViewCctv: () -> Unit = {}
 ) {
     val isSaved = target.savedMetadata != null
+    val isRogue = target.threatLevel.contains("ROGUE") || target.threatLevel.contains("INTERCEPTION")
     val categoryColor = when {
+        isRogue -> Color(0xFFFF1744)
         isSaved -> ReconAmber
         target.category == RfCategory.CAR_KEY -> Color(0xFFFFD600)
         target.category == RfCategory.VEHICLE -> ReconCyan
@@ -1843,6 +1879,7 @@ private fun RfTargetHorizontalCard(
     }
 
     val iconVector = when {
+        isRogue -> Icons.Default.Warning
         isSaved -> Icons.Default.Star
         target.category == RfCategory.CAR_KEY -> Icons.Default.Key
         target.category == RfCategory.VEHICLE -> Icons.Default.DirectionsCar
@@ -2543,5 +2580,441 @@ private fun TacticalCctvViewfinder(
             )
             scanY += 4f
         }
+    }
+}
+
+/**
+ * Tactical Cellular Integrity & IMSI Shield Banner.
+ */
+@Composable
+private fun CellularIntegrityBanner(
+    imsiState: ImsiDetectionState,
+    isSimulation: Boolean,
+    onClick: () -> Unit,
+    onTriggerDrill: () -> Unit
+) {
+    val isCritical = imsiState.threatLevel == ImsiThreatLevel.CRITICAL_INTERCEPTION_RISK
+    val isSuspicious = imsiState.threatLevel == ImsiThreatLevel.SUSPICIOUS
+
+    val borderColor = when {
+        isCritical -> Color(0xFFFF1744)
+        isSuspicious -> ReconAmber
+        else -> ReconGreen.copy(alpha = 0.6f)
+    }
+
+    val bgColor = when {
+        isCritical -> Color(0xFF2A080C)
+        isSuspicious -> Color(0xFF261D08)
+        else -> TacticalSurface
+    }
+
+    Surface(
+        color = bgColor,
+        shape = RoundedCornerShape(6.dp),
+        border = androidx.compose.foundation.BorderStroke(1.dp, borderColor),
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() }
+    ) {
+        Row(
+            modifier = Modifier
+                .padding(horizontal = 8.dp, vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                modifier = Modifier.weight(1f)
+            ) {
+                Icon(
+                    imageVector = when {
+                        isCritical -> Icons.Default.Warning
+                        isSuspicious -> Icons.Default.Warning
+                        else -> Icons.Default.Security
+                    },
+                    contentDescription = "Cell Integrity",
+                    tint = borderColor,
+                    modifier = Modifier.size(16.dp)
+                )
+
+                Column {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Text(
+                            text = when {
+                                isCritical -> "🚨 IMSI-CATCHER / ROGUE CELL DETECTED (${imsiState.threatScore}/100)"
+                                isSuspicious -> "⚠️ CELLULAR RF ANOMALY (${imsiState.threatScore}/100)"
+                                else -> "🛡️ CELL INTEGRITY: SECURE"
+                            },
+                            color = borderColor,
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.Monospace
+                        )
+                        if (isCritical) {
+                            Text(
+                                text = "• INTERCEPTION RISK",
+                                color = Color(0xFFFF5252),
+                                fontSize = 8.sp,
+                                fontWeight = FontWeight.Bold,
+                                fontFamily = FontFamily.Monospace
+                            )
+                        }
+                    }
+
+                    val subText = when {
+                        isCritical -> imsiState.recentAnomalies.firstOrNull()?.description
+                            ?: "Forced 2G downgrade or stationary TAC spoof detected."
+                        isSuspicious -> imsiState.recentAnomalies.firstOrNull()?.description
+                            ?: "Unusual signal spike or isolated cell profile."
+                        else -> "${imsiState.activeServingTech} (${imsiState.activeServingOperator}) • ${imsiState.cipherStatus} • ${imsiState.activeServingDbm}dBm"
+                    }
+
+                    Text(
+                        text = subText,
+                        color = if (isCritical) Color(0xFFFF8A80) else TextSecondary,
+                        fontSize = 7.5.sp,
+                        fontFamily = FontFamily.Monospace,
+                        maxLines = 1
+                    )
+                }
+            }
+
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                if (isSimulation) {
+                    Surface(
+                        color = if (imsiState.isSimulationActive) Color(0xFFFF1744).copy(alpha = 0.25f) else TacticalObsidian,
+                        shape = RoundedCornerShape(4.dp),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, if (imsiState.isSimulationActive) Color(0xFFFF1744) else ReconCyan),
+                        modifier = Modifier.clickable { onTriggerDrill() }
+                    ) {
+                        Text(
+                            text = if (imsiState.isSimulationActive) "STOP DRILL" else "TEST DRILL",
+                            color = if (imsiState.isSimulationActive) Color(0xFFFF1744) else ReconCyan,
+                            fontSize = 7.5.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.Monospace,
+                            modifier = Modifier.padding(horizontal = 4.dp, vertical = 2.dp)
+                        )
+                    }
+                }
+
+                Surface(
+                    color = TacticalObsidian,
+                    shape = RoundedCornerShape(4.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, borderColor.copy(alpha = 0.7f)),
+                    modifier = Modifier.clickable { onClick() }
+                ) {
+                    Text(
+                        text = "FORENSICS",
+                        color = borderColor,
+                        fontSize = 7.5.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace,
+                        modifier = Modifier.padding(horizontal = 5.dp, vertical = 2.dp)
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * IMSI-Catcher & Rogue Base Station Forensic Diagnostic Dialog.
+ */
+@Composable
+private fun ImsiForensicsDialog(
+    imsiState: ImsiDetectionState,
+    isSimulation: Boolean,
+    onDismiss: () -> Unit,
+    onToggleShield: () -> Unit,
+    onClearAnomalies: () -> Unit,
+    onTriggerSimulatedAttack: (Boolean) -> Unit
+) {
+    val isCritical = imsiState.threatLevel == ImsiThreatLevel.CRITICAL_INTERCEPTION_RISK
+    val isSuspicious = imsiState.threatLevel == ImsiThreatLevel.SUSPICIOUS
+
+    val themeColor = when {
+        isCritical -> Color(0xFFFF1744)
+        isSuspicious -> ReconAmber
+        else -> ReconGreen
+    }
+
+    androidx.compose.ui.window.Dialog(onDismissRequest = onDismiss) {
+        Surface(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(8.dp),
+            shape = RoundedCornerShape(10.dp),
+            color = TacticalObsidian,
+            border = androidx.compose.foundation.BorderStroke(1.5.dp, themeColor)
+        ) {
+            Column(
+                modifier = Modifier
+                    .padding(14.dp)
+                    .verticalScroll(rememberScrollState())
+            ) {
+                // Header
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Icon(
+                            imageVector = when {
+                                isCritical -> Icons.Default.Warning
+                                isSuspicious -> Icons.Default.Warning
+                                else -> Icons.Default.Security
+                            },
+                            contentDescription = "Shield",
+                            tint = themeColor,
+                            modifier = Modifier.size(18.dp)
+                        )
+                        Text(
+                            text = "IMSI-CATCHER & CELL DEFENSE",
+                            color = themeColor,
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.Monospace
+                        )
+                    }
+
+                    IconButton(onClick = onDismiss, modifier = Modifier.size(24.dp)) {
+                        Icon(imageVector = Icons.Default.Close, contentDescription = "Close", tint = TextSecondary, modifier = Modifier.size(16.dp))
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                // Threat Score Meter
+                Surface(
+                    color = TacticalSurface,
+                    shape = RoundedCornerShape(6.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, TacticalBorder),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(10.dp)) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Text(
+                                text = "THREAT LEVEL: ${imsiState.threatLevel.name}",
+                                color = themeColor,
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Bold,
+                                fontFamily = FontFamily.Monospace
+                            )
+                            Text(
+                                text = "SCORE: ${imsiState.threatScore} / 100",
+                                color = themeColor,
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Bold,
+                                fontFamily = FontFamily.Monospace
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(6.dp))
+
+                        LinearProgressIndicator(
+                            progress = (imsiState.threatScore / 100f).coerceIn(0f, 1f),
+                            color = themeColor,
+                            trackColor = TacticalObsidian,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(6.dp)
+                                .clip(RoundedCornerShape(3.dp))
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                // Serving Base Station Telemetry
+                Text(
+                    text = "ACTIVE SERVING BASE STATION",
+                    color = ReconCyan,
+                    fontSize = 9.sp,
+                    fontWeight = FontWeight.Bold,
+                    fontFamily = FontFamily.Monospace
+                )
+
+                Spacer(modifier = Modifier.height(4.dp))
+
+                Surface(
+                    color = TacticalSurface,
+                    shape = RoundedCornerShape(6.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, TacticalBorder),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(modifier = Modifier.padding(10.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        ImsiInfoRow("Tech / Protocol:", imsiState.activeServingTech)
+                        ImsiInfoRow("Carrier Identity:", imsiState.activeServingOperator)
+                        ImsiInfoRow("Serving Cell ID:", imsiState.activeServingCellId.ifBlank { "AUDITING SPECTRUM..." })
+                        ImsiInfoRow("Area Code (TAC/LAC):", if (imsiState.activeServingTacOrLac > 0) "${imsiState.activeServingTacOrLac}" else "UNKNOWN")
+                        ImsiInfoRow("Signal Power (RSSI):", "${imsiState.activeServingDbm} dBm")
+                        ImsiInfoRow("Over-the-Air Cipher:", imsiState.cipherStatus)
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                // Heuristic Anomaly History
+                Text(
+                    text = "HEURISTIC ANOMALY LOG (${imsiState.recentAnomalies.size})",
+                    color = ReconCyan,
+                    fontSize = 9.sp,
+                    fontWeight = FontWeight.Bold,
+                    fontFamily = FontFamily.Monospace
+                )
+
+                Spacer(modifier = Modifier.height(4.dp))
+
+                if (imsiState.recentAnomalies.isEmpty()) {
+                    Surface(
+                        color = TacticalSurface,
+                        shape = RoundedCornerShape(6.dp),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, TacticalBorder),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            text = "✓ Zero anomalies detected. Base station operating within commercial 3GPP parameters with standard encryption.",
+                            color = ReconGreen,
+                            fontSize = 8.sp,
+                            fontFamily = FontFamily.Monospace,
+                            modifier = Modifier.padding(10.dp)
+                        )
+                    }
+                } else {
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        imsiState.recentAnomalies.forEach { anomaly ->
+                            Surface(
+                                color = TacticalSurface,
+                                shape = RoundedCornerShape(4.dp),
+                                border = androidx.compose.foundation.BorderStroke(1.dp, if (anomaly.severityPoints >= 40) Color(0xFFFF5252) else ReconAmber),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Column(modifier = Modifier.padding(6.dp)) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        Text(
+                                            text = "⚠️ ${anomaly.title}",
+                                            color = if (anomaly.severityPoints >= 40) Color(0xFFFF5252) else ReconAmber,
+                                            fontSize = 8.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            fontFamily = FontFamily.Monospace
+                                        )
+                                        Text(
+                                            text = "+${anomaly.severityPoints} pts",
+                                            color = TextSecondary,
+                                            fontSize = 7.5.sp,
+                                            fontFamily = FontFamily.Monospace
+                                        )
+                                    }
+                                    Text(
+                                        text = anomaly.description,
+                                        color = TextPrimary,
+                                        fontSize = 7.5.sp,
+                                        fontFamily = FontFamily.Monospace
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Bottom Action Buttons
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    if (isSimulation) {
+                        Surface(
+                            color = if (imsiState.isSimulationActive) Color(0xFFFF1744).copy(alpha = 0.2f) else TacticalSurface,
+                            shape = RoundedCornerShape(6.dp),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, if (imsiState.isSimulationActive) Color(0xFFFF1744) else ReconCyan),
+                            modifier = Modifier
+                                .weight(1f)
+                                .clickable { onTriggerSimulatedAttack(!imsiState.isSimulationActive) }
+                        ) {
+                            Text(
+                                text = if (imsiState.isSimulationActive) "STOP ATTACK" else "DRILL ATTACK",
+                                color = if (imsiState.isSimulationActive) Color(0xFFFF1744) else ReconCyan,
+                                fontSize = 8.sp,
+                                fontWeight = FontWeight.Bold,
+                                fontFamily = FontFamily.Monospace,
+                                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                                modifier = Modifier.padding(vertical = 8.dp)
+                            )
+                        }
+                    }
+
+                    if (imsiState.recentAnomalies.isNotEmpty()) {
+                        Surface(
+                            color = TacticalSurface,
+                            shape = RoundedCornerShape(6.dp),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, TacticalBorder),
+                            modifier = Modifier
+                                .weight(1f)
+                                .clickable { onClearAnomalies() }
+                        ) {
+                            Text(
+                                text = "CLEAR LOG",
+                                color = TextSecondary,
+                                fontSize = 8.sp,
+                                fontWeight = FontWeight.Bold,
+                                fontFamily = FontFamily.Monospace,
+                                textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                                modifier = Modifier.padding(vertical = 8.dp)
+                            )
+                        }
+                    }
+
+                    Surface(
+                        color = ReconGreen.copy(alpha = 0.2f),
+                        shape = RoundedCornerShape(6.dp),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, ReconGreen),
+                        modifier = Modifier
+                            .weight(1f)
+                            .clickable { onDismiss() }
+                    ) {
+                        Text(
+                            text = "CLOSE",
+                            color = ReconGreen,
+                            fontSize = 8.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.Monospace,
+                            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                            modifier = Modifier.padding(vertical = 8.dp)
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ImsiInfoRow(label: String, value: String) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween
+    ) {
+        Text(text = label, color = TextSecondary, fontSize = 8.sp, fontFamily = FontFamily.Monospace)
+        Text(text = value, color = TextPrimary, fontSize = 8.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
     }
 }

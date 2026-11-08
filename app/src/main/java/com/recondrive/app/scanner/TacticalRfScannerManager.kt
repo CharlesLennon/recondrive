@@ -112,6 +112,10 @@ class TacticalRfScannerManager(
     val gnssEngine: TacticalGnssEngine = TacticalGnssEngine(context)
     val wifiRttEngine: TacticalWifiRttEngine = TacticalWifiRttEngine(context)
     val publicCctvRepo: TacticalPublicCctvRepository = TacticalPublicCctvRepository(context)
+    val imsiDetector: TacticalImsiCatcherDetector = TacticalImsiCatcherDetector(context, soundManager)
+    val imsiDetectionState: StateFlow<ImsiDetectionState> = imsiDetector.state
+
+    private var lastKnownSpeed: Float = 0f
 
     init {
         nfcManager.onVehicleKeyDetected = { scanned ->
@@ -252,12 +256,13 @@ class TacticalRfScannerManager(
      * Anchors live tracking relative to current vehicle position and updates
      * relative bearings/distances for all stationary pinned infrastructure.
      */
-    fun updateLastKnownLocation(lat: Double, lon: Double, heading: Float = lastKnownHeading) {
+    fun updateLastKnownLocation(lat: Double, lon: Double, heading: Float = lastKnownHeading, speedKmh: Float = lastKnownSpeed) {
         val prevLat = lastKnownLat
         val prevLon = lastKnownLon
         lastKnownLat = lat
         lastKnownLon = lon
         lastKnownHeading = heading
+        lastKnownSpeed = speedKmh
 
         // Update relative bearing and distance of all pinned stationary devices relative to vehicle's new position
         var updatedStationary = false
@@ -420,11 +425,48 @@ class TacticalRfScannerManager(
             listOf(
                 "4C:FC:AA:8B:19:2E", "00:26:7E:44:91:FA", "9C:8E:99:A2:4B:11",
                 "C0:56:E3:7A:02:D4", "00:62:EC:3F:89:AB", "B4:FB:E4:11:80:55",
-                "60:60:1F:B1:33:09", "UWB_BMW_DIGITAL_KEY_3", "TESLA_KEY_SIM_0211", "NIR_OPTICAL_ILLUMINATOR"
+                "60:60:1F:B1:33:09", "UWB_BMW_DIGITAL_KEY_3", "TESLA_KEY_SIM_0211", "NIR_OPTICAL_ILLUMINATOR",
+                "CELL_ROGUE_2G_STINGRAY"
             ).forEach {
                 targetMap.remove(it)
                 stationaryPinpointMap.remove(it)
             }
+            imsiDetector.simulateAttack(false)
+            syncTargetsToFlow()
+        }
+    }
+
+    /**
+     * Injects synthetic Stingray / rogue base station attack for testing and drills.
+     */
+    fun simulateImsiAttack(enable: Boolean) {
+        imsiDetector.simulateAttack(enable)
+        if (enable) {
+            val rogueTarget = DetectedRfTarget(
+                id = "CELL_ROGUE_2G_STINGRAY",
+                name = "⚠️ ROGUE CELL (TEST_PLMN_001_01)",
+                rawSsidOrBleName = "TEST_PLMN_001_01",
+                macAddress = "CELL_ROGUE_2G_STINGRAY",
+                vendor = "Portable SDR Interceptor",
+                category = RfCategory.CELL_TOWER,
+                rssi = -46,
+                estimatedDistanceMeters = 35.0,
+                frequencyMhz = 900,
+                protocol = "UNENCRYPTED 2G CELLULAR TRAP",
+                threatLevel = "⚠️ ROGUE BASE STATION / INTERCEPTION RISK",
+                details = "⚠️ ACTIVE INTERCEPTION DRILL • Forced 2G Downgrade • A5/0 Cipher Stripping • LAC: 9999 • -46dBm",
+                timestamp = System.currentTimeMillis(),
+                detectedLat = lastKnownLat + 0.0003,
+                detectedLon = lastKnownLon + 0.0003,
+                relativeBearingDeg = 45f,
+                locationHistory = emptyList(),
+                motionTrend = RelativeMotionTrend.STATIONARY,
+                savedMetadata = null
+            )
+            targetMap["CELL_ROGUE_2G_STINGRAY"] = rogueTarget
+            syncTargetsToFlow()
+        } else {
+            targetMap.remove("CELL_ROGUE_2G_STINGRAY")
             syncTargetsToFlow()
         }
     }
@@ -654,6 +696,7 @@ class TacticalRfScannerManager(
         try {
             val cellList = telephonyManager.allCellInfo ?: return
             val now = System.currentTimeMillis()
+            val imsiState = imsiDetector.evaluateCellEnvironment(cellList, lastKnownLat, lastKnownLon, lastKnownSpeed)
 
             for (cell in cellList) {
                 var cellId = ""
@@ -751,9 +794,21 @@ class TacticalRfScannerManager(
                 if (worldAngle < 0f) worldAngle += 360f
                 val relativeBearing = (worldAngle - lastKnownHeading + 360f) % 360f
 
+                val isRogueSuspect = (imsiState.threatLevel != ImsiThreatLevel.CLEAR && isServing) || (isServing && imsiState.is2gDowngraded)
+                val targetThreat = when {
+                    isRogueSuspect -> "⚠️ ROGUE BASE STATION / INTERCEPTION RISK"
+                    isServing -> "SERVING CELL TOWER (SECURE)"
+                    else -> "NEIGHBORING BASE STATION"
+                }
+                val targetDetails = when {
+                    isRogueSuspect -> "⚠️ INTERCEPTION ANOMALY • ${imsiState.activeServingTech} • ${imsiState.cipherStatus} • TAC/LAC: $tac • PCI: $pci • Power: ${dbm}dBm"
+                    isServing -> "PRIMARY SERVING • ${imsiState.cipherStatus} • TAC: $tac • PCI: $pci • Power: ${dbm}dBm"
+                    else -> "NEIGHBORING base station • TAC: $tac • PCI: $pci • Power: ${dbm}dBm"
+                }
+
                 val target = DetectedRfTarget(
                     id = cellId,
-                    name = "$cellTech BASE STATION ($operatorName)",
+                    name = if (isRogueSuspect) "⚠️ ROGUE CELL ($operatorName)" else "$cellTech BASE STATION ($operatorName)",
                     rawSsidOrBleName = operatorName,
                     macAddress = cellId,
                     vendor = operatorName,
@@ -761,9 +816,9 @@ class TacticalRfScannerManager(
                     rssi = dbm,
                     estimatedDistanceMeters = effectiveDist,
                     frequencyMhz = if (cellTech.contains("5G")) 3500 else 1800,
-                    protocol = "$cellTech Cellular Mast",
-                    threatLevel = if (isServing) "SERVING CELL TOWER" else "NEIGHBORING BASE STATION",
-                    details = "${if (isServing) "PRIMARY SERVING" else "NEIGHBORING"} base station • TAC: $tac • PCI: $pci • Power: ${dbm}dBm",
+                    protocol = if (isRogueSuspect) "UNENCRYPTED 2G CELLULAR TRAP" else "$cellTech Cellular Mast",
+                    threatLevel = targetThreat,
+                    details = targetDetails,
                     timestamp = now,
                     detectedLat = tracker.pinnedLat,
                     detectedLon = tracker.pinnedLon,
