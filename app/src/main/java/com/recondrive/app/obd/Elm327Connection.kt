@@ -38,7 +38,7 @@ class BluetoothElm327Connection(
     override val isConnected: Boolean
         get() = socket?.isConnected == true
 
-    @SuppressLint("MissingPermission")
+    @get:SuppressLint("MissingPermission")
     override val connectionType: String
         get() = "Bluetooth SPP (${device.name ?: device.address})"
 
@@ -55,17 +55,19 @@ class BluetoothElm327Connection(
         Timber.i("Bluetooth ELM327 RFCOMM socket established.")
     }
 
-    override suspend fun disconnect() = withContext(Dispatchers.IO) {
-        try {
-            inputStream?.close()
-            outputStream?.close()
-            socket?.close()
-        } catch (e: Exception) {
-            Timber.w(e, "Error closing Bluetooth socket")
-        } finally {
-            inputStream = null
-            outputStream = null
-            socket = null
+    override suspend fun disconnect() {
+        withContext(Dispatchers.IO) {
+            try {
+                inputStream?.close()
+                outputStream?.close()
+                socket?.close()
+            } catch (e: Exception) {
+                Timber.w(e, "Error closing Bluetooth socket")
+            } finally {
+                inputStream = null
+                outputStream = null
+                socket = null
+            }
         }
     }
 
@@ -138,17 +140,19 @@ class WifiElm327Connection(
         Timber.i("Wi-Fi ELM327 TCP connection established.")
     }
 
-    override suspend fun disconnect() = withContext(Dispatchers.IO) {
-        try {
-            inputStream?.close()
-            outputStream?.close()
-            socket?.close()
-        } catch (e: Exception) {
-            Timber.w(e, "Error closing Wi-Fi socket")
-        } finally {
-            inputStream = null
-            outputStream = null
-            socket = null
+    override suspend fun disconnect() {
+        withContext(Dispatchers.IO) {
+            try {
+                inputStream?.close()
+                outputStream?.close()
+                socket?.close()
+            } catch (e: Exception) {
+                Timber.w(e, "Error closing Wi-Fi socket")
+            } finally {
+                inputStream = null
+                outputStream = null
+                socket = null
+            }
         }
     }
 

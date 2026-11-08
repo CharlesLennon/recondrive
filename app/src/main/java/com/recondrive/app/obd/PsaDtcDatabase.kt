@@ -107,13 +107,8 @@ class PsaDtcDatabase(private val context: Context) {
             Timber.e(e, "Error querying PSA DTC DB for code %s", cleanCode)
         }
 
-        // Fallback default descriptions if database didn't have exact match
-        if (descEn == null) {
-            descEn = getDefaultDescription(cleanCode)
-        }
-        if (descFr == null) {
-            descFr = ""
-        }
+        val finalDescEn = descEn ?: getDefaultDescription(cleanCode)
+        val finalDescFr = descFr ?: ""
 
         val advice = PICASSO_MECHANICAL_ADVISORIES[cleanCode]
             ?: generateGenericAdvisory(cleanCode, foundSystem)
@@ -133,8 +128,8 @@ class PsaDtcDatabase(private val context: Context) {
             systemName = systemName,
             ecu = foundEcu,
             ecuCanId = ecuCanId ?: mapSystemToCanId(foundSystem),
-            descEn = descEn,
-            descFr = descFr,
+            descEn = finalDescEn,
+            descFr = finalDescFr,
             comment = comment,
             mechanicalAdvice = advice,
             severity = severity
