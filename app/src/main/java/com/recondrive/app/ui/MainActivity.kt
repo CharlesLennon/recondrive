@@ -12,6 +12,7 @@ import android.os.Looper
 import android.provider.Settings
 import android.widget.Toast
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
@@ -204,6 +205,11 @@ class MainActivity : ComponentActivity() {
                 var targetWaypoint by remember { mutableStateOf<Pair<Double, Double>?>(null) }
                 var targetWaypointName by remember { mutableStateOf<String?>(null) }
                 var showBfiSpatialScanner by remember { mutableStateOf(false) }
+                var isScannerMapFullScreen by rememberSaveable { mutableStateOf(false) }
+
+                BackHandler(enabled = isScannerMapFullScreen && selectedTab == 2) {
+                    isScannerMapFullScreen = false
+                }
 
                 LaunchedEffect(Unit) {
                     ReconApplication.instance.rfScannerManager.nfcManager.onAutoDockTriggered = {
@@ -271,187 +277,204 @@ class MainActivity : ComponentActivity() {
 
                 Scaffold(
                     bottomBar = {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .background(TacticalObsidian)
-                        ) {
-                            NavigationBar(
-                                containerColor = TacticalObsidian,
-                                contentColor = ReconCyan,
-                                tonalElevation = 0.dp
-                            ) {
-                                NavigationBarItem(
-                                    selected = selectedTab == 0,
-                                    onClick = { selectedTab = 0 },
-                                    icon = {
-                                        Icon(
-                                            imageVector = Icons.Default.Speed,
-                                            contentDescription = "HUD",
-                                            tint = if (selectedTab == 0) ReconCyan else TextSecondary
-                                        )
-                                    },
-                                    label = {
-                                        Text(
-                                            text = "HUD",
-                                            color = if (selectedTab == 0) ReconCyan else TextSecondary,
-                                            fontFamily = FontFamily.Monospace,
-                                            fontSize = 8.5.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            maxLines = 1
-                                        )
-                                    }
-                                )
-
-                                NavigationBarItem(
-                                    selected = selectedTab == 1,
-                                    onClick = { selectedTab = 1 },
-                                    icon = {
-                                        Icon(
-                                            imageVector = Icons.Default.Map,
-                                            contentDescription = "MAP",
-                                            tint = if (selectedTab == 1) ReconCyan else TextSecondary
-                                        )
-                                    },
-                                    label = {
-                                        Text(
-                                            text = "MAP",
-                                            color = if (selectedTab == 1) ReconCyan else TextSecondary,
-                                            fontFamily = FontFamily.Monospace,
-                                            fontSize = 8.5.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            maxLines = 1
-                                        )
-                                    }
-                                )
-
-                                NavigationBarItem(
-                                    selected = selectedTab == 2,
-                                    onClick = { selectedTab = 2 },
-                                    icon = {
-                                        Icon(
-                                            imageVector = Icons.Default.Sensors,
-                                            contentDescription = "SCANNER",
-                                            tint = if (selectedTab == 2) ReconCyan else TextSecondary
-                                        )
-                                    },
-                                    label = {
-                                        Text(
-                                            text = "SCANNER",
-                                            color = if (selectedTab == 2) ReconCyan else TextSecondary,
-                                            fontFamily = FontFamily.Monospace,
-                                            fontSize = 8.5.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            maxLines = 1
-                                        )
-                                    }
-                                )
-
-                                NavigationBarItem(
-                                    selected = selectedTab == 3,
-                                    onClick = { selectedTab = 3 },
-                                    icon = {
-                                        Icon(
-                                            imageVector = Icons.Default.Timelapse,
-                                            contentDescription = "TIMELINE",
-                                            tint = if (selectedTab == 3) ReconCyan else TextSecondary
-                                        )
-                                    },
-                                    label = {
-                                        Text(
-                                            text = "TIMELINE",
-                                            color = if (selectedTab == 3) ReconCyan else TextSecondary,
-                                            fontFamily = FontFamily.Monospace,
-                                            fontSize = 8.5.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            maxLines = 1
-                                        )
-                                    }
-                                )
-
-                                NavigationBarItem(
-                                    selected = selectedTab == 4,
-                                    onClick = { selectedTab = 4 },
-                                    icon = {
-                                        Icon(
-                                            imageVector = Icons.Default.DirectionsCar,
-                                            contentDescription = "VEHICLE",
-                                            tint = if (selectedTab == 4) ReconCyan else TextSecondary
-                                        )
-                                    },
-                                    label = {
-                                        Text(
-                                            text = "VEHICLE",
-                                            color = if (selectedTab == 4) ReconCyan else TextSecondary,
-                                            fontFamily = FontFamily.Monospace,
-                                            fontSize = 8.5.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            maxLines = 1
-                                        )
-                                    }
-                                )
-
-                                NavigationBarItem(
-                                    selected = selectedTab == 5,
-                                    onClick = { selectedTab = 5 },
-                                    icon = {
-                                        Icon(
-                                            imageVector = Icons.Default.Settings,
-                                            contentDescription = "SETTINGS",
-                                            tint = if (selectedTab == 5) ReconCyan else TextSecondary
-                                        )
-                                    },
-                                    label = {
-                                        Text(
-                                            text = "SETTINGS",
-                                            color = if (selectedTab == 5) ReconCyan else TextSecondary,
-                                            fontFamily = FontFamily.Monospace,
-                                            fontSize = 8.5.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            maxLines = 1
-                                        )
-                                    }
-                                )
-                            }
-
-                            // App Version Badge on Nav Bar
-                            Row(
+                        if (!isScannerMapFullScreen || selectedTab != 2) {
+                            Column(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(bottom = 6.dp, top = 0.dp),
-                                horizontalArrangement = Arrangement.Center,
-                                verticalAlignment = Alignment.CenterVertically
+                                    .background(TacticalObsidian)
                             ) {
-                                Surface(
-                                    color = TacticalSurface,
-                                    shape = RoundedCornerShape(10.dp),
-                                    border = androidx.compose.foundation.BorderStroke(1.dp, TacticalBorder),
-                                    modifier = Modifier.clickable {
-                                        Toast.makeText(
-                                            this@MainActivity,
-                                            "Auditing GitHub Releases for Tactical Updates...",
-                                            Toast.LENGTH_SHORT
-                                        ).show()
-                                        ReconApplication.instance.updateManager.checkForUpdates(isManual = true)
-                                    }
+                                NavigationBar(
+                                    containerColor = TacticalObsidian,
+                                    contentColor = ReconCyan,
+                                    tonalElevation = 0.dp
                                 ) {
-                                    Row(
-                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
-                                        verticalAlignment = Alignment.CenterVertically
+                                    NavigationBarItem(
+                                        selected = selectedTab == 0,
+                                        onClick = {
+                                            selectedTab = 0
+                                            isScannerMapFullScreen = false
+                                        },
+                                        icon = {
+                                            Icon(
+                                                imageVector = Icons.Default.Speed,
+                                                contentDescription = "HUD",
+                                                tint = if (selectedTab == 0) ReconCyan else TextSecondary
+                                            )
+                                        },
+                                        label = {
+                                            Text(
+                                                text = "HUD",
+                                                color = if (selectedTab == 0) ReconCyan else TextSecondary,
+                                                fontFamily = FontFamily.Monospace,
+                                                fontSize = 8.5.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                maxLines = 1
+                                            )
+                                        }
+                                    )
+
+                                    NavigationBarItem(
+                                        selected = selectedTab == 1,
+                                        onClick = {
+                                            selectedTab = 1
+                                            isScannerMapFullScreen = false
+                                        },
+                                        icon = {
+                                            Icon(
+                                                imageVector = Icons.Default.Map,
+                                                contentDescription = "MAP",
+                                                tint = if (selectedTab == 1) ReconCyan else TextSecondary
+                                            )
+                                        },
+                                        label = {
+                                            Text(
+                                                text = "MAP",
+                                                color = if (selectedTab == 1) ReconCyan else TextSecondary,
+                                                fontFamily = FontFamily.Monospace,
+                                                fontSize = 8.5.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                maxLines = 1
+                                            )
+                                        }
+                                    )
+
+                                    NavigationBarItem(
+                                        selected = selectedTab == 2,
+                                        onClick = { selectedTab = 2 },
+                                        icon = {
+                                            Icon(
+                                                imageVector = Icons.Default.Sensors,
+                                                contentDescription = "SCANNER",
+                                                tint = if (selectedTab == 2) ReconCyan else TextSecondary
+                                            )
+                                        },
+                                        label = {
+                                            Text(
+                                                text = "SCANNER",
+                                                color = if (selectedTab == 2) ReconCyan else TextSecondary,
+                                                fontFamily = FontFamily.Monospace,
+                                                fontSize = 8.5.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                maxLines = 1
+                                            )
+                                        }
+                                    )
+
+                                    NavigationBarItem(
+                                        selected = selectedTab == 3,
+                                        onClick = {
+                                            selectedTab = 3
+                                            isScannerMapFullScreen = false
+                                        },
+                                        icon = {
+                                            Icon(
+                                                imageVector = Icons.Default.Timelapse,
+                                                contentDescription = "TIMELINE",
+                                                tint = if (selectedTab == 3) ReconCyan else TextSecondary
+                                            )
+                                        },
+                                        label = {
+                                            Text(
+                                                text = "TIMELINE",
+                                                color = if (selectedTab == 3) ReconCyan else TextSecondary,
+                                                fontFamily = FontFamily.Monospace,
+                                                fontSize = 8.5.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                maxLines = 1
+                                            )
+                                        }
+                                    )
+
+                                    NavigationBarItem(
+                                        selected = selectedTab == 4,
+                                        onClick = {
+                                            selectedTab = 4
+                                            isScannerMapFullScreen = false
+                                        },
+                                        icon = {
+                                            Icon(
+                                                imageVector = Icons.Default.DirectionsCar,
+                                                contentDescription = "VEHICLE",
+                                                tint = if (selectedTab == 4) ReconCyan else TextSecondary
+                                            )
+                                        },
+                                        label = {
+                                            Text(
+                                                text = "VEHICLE",
+                                                color = if (selectedTab == 4) ReconCyan else TextSecondary,
+                                                fontFamily = FontFamily.Monospace,
+                                                fontSize = 8.5.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                maxLines = 1
+                                            )
+                                        }
+                                    )
+
+                                    NavigationBarItem(
+                                        selected = selectedTab == 5,
+                                        onClick = {
+                                            selectedTab = 5
+                                            isScannerMapFullScreen = false
+                                        },
+                                        icon = {
+                                            Icon(
+                                                imageVector = Icons.Default.Settings,
+                                                contentDescription = "SETTINGS",
+                                                tint = if (selectedTab == 5) ReconCyan else TextSecondary
+                                            )
+                                        },
+                                        label = {
+                                            Text(
+                                                text = "SETTINGS",
+                                                color = if (selectedTab == 5) ReconCyan else TextSecondary,
+                                                fontFamily = FontFamily.Monospace,
+                                                fontSize = 8.5.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                maxLines = 1
+                                            )
+                                        }
+                                    )
+                                }
+
+                                // App Version Badge on Nav Bar
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(bottom = 6.dp, top = 0.dp),
+                                    horizontalArrangement = Arrangement.Center,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Surface(
+                                        color = TacticalSurface,
+                                        shape = RoundedCornerShape(10.dp),
+                                        border = androidx.compose.foundation.BorderStroke(1.dp, TacticalBorder),
+                                        modifier = Modifier.clickable {
+                                            Toast.makeText(
+                                                this@MainActivity,
+                                                "Auditing GitHub Releases for Tactical Updates...",
+                                                Toast.LENGTH_SHORT
+                                            ).show()
+                                            ReconApplication.instance.updateManager.checkForUpdates(isManual = true)
+                                        }
                                     ) {
-                                        Box(
-                                            modifier = Modifier
-                                                .size(6.dp)
-                                                .background(ReconGreen, CircleShape)
-                                        )
-                                        Spacer(modifier = Modifier.width(6.dp))
-                                        Text(
-                                            text = "RECONDRIVE v${com.recondrive.app.BuildConfig.VERSION_NAME}",
-                                            color = ReconCyan,
-                                            fontFamily = FontFamily.Monospace,
-                                            fontSize = 9.sp,
-                                            fontWeight = FontWeight.Bold
-                                        )
+                                        Row(
+                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(6.dp)
+                                                    .background(ReconGreen, CircleShape)
+                                            )
+                                            Spacer(modifier = Modifier.width(6.dp))
+                                            Text(
+                                                text = "RECONDRIVE v${com.recondrive.app.BuildConfig.VERSION_NAME}",
+                                                color = ReconCyan,
+                                                fontFamily = FontFamily.Monospace,
+                                                fontSize = 9.sp,
+                                                fontWeight = FontWeight.Bold
+                                            )
+                                        }
                                     }
                                 }
                             }
@@ -461,12 +484,12 @@ class MainActivity : ComponentActivity() {
                     Column(
                         modifier = Modifier
                             .fillMaxSize()
-                            .padding(paddingValues)
+                            .padding(if (isScannerMapFullScreen && selectedTab == 2) PaddingValues(0.dp) else paddingValues)
                     ) {
                         // =====================================================
                         // TACTICAL PERMISSIONS MISSING WARNING BANNER
                         // =====================================================
-                        if (missingPermissions.isNotEmpty()) {
+                        if (missingPermissions.isNotEmpty() && (!isScannerMapFullScreen || selectedTab != 2)) {
                             Surface(
                                 color = Color(0xFFD50000).copy(alpha = 0.22f),
                                 shape = RoundedCornerShape(8.dp),
@@ -619,10 +642,13 @@ class MainActivity : ComponentActivity() {
                                     currentHeading = currentHeading,
                                     deviceHeading = deviceHeading,
                                     currentSpeedKmh = currentSpeedKmh,
+                                    isMapFullScreen = isScannerMapFullScreen,
+                                    onToggleFullScreen = { isScannerMapFullScreen = !isScannerMapFullScreen },
                                     onNavigateToLocation = { name, destLat, destLon ->
                                         targetWaypoint = destLat to destLon
                                         targetWaypointName = name
                                         selectedTab = 1
+                                        isScannerMapFullScreen = false
                                         Toast.makeText(
                                             this@MainActivity,
                                             "RF Target locked: $name. Opening Tactical Map...",

@@ -21,10 +21,13 @@ import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.activity.compose.BackHandler
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -69,9 +72,22 @@ fun TacticalScannerScreen(
     currentHeading: Float = 0f,
     deviceHeading: Float = currentHeading,
     currentSpeedKmh: Float = 0f,
+    isMapFullScreen: Boolean = false,
+    onToggleFullScreen: () -> Unit = {},
     onNavigateToLocation: (name: String, lat: Double, lon: Double) -> Unit = { _, _, _ -> },
     onOpenBfiSpatialScanner: () -> Unit = {}
 ) {
+    var internalFullScreen by rememberSaveable { mutableStateOf(false) }
+    val effectiveFullScreen = isMapFullScreen || internalFullScreen
+    val toggleFullScreen = {
+        internalFullScreen = !effectiveFullScreen
+        onToggleFullScreen()
+    }
+
+    BackHandler(enabled = effectiveFullScreen) {
+        toggleFullScreen()
+    }
+
     val detectedTargets by scannerManager.detectedTargets.collectAsState()
     val isScanning by scannerManager.isScanning.collectAsState()
     val isScannerPaused by scannerManager.isScannerPaused.collectAsState()
@@ -225,95 +241,131 @@ fun TacticalScannerScreen(
         modifier = Modifier
             .fillMaxSize()
             .background(TacticalObsidian)
-            .padding(horizontal = 12.dp, vertical = 6.dp)
+            .padding(
+                if (effectiveFullScreen) PaddingValues(0.dp) else PaddingValues(horizontal = 12.dp, vertical = 6.dp)
+            )
     ) {
-        // =====================================================================
-        // 1. TOP STATUS ROW (SIGINT Scanner Title, Pause/Resume, Demo Toggle)
-        // =====================================================================
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(vertical = 2.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = "SIGINT RF SCANNER // SPECTRUM AUDIT",
-                    color = ReconCyan,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold,
-                    fontFamily = FontFamily.Monospace,
-                    letterSpacing = 0.5.sp
-                )
-                Text(
-                    text = if (isScannerPaused) "SCANNER PAUSED (BACKGROUND IDLE)" else "24/7 LIVE PROXIMITY ACTIVE • WI-FI 2.4/5GHz • BLE • BT • P2P • CELL • MAD",
-                    color = if (isScannerPaused) ReconAmber else TextSecondary,
-                    fontSize = 8.5.sp,
-                    fontFamily = FontFamily.Monospace
-                )
-            }
-
-            // Pause / Resume Toggle Button
-            Surface(
-                color = TacticalSurface,
-                shape = RoundedCornerShape(12.dp),
-                border = androidx.compose.foundation.BorderStroke(1.dp, if (isScannerPaused) ReconAmber else ReconGreen),
-                modifier = Modifier.clickable { scannerManager.togglePause() }
+        if (!effectiveFullScreen) {
+            // =====================================================================
+            // 1. TOP STATUS ROW (SIGINT Scanner Title, Pause/Resume, Demo Toggle)
+            // =====================================================================
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 2.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(3.dp)
-                ) {
-                    Icon(
-                        imageVector = if (isScannerPaused) Icons.Default.PlayArrow else Icons.Default.Pause,
-                        contentDescription = if (isScannerPaused) "Resume" else "Pause",
-                        tint = if (isScannerPaused) ReconAmber else ReconGreen,
-                        modifier = Modifier.size(10.dp)
-                    )
+                Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = if (isScannerPaused) "PAUSED" else "ACTIVE",
-                        color = if (isScannerPaused) ReconAmber else ReconGreen,
-                        fontSize = 8.5.sp,
-                        fontWeight = FontWeight.Bold,
-                        fontFamily = FontFamily.Monospace
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.width(4.dp))
-
-            // 3D Beamforming Spatial Scanner Quick Launch Button
-            Surface(
-                color = TacticalSurface,
-                shape = RoundedCornerShape(12.dp),
-                border = androidx.compose.foundation.BorderStroke(1.dp, ReconCyan),
-                modifier = Modifier.clickable {
-                    scannerManager.soundManager?.playUiClick()
-                    onOpenBfiSpatialScanner()
-                }
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(3.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.ViewInAr,
-                        contentDescription = "3D Beam",
-                        tint = ReconCyan,
-                        modifier = Modifier.size(10.dp)
-                    )
-                    Text(
-                        text = "3D BEAM",
+                        text = "SIGINT RF SCANNER // SPECTRUM AUDIT",
                         color = ReconCyan,
-                        fontSize = 8.5.sp,
+                        fontSize = 12.sp,
                         fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace,
+                        letterSpacing = 0.5.sp
+                    )
+                    Text(
+                        text = if (isScannerPaused) "SCANNER PAUSED (BACKGROUND IDLE)" else "24/7 LIVE PROXIMITY ACTIVE • WI-FI 2.4/5GHz • BLE • BT • P2P • CELL • MAD",
+                        color = if (isScannerPaused) ReconAmber else TextSecondary,
+                        fontSize = 8.5.sp,
                         fontFamily = FontFamily.Monospace
                     )
                 }
-            }
+
+                // Pause / Resume Toggle Button
+                Surface(
+                    color = TacticalSurface,
+                    shape = RoundedCornerShape(12.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, if (isScannerPaused) ReconAmber else ReconGreen),
+                    modifier = Modifier.clickable { scannerManager.togglePause() }
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(3.dp)
+                    ) {
+                        Icon(
+                            imageVector = if (isScannerPaused) Icons.Default.PlayArrow else Icons.Default.Pause,
+                            contentDescription = if (isScannerPaused) "Resume" else "Pause",
+                            tint = if (isScannerPaused) ReconAmber else ReconGreen,
+                            modifier = Modifier.size(10.dp)
+                        )
+                        Text(
+                            text = if (isScannerPaused) "PAUSED" else "ACTIVE",
+                            color = if (isScannerPaused) ReconAmber else ReconGreen,
+                            fontSize = 8.5.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.Monospace
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.width(4.dp))
+
+                // Fullscreen Map Quick Launch Button
+                Surface(
+                    color = TacticalSurface,
+                    shape = RoundedCornerShape(12.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, ReconCyan),
+                    modifier = Modifier.clickable {
+                        scannerManager.soundManager?.playUiClick()
+                        toggleFullScreen()
+                    }
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(3.dp)
+                    ) {
+                        Icon(
+                            imageVector = if (effectiveFullScreen) Icons.Default.FullscreenExit else Icons.Default.Fullscreen,
+                            contentDescription = "Fullscreen Map",
+                            tint = ReconCyan,
+                            modifier = Modifier.size(10.dp)
+                        )
+                        Text(
+                            text = if (effectiveFullScreen) "EXIT MAP" else "FULL MAP",
+                            color = ReconCyan,
+                            fontSize = 8.5.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.Monospace
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.width(4.dp))
+
+                // 3D Beamforming Spatial Scanner Quick Launch Button
+                Surface(
+                    color = TacticalSurface,
+                    shape = RoundedCornerShape(12.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, ReconCyan),
+                    modifier = Modifier.clickable {
+                        scannerManager.soundManager?.playUiClick()
+                        onOpenBfiSpatialScanner()
+                    }
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(3.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.ViewInAr,
+                            contentDescription = "3D Beam",
+                            tint = ReconCyan,
+                            modifier = Modifier.size(10.dp)
+                        )
+                        Text(
+                            text = "3D BEAM",
+                            color = ReconCyan,
+                            fontSize = 8.5.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.Monospace
+                        )
+                    }
+                }
 
             Spacer(modifier = Modifier.width(5.dp))
 
@@ -879,18 +931,26 @@ fun TacticalScannerScreen(
         }
 
         Spacer(modifier = Modifier.height(4.dp))
+    }
 
-        // =====================================================================
-        // 3. HERO LIVE SCANNER MAP WITH REAL OSM TILES & COURSE-UP ROTATION
-        // =====================================================================
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .weight(1f)
-                .clip(RoundedCornerShape(12.dp))
-                .background(TacticalSurface)
-                .border(1.dp, TacticalBorder, RoundedCornerShape(12.dp))
-        ) {
+    // =====================================================================
+    // 3. HERO LIVE SCANNER MAP WITH REAL OSM TILES & COURSE-UP ROTATION
+    // =====================================================================
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(
+                if (effectiveFullScreen) {
+                    Modifier.fillMaxHeight()
+                } else {
+                    Modifier
+                        .weight(1f)
+                        .clip(RoundedCornerShape(12.dp))
+                        .border(1.dp, TacticalBorder, RoundedCornerShape(12.dp))
+                }
+            )
+            .background(TacticalSurface)
+    ) {
             LiveScannerRoadMapCanvas(
                 cameraLat = cameraLat,
                 cameraLon = cameraLon,
@@ -998,13 +1058,35 @@ fun TacticalScannerScreen(
                 }
             }
 
-            // Center-Right Floating Tactile Zoom Control Bar (+ and - Buttons)
+            // Center-Right Floating Tactile Control Bar (Fullscreen, Zoom In, Zoom Out)
             Column(
                 modifier = Modifier
                     .align(Alignment.CenterEnd)
                     .padding(end = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
+                // Fullscreen Map Toggle Button
+                Surface(
+                    color = TacticalObsidian.copy(alpha = 0.88f),
+                    shape = CircleShape,
+                    border = androidx.compose.foundation.BorderStroke(1.5.dp, ReconCyan),
+                    modifier = Modifier
+                        .size(32.dp)
+                        .clickable {
+                            scannerManager.soundManager?.playUiClick()
+                            toggleFullScreen()
+                        }
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        Icon(
+                            imageVector = if (effectiveFullScreen) Icons.Default.FullscreenExit else Icons.Default.Fullscreen,
+                            contentDescription = if (effectiveFullScreen) "Exit Fullscreen" else "Fullscreen Map",
+                            tint = ReconCyan,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+                }
+
                 // Zoom In Button (+)
                 Surface(
                     color = TacticalObsidian.copy(alpha = 0.88f),
@@ -1070,9 +1152,210 @@ fun TacticalScannerScreen(
                     }
                 }
             }
+
+            // Floating Emergency Siren Banner when in Fullscreen Mode
+            if (effectiveFullScreen && sirenTelemetry.isSirenDetected) {
+                Surface(
+                    color = Color(0xFFD50000).copy(alpha = 0.88f),
+                    shape = RoundedCornerShape(8.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.5.dp, Color(0xFFFF1744)),
+                    modifier = Modifier
+                        .align(Alignment.TopCenter)
+                        .padding(top = 8.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Icon(imageVector = Icons.Default.Warning, contentDescription = null, tint = Color(0xFFFF1744), modifier = Modifier.size(14.dp))
+                        Text(text = sirenTelemetry.alertMessage, color = Color.White, fontSize = 9.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
+                    }
+                }
+            }
+
+            // Bottom Floating Tactical Overlays in Fullscreen Mode
+            if (effectiveFullScreen) {
+                Column(
+                    modifier = Modifier
+                        .align(Alignment.BottomStart)
+                        .padding(horizontal = 8.dp, vertical = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    // Floating Selected Target Card (if a target is tapped on map)
+                    val selectedTarget = targetsInRange.firstOrNull { it.id == selectedTargetId }
+                    if (selectedTarget != null) {
+                        Surface(
+                            color = TacticalObsidian.copy(alpha = 0.92f),
+                            shape = RoundedCornerShape(8.dp),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, ReconCyan),
+                            modifier = Modifier.fillMaxWidth(0.92f)
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = selectedTarget.displayName,
+                                        color = ReconCyan,
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        fontFamily = FontFamily.Monospace,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                    Text(
+                                        text = "${selectedTarget.category.name} • ${"%.0f".format(selectedTarget.estimatedDistanceMeters)}m • ${selectedTarget.smoothedRssi} dBm",
+                                        color = TextSecondary,
+                                        fontSize = 8.5.sp,
+                                        fontFamily = FontFamily.Monospace
+                                    )
+                                }
+                                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                    IconButton(
+                                        onClick = { editingTarget = selectedTarget },
+                                        modifier = Modifier.size(28.dp)
+                                    ) {
+                                        Icon(imageVector = Icons.Default.EditNote, contentDescription = "Intel", tint = ReconCyan, modifier = Modifier.size(16.dp))
+                                    }
+                                    IconButton(
+                                        onClick = { selectedTargetId = null },
+                                        modifier = Modifier.size(28.dp)
+                                    ) {
+                                        Icon(imageVector = Icons.Default.Close, contentDescription = "Deselect", tint = TextSecondary, modifier = Modifier.size(16.dp))
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // Floating Category Filter Chips in Fullscreen
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth(0.92f)
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        FilterChipItem(
+                            label = "ALL (${targetsInRange.size})",
+                            selected = selectedFilterCategory == null && !filterSavedOnly,
+                            activeColor = ReconCyan,
+                            onClick = {
+                                selectedFilterCategory = null
+                                filterSavedOnly = false
+                            }
+                        )
+                        FilterChipItem(
+                            label = "⭐ SAVED ($savedCount)",
+                            selected = filterSavedOnly,
+                            activeColor = ReconAmber,
+                            onClick = {
+                                filterSavedOnly = !filterSavedOnly
+                                selectedFilterCategory = null
+                            }
+                        )
+                        FilterChipItem(
+                            label = "🔑 KEYS ($keyCount)",
+                            selected = selectedFilterCategory == RfCategory.CAR_KEY && !filterSavedOnly,
+                            activeColor = Color(0xFFFFD600),
+                            onClick = {
+                                filterSavedOnly = false
+                                selectedFilterCategory = RfCategory.CAR_KEY
+                            }
+                        )
+                        FilterChipItem(
+                            label = "🚗 CARS ($vehicleCount)",
+                            selected = selectedFilterCategory == RfCategory.VEHICLE && !filterSavedOnly,
+                            activeColor = ReconCyan,
+                            onClick = {
+                                filterSavedOnly = false
+                                selectedFilterCategory = RfCategory.VEHICLE
+                            }
+                        )
+                        FilterChipItem(
+                            label = "📷 CCTV ($cctvCount)",
+                            selected = selectedFilterCategory == RfCategory.CCTV_SURVEILLANCE && !filterSavedOnly,
+                            activeColor = Color(0xFFFF5252),
+                            onClick = {
+                                filterSavedOnly = false
+                                selectedFilterCategory = RfCategory.CCTV_SURVEILLANCE
+                            }
+                        )
+                        if (cellCount > 0) {
+                            FilterChipItem(
+                                label = "📡 CELL ($cellCount)",
+                                selected = selectedFilterCategory == RfCategory.CELL_TOWER && !filterSavedOnly,
+                                activeColor = Color(0xFF00E5FF),
+                                onClick = {
+                                    filterSavedOnly = false
+                                    selectedFilterCategory = RfCategory.CELL_TOWER
+                                }
+                            )
+                        }
+                        if (wifiCount > 0) {
+                            FilterChipItem(
+                                label = "📶 WI-FI ($wifiCount)",
+                                selected = selectedFilterCategory == RfCategory.ACCESS_POINT && !filterSavedOnly,
+                                activeColor = ReconGreen,
+                                onClick = {
+                                    filterSavedOnly = false
+                                    selectedFilterCategory = RfCategory.ACCESS_POINT
+                                }
+                            )
+                        }
+                        if (droneCount > 0) {
+                            FilterChipItem(
+                                label = "🛸 DRONE ($droneCount)",
+                                selected = selectedFilterCategory == RfCategory.DRONE_UAV && !filterSavedOnly,
+                                activeColor = Color(0xFFBA68C8),
+                                onClick = {
+                                    filterSavedOnly = false
+                                    selectedFilterCategory = RfCategory.DRONE_UAV
+                                }
+                            )
+                        }
+                    }
+
+                    // Floating Exit Fullscreen Button
+                    Surface(
+                        color = TacticalObsidian.copy(alpha = 0.90f),
+                        shape = RoundedCornerShape(6.dp),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, ReconCyan),
+                        modifier = Modifier.clickable {
+                            scannerManager.soundManager?.playUiClick()
+                            toggleFullScreen()
+                        }
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.FullscreenExit,
+                                contentDescription = "Exit Fullscreen",
+                                tint = ReconCyan,
+                                modifier = Modifier.size(13.dp)
+                            )
+                            Text(
+                                text = "EXIT FULLSCREEN",
+                                color = ReconCyan,
+                                fontSize = 8.5.sp,
+                                fontWeight = FontWeight.Bold,
+                                fontFamily = FontFamily.Monospace
+                            )
+                        }
+                    }
+                }
+            }
         }
 
-        Spacer(modifier = Modifier.height(6.dp))
+        if (!effectiveFullScreen) {
+            Spacer(modifier = Modifier.height(6.dp))
 
         // =====================================================================
         // 4. CATEGORY & SAVED FILTER CHIPS
@@ -1255,6 +1538,7 @@ fun TacticalScannerScreen(
                     )
                 }
             }
+        }
         }
 
         // Technology Details & Operational Principles Dialog
