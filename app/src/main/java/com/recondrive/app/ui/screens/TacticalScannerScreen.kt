@@ -1209,7 +1209,7 @@ fun TacticalScannerScreen(
                                         overflow = TextOverflow.Ellipsis
                                     )
                                     Text(
-                                        text = "${selectedTarget.category.name} • ${"%.0f".format(selectedTarget.estimatedDistanceMeters)}m • ${selectedTarget.smoothedRssi} dBm",
+                                        text = "${selectedTarget.category.name} • ${"%.0f".format(selectedTarget.estimatedDistanceMeters)}m • ${selectedTarget.rssi} dBm",
                                         color = TextSecondary,
                                         fontSize = 8.5.sp,
                                         fontFamily = FontFamily.Monospace
