@@ -17,6 +17,8 @@ import androidx.compose.ui.platform.LocalContext
 import coil.compose.AsyncImage
 import coil.request.ImageRequest
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -117,7 +119,7 @@ fun TacticalScannerScreen(
     var cameraLon by remember { mutableDoubleStateOf(currentLon) }
     var isFollowingVehicle by remember { mutableStateOf(true) }
 
-    // Range selection: Expansive Tactical Scanning (25m, 50m, 100m, 250m, 500m, 1000m / 1km max)
+    // Range selection: Expansive Tactical Scanning (10m, 15m, 25m, 50m, 100m, 250m, 500m, 1000m / 1km max)
     var selectedRangeMeters by remember { mutableFloatStateOf(500f) }
     var dynamicZoom by remember { mutableFloatStateOf(14.8f) }
 
@@ -125,10 +127,12 @@ fun TacticalScannerScreen(
         if (zoomFactor > 0f && !zoomFactor.isNaN() && !zoomFactor.isInfinite()) {
             val delta = log2(zoomFactor.toDouble()).toFloat()
             if (!delta.isNaN() && !delta.isInfinite()) {
-                val newZoom = (dynamicZoom + delta).coerceIn(12.0f, 21.0f)
+                val newZoom = (dynamicZoom + delta).coerceIn(12.0f, 22.0f)
                 dynamicZoom = newZoom
                 selectedRangeMeters = when {
-                    newZoom >= 19.0f -> 25f
+                    newZoom >= 20.6f -> 10f
+                    newZoom >= 19.8f -> 15f
+                    newZoom >= 18.8f -> 25f
                     newZoom >= 17.8f -> 50f
                     newZoom >= 16.8f -> 100f
                     newZoom >= 15.5f -> 250f
@@ -142,6 +146,8 @@ fun TacticalScannerScreen(
     val onSelectRangePreset: (Float) -> Unit = { rangeM ->
         selectedRangeMeters = rangeM
         dynamicZoom = when (rangeM) {
+            10f -> 21.0f
+            15f -> 20.2f
             25f -> 19.5f
             50f -> 18.2f
             100f -> 17.2f
@@ -150,6 +156,24 @@ fun TacticalScannerScreen(
             1000f -> 13.5f
             else -> 14.8f
         }
+    }
+
+    // Default to ~10m (then 15m) when entering full-screen mode
+    var hasInitializedFullScreenZoom by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(effectiveFullScreen) {
+        if (effectiveFullScreen && !hasInitializedFullScreenZoom) {
+            onSelectRangePreset(10f)
+            hasInitializedFullScreenZoom = true
+        } else if (!effectiveFullScreen) {
+            hasInitializedFullScreenZoom = false
+        }
+    }
+
+    val rangeSteps = listOf(10f, 15f, 25f, 50f, 100f, 250f, 500f, 1000f)
+    val cycleRange = {
+        val currentIndex = rangeSteps.indexOfFirst { abs(it - selectedRangeMeters) < 0.5f }
+        val nextIndex = if (currentIndex in rangeSteps.indices) (currentIndex + 1) % rangeSteps.size else 0
+        onSelectRangePreset(rangeSteps[nextIndex])
     }
 
     // Sync user location and speed with scanner manager and anchor targets relative to vehicle
@@ -247,7 +271,7 @@ fun TacticalScannerScreen(
     ) {
         if (!effectiveFullScreen) {
             // =====================================================================
-            // 1. TOP STATUS ROW (SIGINT Scanner Title, Pause/Resume, Demo Toggle)
+            // 1. TOP STATUS ROW (SIGINT Scanner Title, Pause/Resume, Sweep)
             // =====================================================================
             Row(
                 modifier = Modifier
@@ -256,57 +280,95 @@ fun TacticalScannerScreen(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Column(modifier = Modifier.weight(1f)) {
+                Column(modifier = Modifier.weight(1f, fill = false)) {
                     Text(
                         text = "SIGINT RF SCANNER // SPECTRUM AUDIT",
                         color = ReconCyan,
-                        fontSize = 12.sp,
+                        fontSize = 11.5.sp,
                         fontWeight = FontWeight.Bold,
                         fontFamily = FontFamily.Monospace,
-                        letterSpacing = 0.5.sp
+                        letterSpacing = 0.5.sp,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                     Text(
-                        text = if (isScannerPaused) "SCANNER PAUSED (BACKGROUND IDLE)" else "24/7 LIVE PROXIMITY ACTIVE • WI-FI 2.4/5GHz • BLE • BT • P2P • CELL • MAD",
+                        text = if (isScannerPaused) "SCANNER PAUSED (IDLE)" else "24/7 LIVE PROXIMITY ACTIVE • WI-FI • BLE • CELL",
                         color = if (isScannerPaused) ReconAmber else TextSecondary,
-                        fontSize = 8.5.sp,
-                        fontFamily = FontFamily.Monospace
+                        fontSize = 8.sp,
+                        fontFamily = FontFamily.Monospace,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                 }
 
-                // Pause / Resume Toggle Button
-                Surface(
-                    color = TacticalSurface,
-                    shape = RoundedCornerShape(12.dp),
-                    border = androidx.compose.foundation.BorderStroke(1.dp, if (isScannerPaused) ReconAmber else ReconGreen),
-                    modifier = Modifier.clickable { scannerManager.togglePause() }
+                Spacer(modifier = Modifier.width(6.dp))
+
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(3.dp)
+                    // Pause / Resume Toggle Button
+                    Surface(
+                        color = TacticalSurface,
+                        shape = RoundedCornerShape(10.dp),
+                        border = androidx.compose.foundation.BorderStroke(1.dp, if (isScannerPaused) ReconAmber else ReconGreen),
+                        modifier = Modifier.clickable { scannerManager.togglePause() }
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(3.dp)
+                        ) {
+                            Icon(
+                                imageVector = if (isScannerPaused) Icons.Default.PlayArrow else Icons.Default.Pause,
+                                contentDescription = if (isScannerPaused) "Resume" else "Pause",
+                                tint = if (isScannerPaused) ReconAmber else ReconGreen,
+                                modifier = Modifier.size(10.dp)
+                            )
+                            Text(
+                                text = if (isScannerPaused) "PAUSED" else "ACTIVE",
+                                color = if (isScannerPaused) ReconAmber else ReconGreen,
+                                fontSize = 8.sp,
+                                fontWeight = FontWeight.Bold,
+                                fontFamily = FontFamily.Monospace
+                            )
+                        }
+                    }
+
+                    // Rescan Sweep Button
+                    IconButton(
+                        onClick = { scannerManager.triggerImmediateSweep(currentLat, currentLon) },
+                        modifier = Modifier
+                            .size(26.dp)
+                            .background(TacticalSurface, CircleShape)
+                            .border(1.dp, TacticalBorder, CircleShape)
                     ) {
                         Icon(
-                            imageVector = if (isScannerPaused) Icons.Default.PlayArrow else Icons.Default.Pause,
-                            contentDescription = if (isScannerPaused) "Resume" else "Pause",
-                            tint = if (isScannerPaused) ReconAmber else ReconGreen,
-                            modifier = Modifier.size(10.dp)
-                        )
-                        Text(
-                            text = if (isScannerPaused) "PAUSED" else "ACTIVE",
-                            color = if (isScannerPaused) ReconAmber else ReconGreen,
-                            fontSize = 8.5.sp,
-                            fontWeight = FontWeight.Bold,
-                            fontFamily = FontFamily.Monospace
+                            imageVector = Icons.Default.Refresh,
+                            contentDescription = "Sweep Spectrum",
+                            tint = ReconCyan,
+                            modifier = Modifier.size(13.dp)
                         )
                     }
                 }
+            }
 
-                Spacer(modifier = Modifier.width(4.dp))
+            Spacer(modifier = Modifier.height(3.dp))
 
+            // =====================================================================
+            // 1B. TACTICAL QUICK ACTION PILLS (Full Map, 3D Beam, Live, Siren)
+            // =====================================================================
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(5.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
                 // Fullscreen Map Quick Launch Button
                 Surface(
                     color = TacticalSurface,
-                    shape = RoundedCornerShape(12.dp),
+                    shape = RoundedCornerShape(10.dp),
                     border = androidx.compose.foundation.BorderStroke(1.dp, ReconCyan),
                     modifier = Modifier.clickable {
                         scannerManager.soundManager?.playUiClick()
@@ -319,27 +381,25 @@ fun TacticalScannerScreen(
                         horizontalArrangement = Arrangement.spacedBy(3.dp)
                     ) {
                         Icon(
-                            imageVector = if (effectiveFullScreen) Icons.Default.FullscreenExit else Icons.Default.Fullscreen,
+                            imageVector = Icons.Default.Fullscreen,
                             contentDescription = "Fullscreen Map",
                             tint = ReconCyan,
-                            modifier = Modifier.size(10.dp)
+                            modifier = Modifier.size(11.dp)
                         )
                         Text(
-                            text = if (effectiveFullScreen) "EXIT MAP" else "FULL MAP",
+                            text = "FULL MAP",
                             color = ReconCyan,
-                            fontSize = 8.5.sp,
+                            fontSize = 8.sp,
                             fontWeight = FontWeight.Bold,
                             fontFamily = FontFamily.Monospace
                         )
                     }
                 }
 
-                Spacer(modifier = Modifier.width(4.dp))
-
                 // 3D Beamforming Spatial Scanner Quick Launch Button
                 Surface(
                     color = TacticalSurface,
-                    shape = RoundedCornerShape(12.dp),
+                    shape = RoundedCornerShape(10.dp),
                     border = androidx.compose.foundation.BorderStroke(1.dp, ReconCyan),
                     modifier = Modifier.clickable {
                         scannerManager.soundManager?.playUiClick()
@@ -355,95 +415,73 @@ fun TacticalScannerScreen(
                             imageVector = Icons.Default.ViewInAr,
                             contentDescription = "3D Beam",
                             tint = ReconCyan,
-                            modifier = Modifier.size(10.dp)
+                            modifier = Modifier.size(11.dp)
                         )
                         Text(
                             text = "3D BEAM",
                             color = ReconCyan,
-                            fontSize = 8.5.sp,
+                            fontSize = 8.sp,
                             fontWeight = FontWeight.Bold,
                             fontFamily = FontFamily.Monospace
                         )
                     }
                 }
 
-            Spacer(modifier = Modifier.width(5.dp))
-
-            // Pure Live Hardware Sniffing Status Pill
-            Surface(
-                color = TacticalSurface,
-                shape = RoundedCornerShape(12.dp),
-                border = androidx.compose.foundation.BorderStroke(1.dp, ReconGreen)
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(3.dp)
+                // Pure Live Hardware Sniffing Status Pill
+                Surface(
+                    color = TacticalSurface,
+                    shape = RoundedCornerShape(10.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, ReconGreen)
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .size(5.dp)
-                            .clip(CircleShape)
-                            .background(ReconGreen)
-                    )
-                    Text(
-                        text = "LIVE",
-                        color = ReconGreen,
-                        fontSize = 8.5.sp,
-                        fontWeight = FontWeight.Bold,
-                        fontFamily = FontFamily.Monospace
-                    )
+                    Row(
+                        modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(3.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(5.dp)
+                                .clip(CircleShape)
+                                .background(ReconGreen)
+                        )
+                        Text(
+                            text = "LIVE",
+                            color = ReconGreen,
+                            fontSize = 8.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.Monospace
+                        )
+                    }
+                }
+
+                // Siren Doppler Acoustic Detector Toggle Pill (Safe user-controlled microphone listener)
+                Surface(
+                    color = TacticalSurface,
+                    shape = RoundedCornerShape(10.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, if (isSirenDetectorEnabled) ReconGreen else TextSecondary),
+                    modifier = Modifier.clickable { scannerManager.toggleSirenDetector() }
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(3.dp)
+                    ) {
+                        Icon(
+                            imageVector = if (isSirenDetectorEnabled) Icons.Default.Mic else Icons.Default.MicOff,
+                            contentDescription = "Acoustic Siren Doppler Listener",
+                            tint = if (isSirenDetectorEnabled) ReconGreen else TextSecondary,
+                            modifier = Modifier.size(10.dp)
+                        )
+                        Text(
+                            text = if (isSirenDetectorEnabled) "SIREN: ON" else "SIREN: OFF",
+                            color = if (isSirenDetectorEnabled) ReconGreen else TextSecondary,
+                            fontSize = 8.sp,
+                            fontWeight = FontWeight.Bold,
+                            fontFamily = FontFamily.Monospace
+                        )
+                    }
                 }
             }
-
-            Spacer(modifier = Modifier.width(5.dp))
-
-            // Siren Doppler Acoustic Detector Toggle Pill (Safe user-controlled microphone listener)
-            Surface(
-                color = TacticalSurface,
-                shape = RoundedCornerShape(12.dp),
-                border = androidx.compose.foundation.BorderStroke(1.dp, if (isSirenDetectorEnabled) ReconGreen else TextSecondary),
-                modifier = Modifier.clickable { scannerManager.toggleSirenDetector() }
-            ) {
-                Row(
-                    modifier = Modifier.padding(horizontal = 7.dp, vertical = 3.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(3.dp)
-                ) {
-                    Icon(
-                        imageVector = if (isSirenDetectorEnabled) Icons.Default.Mic else Icons.Default.MicOff,
-                        contentDescription = "Acoustic Siren Doppler Listener",
-                        tint = if (isSirenDetectorEnabled) ReconGreen else TextSecondary,
-                        modifier = Modifier.size(10.dp)
-                    )
-                    Text(
-                        text = if (isSirenDetectorEnabled) "SIREN: ON" else "SIREN: OFF",
-                        color = if (isSirenDetectorEnabled) ReconGreen else TextSecondary,
-                        fontSize = 8.5.sp,
-                        fontWeight = FontWeight.Bold,
-                        fontFamily = FontFamily.Monospace
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.width(5.dp))
-
-            // Rescan Sweep Button
-            IconButton(
-                onClick = { scannerManager.triggerImmediateSweep(currentLat, currentLon) },
-                modifier = Modifier
-                    .size(28.dp)
-                    .background(TacticalSurface, CircleShape)
-                    .border(1.dp, TacticalBorder, CircleShape)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Refresh,
-                    contentDescription = "Sweep Spectrum",
-                    tint = ReconCyan,
-                    modifier = Modifier.size(14.dp)
-                )
-            }
-        }
 
         Spacer(modifier = Modifier.height(4.dp))
 
@@ -1030,16 +1068,17 @@ fun TacticalScannerScreen(
                 }
             }
 
-            // Top-Right Quick Range Selector (Expansive: 25m, 50m, 100m, 250m, 500m, 1km)
+            // Top-Right Quick Range Selector (10m, 15m, 25m, 50m, 100m, 250m, 500m, 1km)
             Row(
                 modifier = Modifier
                     .align(Alignment.TopEnd)
-                    .padding(8.dp),
+                    .padding(8.dp)
+                    .horizontalScroll(rememberScrollState()),
                 horizontalArrangement = Arrangement.spacedBy(4.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                listOf(25f, 50f, 100f, 250f, 500f, 1000f).forEach { r ->
-                    val isSelected = selectedRangeMeters == r
+                listOf(10f, 15f, 25f, 50f, 100f, 250f, 500f, 1000f).forEach { r ->
+                    val isSelected = abs(selectedRangeMeters - r) < 0.5f
                     Surface(
                         color = if (isSelected) ReconCyan.copy(alpha = 0.25f) else TacticalObsidian.copy(alpha = 0.85f),
                         shape = RoundedCornerShape(4.dp),
@@ -1058,13 +1097,34 @@ fun TacticalScannerScreen(
                 }
             }
 
-            // Center-Right Floating Tactile Control Bar (Fullscreen, Zoom In, Zoom Out)
+            // Center-Right Floating Tactile Control Bar (Range Cycle, Fullscreen, Zoom In, Zoom Out)
             Column(
                 modifier = Modifier
                     .align(Alignment.CenterEnd)
                     .padding(end = 8.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp)
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
             ) {
+                // Range Quick Cycle Pill
+                Surface(
+                    color = TacticalObsidian.copy(alpha = 0.88f),
+                    shape = RoundedCornerShape(6.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, ReconCyan),
+                    modifier = Modifier.clickable {
+                        scannerManager.soundManager?.playUiClick()
+                        cycleRange()
+                    }
+                ) {
+                    Text(
+                        text = if (selectedRangeMeters >= 1000f) "1km" else "${selectedRangeMeters.toInt()}m",
+                        color = ReconCyan,
+                        fontSize = 8.sp,
+                        fontWeight = FontWeight.Bold,
+                        fontFamily = FontFamily.Monospace,
+                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp)
+                    )
+                }
+
                 // Fullscreen Map Toggle Button
                 Surface(
                     color = TacticalObsidian.copy(alpha = 0.88f),
