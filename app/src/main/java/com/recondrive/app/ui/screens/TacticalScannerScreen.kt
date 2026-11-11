@@ -113,6 +113,7 @@ fun TacticalScannerScreen(
     var viewingCctvCamera by remember { mutableStateOf<PublicCctvCamera?>(null) }
     var showImsiForensicsDialog by remember { mutableStateOf(false) }
     var inspectingTech by remember { mutableStateOf<DetectionTechnology?>(null) }
+    var viewingDroneForensics by remember { mutableStateOf<DetectedRfTarget?>(null) }
 
     // Map viewport state
     var cameraLat by remember { mutableDoubleStateOf(currentLat) }
@@ -1275,7 +1276,27 @@ fun TacticalScannerScreen(
                                         fontFamily = FontFamily.Monospace
                                     )
                                 }
-                                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    if (selectedTarget.droneTelemetry != null) {
+                                        Surface(
+                                            color = Color(0xFFE040FB).copy(alpha = 0.25f),
+                                            shape = RoundedCornerShape(4.dp),
+                                            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE040FB)),
+                                            modifier = Modifier.clickable { viewingDroneForensics = selectedTarget }
+                                        ) {
+                                            Row(
+                                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 4.dp),
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(3.dp)
+                                            ) {
+                                                Icon(imageVector = Icons.Default.Flight, contentDescription = "ODID Intel", tint = Color(0xFFE040FB), modifier = Modifier.size(11.dp))
+                                                Text(text = "ODID", color = Color(0xFFE040FB), fontSize = 8.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
+                                            }
+                                        }
+                                    }
                                     IconButton(
                                         onClick = { editingTarget = selectedTarget },
                                         modifier = Modifier.size(28.dp)
@@ -1594,6 +1615,9 @@ fun TacticalScannerScreen(
                                     onNavigateToLocation("PILOT GCS: ${target.displayName}", dt.pilotLat, dt.pilotLon)
                                 }
                             }
+                        },
+                        onInspectDrone = {
+                            viewingDroneForensics = target
                         }
                     )
                 }
@@ -1606,6 +1630,18 @@ fun TacticalScannerScreen(
             TacticalTechInfoDialog(
                 tech = tech,
                 onDismiss = { inspectingTech = null }
+            )
+        }
+
+        // OpenDroneID Deep Airspace Forensics Dialog
+        viewingDroneForensics?.let { droneTarget ->
+            OpenDroneIdForensicDialog(
+                target = droneTarget,
+                onDismiss = { viewingDroneForensics = null },
+                onNavigateToPilot = { lat, lon ->
+                    onNavigateToLocation("PILOT GCS: ${droneTarget.displayName}", lat, lon)
+                    viewingDroneForensics = null
+                }
             )
         }
     }
@@ -2046,8 +2082,22 @@ private fun LiveScannerRoadMapCanvas(
                         strokeWidth = 1.3f,
                         pathEffect = PathEffect.dashPathEffect(floatArrayOf(4f, 4f))
                     )
-                    drawCircle(color = Color(0xFFE040FB), radius = 4f, center = pilotPos)
-                    drawCircle(color = Color(0xFFE040FB).copy(alpha = 0.35f), radius = 8f, center = pilotPos, style = Stroke(1.2f))
+                    drawCircle(color = Color(0xFFE040FB), radius = 5f, center = pilotPos)
+                    drawCircle(color = Color(0xFFE040FB).copy(alpha = 0.35f), radius = 10f, center = pilotPos, style = Stroke(1.2f))
+
+                    drawContext.canvas.nativeCanvas.apply {
+                        save()
+                        rotate(deviceHeading, pilotPos.x, pilotPos.y)
+                        val pilotTag = "🎮 PILOT GCS"
+                        val pPaint = android.graphics.Paint().apply {
+                            color = android.graphics.Color.rgb(224, 64, 251)
+                            textSize = 22f
+                            isFakeBoldText = true
+                            typeface = android.graphics.Typeface.MONOSPACE
+                        }
+                        drawText(pilotTag, pilotPos.x + 10f, pilotPos.y + 7f, pPaint)
+                        restore()
+                    }
                 }
 
                 // Target Blip Outer Glow
@@ -2313,7 +2363,8 @@ private fun RfTargetHorizontalCard(
     onViewCctv: () -> Unit = {},
     onInspectTech: (DetectionTechnology) -> Unit = {},
     onDismissCoTravel: () -> Unit = {},
-    onNavigateToPilot: () -> Unit = {}
+    onNavigateToPilot: () -> Unit = {},
+    onInspectDrone: () -> Unit = {}
 ) {
     val isSaved = target.savedMetadata != null
     val isRogue = target.threatLevel.contains("ROGUE") || target.threatLevel.contains("INTERCEPTION")
@@ -2569,6 +2620,25 @@ private fun RfTargetHorizontalCard(
                             ) {
                                 Icon(imageVector = Icons.Default.Videocam, contentDescription = "Feed", tint = Color(0xFFFF5252), modifier = Modifier.size(10.dp))
                                 Text(text = "FEED", color = Color(0xFFFF5252), fontSize = 8.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
+                            }
+                        }
+                    }
+
+                    // OpenDroneID Deep Airspace Intel Button
+                    if (target.droneTelemetry != null) {
+                        Surface(
+                            color = Color(0xFFE040FB).copy(alpha = 0.25f),
+                            shape = RoundedCornerShape(4.dp),
+                            border = androidx.compose.foundation.BorderStroke(1.dp, Color(0xFFE040FB)),
+                            modifier = Modifier.clickable { onInspectDrone() }
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 5.dp, vertical = 3.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(2.dp)
+                            ) {
+                                Icon(imageVector = Icons.Default.Flight, contentDescription = "ODID Intel", tint = Color(0xFFE040FB), modifier = Modifier.size(10.dp))
+                                Text(text = "ODID", color = Color(0xFFE040FB), fontSize = 7.5.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.Monospace)
                             }
                         }
                     }

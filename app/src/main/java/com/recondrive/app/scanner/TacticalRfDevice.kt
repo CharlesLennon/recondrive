@@ -159,22 +159,119 @@ enum class RelativeMotionTrend {
 }
 
 /**
- * Direct Remote ID (ASTM F3411 / OpenDroneID) telemetry decoded from airborne UAV broadcast frames.
+ * Direct Remote ID (ASTM F3411-19/22a / ASD-STAN prEN 4709-002 / DJI DroneID)
+ * comprehensive tactical telemetry decoded from airborne UAV broadcast frames.
  */
 data class DroneTelemetry(
+    // 1. Airframe & Identity
     val uasId: String? = null,
-    val uasType: String = "QUADCOPTER",
+    val idType: String = "SERIAL_NUMBER",
+    val uasType: String = "QUADCOPTER / UAV",
+    val manufacturer: String = "UNKNOWN",
+    val modelName: String = "UAV",
+    val ceClass: String? = null,
+
+    // 2. Flight Dynamics & Live Coordinates
     val droneLat: Double? = null,
     val droneLon: Double? = null,
     val isAirborne: Boolean = true,
+    val operationalStatus: String = "AIRBORNE",
     val altitudeAglMeters: Float? = null,
+    val altitudeMslMeters: Float? = null,
+    val heightType: String = "AGL",
     val speedKmh: Float? = null,
+    val speedMph: Float? = null,
+    val verticalSpeedMps: Float? = null,
     val headingDeg: Float? = null,
+
+    // 3. Remote Pilot Ground Control Station (GCS)
     val pilotLat: Double? = null,
     val pilotLon: Double? = null,
+    val pilotAltitudeMslMeters: Float? = null,
     val pilotLocationType: String = "OPERATOR GCS",
-    val description: String? = null
-)
+    val distanceHostToPilotMeters: Double? = null,
+    val distanceDroneToPilotMeters: Double? = null,
+    val bearingHostToPilotDeg: Float? = null,
+
+    // 4. Civil Aviation Authority Registration & Mission
+    val operatorId: String? = null,
+    val operatorIdType: String = "CAA_OPERATOR_ID",
+    val description: String? = null,
+    val authType: String? = null,
+
+    // 5. Swarm & Operational Perimeter
+    val areaCount: Int = 1,
+    val areaRadiusMeters: Int? = null,
+    val areaCeilingMeters: Float? = null,
+    val areaFloorMeters: Float? = null,
+
+    // 6. GNSS Navigation Integrity & Signal Telemetry
+    val horizontalAccuracy: String? = null,
+    val verticalAccuracy: String? = null,
+    val speedAccuracy: String? = null,
+    val gpsTimestampSeconds: Float? = null,
+    val protocolStandard: String = "ASTM F3411 / Direct Remote ID",
+    val rawPayloadHex: String? = null,
+    val lastUpdatedTimestamp: Long = System.currentTimeMillis()
+) {
+    val isCeilingExceeded: Boolean
+        get() = (altitudeAglMeters ?: 0f) > 120f
+
+    val isEmergency: Boolean
+        get() = operationalStatus.contains("EMERGENCY", ignoreCase = true)
+
+    val headingCardinal: String
+        get() {
+            val hdg = headingDeg ?: return "UNKNOWN"
+            val directions = arrayOf("N", "NE", "E", "SE", "S", "SW", "W", "NW")
+            val idx = (((hdg % 360) + 22.5f) / 45f).toInt() % 8
+            return "%.0f° %s".format(hdg, directions[idx])
+        }
+
+    fun mergeWith(incoming: DroneTelemetry): DroneTelemetry {
+        return DroneTelemetry(
+            uasId = incoming.uasId ?: this.uasId,
+            idType = if (incoming.idType != "SERIAL_NUMBER") incoming.idType else this.idType,
+            uasType = if (incoming.uasType != "QUADCOPTER / UAV") incoming.uasType else this.uasType,
+            manufacturer = if (incoming.manufacturer != "UNKNOWN") incoming.manufacturer else this.manufacturer,
+            modelName = if (incoming.modelName != "UAV") incoming.modelName else this.modelName,
+            ceClass = incoming.ceClass ?: this.ceClass,
+            droneLat = incoming.droneLat ?: this.droneLat,
+            droneLon = incoming.droneLon ?: this.droneLon,
+            isAirborne = incoming.isAirborne,
+            operationalStatus = if (incoming.operationalStatus != "AIRBORNE") incoming.operationalStatus else this.operationalStatus,
+            altitudeAglMeters = incoming.altitudeAglMeters ?: this.altitudeAglMeters,
+            altitudeMslMeters = incoming.altitudeMslMeters ?: this.altitudeMslMeters,
+            heightType = if (incoming.heightType != "AGL") incoming.heightType else this.heightType,
+            speedKmh = incoming.speedKmh ?: this.speedKmh,
+            speedMph = incoming.speedMph ?: this.speedMph,
+            verticalSpeedMps = incoming.verticalSpeedMps ?: this.verticalSpeedMps,
+            headingDeg = incoming.headingDeg ?: this.headingDeg,
+            pilotLat = incoming.pilotLat ?: this.pilotLat,
+            pilotLon = incoming.pilotLon ?: this.pilotLon,
+            pilotAltitudeMslMeters = incoming.pilotAltitudeMslMeters ?: this.pilotAltitudeMslMeters,
+            pilotLocationType = if (incoming.pilotLocationType != "OPERATOR GCS") incoming.pilotLocationType else this.pilotLocationType,
+            distanceHostToPilotMeters = incoming.distanceHostToPilotMeters ?: this.distanceHostToPilotMeters,
+            distanceDroneToPilotMeters = incoming.distanceDroneToPilotMeters ?: this.distanceDroneToPilotMeters,
+            bearingHostToPilotDeg = incoming.bearingHostToPilotDeg ?: this.bearingHostToPilotDeg,
+            operatorId = incoming.operatorId ?: this.operatorId,
+            operatorIdType = if (incoming.operatorIdType != "CAA_OPERATOR_ID") incoming.operatorIdType else this.operatorIdType,
+            description = incoming.description ?: this.description,
+            authType = incoming.authType ?: this.authType,
+            areaCount = if (incoming.areaCount > 1) incoming.areaCount else this.areaCount,
+            areaRadiusMeters = incoming.areaRadiusMeters ?: this.areaRadiusMeters,
+            areaCeilingMeters = incoming.areaCeilingMeters ?: this.areaCeilingMeters,
+            areaFloorMeters = incoming.areaFloorMeters ?: this.areaFloorMeters,
+            horizontalAccuracy = incoming.horizontalAccuracy ?: this.horizontalAccuracy,
+            verticalAccuracy = incoming.verticalAccuracy ?: this.verticalAccuracy,
+            speedAccuracy = incoming.speedAccuracy ?: this.speedAccuracy,
+            gpsTimestampSeconds = incoming.gpsTimestampSeconds ?: this.gpsTimestampSeconds,
+            protocolStandard = incoming.protocolStandard,
+            rawPayloadHex = incoming.rawPayloadHex ?: this.rawPayloadHex,
+            lastUpdatedTimestamp = System.currentTimeMillis()
+        )
+    }
+}
 
 /**
  * Non-stressful classification of shared route / co-travel proximity between vehicles.

@@ -864,9 +864,22 @@ class TacticalRfScannerManager(
 
                 csiEngine?.feedLiveSample(rssi)
 
-                val classification = TacticalRfClassifier.classify(ssid, bssid, sourceTech = DetectionTechnology.WIFI_BEACON)
+                val wifiDroneTelemetry = TacticalDroneIdParser.parseWifi(ssid, bssid)
+                val isDrone = wifiDroneTelemetry != null
+                val classification = if (isDrone) {
+                    TargetClassification(
+                        category = RfCategory.DRONE_UAV,
+                        targetName = "${wifiDroneTelemetry.modelName} [${wifiDroneTelemetry.uasId ?: bssid.takeLast(6)}]",
+                        threatLevel = "AIRSPACE UAV IN FLIGHT",
+                        vendor = wifiDroneTelemetry.manufacturer,
+                        protocolOverride = wifiDroneTelemetry.protocolStandard,
+                        details = "Airborne UAV detected via Wi-Fi Beacon OpenDroneID • ID: ${wifiDroneTelemetry.uasId ?: bssid}"
+                    )
+                } else {
+                    TacticalRfClassifier.classify(ssid, bssid, sourceTech = DetectionTechnology.WIFI_BEACON)
+                }
                 val dist = TacticalRfClassifier.estimateDistance(rssi, freq)
-                val isStationary = classification.category == RfCategory.ACCESS_POINT || classification.category == RfCategory.CCTV_SURVEILLANCE
+                val isStationary = !isDrone && (classification.category == RfCategory.ACCESS_POINT || classification.category == RfCategory.CCTV_SURVEILLANCE)
 
                 val targetLat: Double
                 val targetLon: Double
@@ -1004,15 +1017,29 @@ class TacticalRfScannerManager(
                     locationHistory = history.toList(),
                     motionTrend = motionTrend,
                     savedMetadata = saved,
-                    detectionTech = if (TacticalRfClassifier.isLocallyAdministeredMac(bssid) || 
+                    detectionTech = if (isDrone) {
+                        DetectionTechnology.OPEN_DRONE_ID
+                    } else if (TacticalRfClassifier.isLocallyAdministeredMac(bssid) || 
                         (TacticalRfClassifier.isKnownOui(bssid) && (classification.vendor.contains("Flock") || classification.vendor.contains("Axon") || classification.vendor.contains("Hikvision") || classification.vendor.contains("Dahua")))) {
                         DetectionTechnology.MAC_SNIFFING
                     } else {
                         DetectionTechnology.WIFI_BEACON
-                    }
+                    },
+                    droneTelemetry = wifiDroneTelemetry
                 )
 
                 targetMap[bssid] = target
+
+                if (isDrone && (now - lastDroneAlertTime > 45000L)) {
+                    lastDroneAlertTime = now
+                    soundManager.dispatchAlert(
+                        category = com.recondrive.app.audio.AlertCategory.OPEN_DRONE_ID,
+                        title = "🛸 AERIAL DRONE DETECTED",
+                        message = "Airborne UAV ${wifiDroneTelemetry.modelName} active in local airspace.",
+                        ttsPhrase = "Alert: Drone detected in local airspace.",
+                        soundType = "TACTICAL_CHIRP"
+                    )
+                }
             }
 
             syncTargetsToFlow()
@@ -1052,6 +1079,39 @@ class TacticalRfScannerManager(
             val rawBytes = scanRecord?.bytes
             val droneTelemetry = TacticalDroneIdParser.parse(serviceDataMap, manufacturerData, rawBytes)
 
+            // Stateful accumulation: Merge newly received packet with existing drone telemetry
+            val existing = targetMap[address]
+            val mergedDroneTelemetry = when {
+                droneTelemetry != null && existing?.droneTelemetry != null -> existing.droneTelemetry.mergeWith(droneTelemetry)
+                droneTelemetry != null -> droneTelemetry
+                else -> existing?.droneTelemetry
+            }
+
+            // Calculate live vectors (Host -> Drone, Host -> Pilot, Drone -> Pilot)
+            val fullyComputedTelemetry = mergedDroneTelemetry?.let { dt ->
+                val distHostPilot = if (dt.pilotLat != null && dt.pilotLon != null) {
+                    calculateDistanceMeters(lastKnownLat, lastKnownLon, dt.pilotLat, dt.pilotLon)
+                } else dt.distanceHostToPilotMeters
+
+                val distDronePilot = if (dt.pilotLat != null && dt.pilotLon != null && dt.droneLat != null && dt.droneLon != null) {
+                    calculateDistanceMeters(dt.droneLat, dt.droneLon, dt.pilotLat, dt.pilotLon)
+                } else dt.distanceDroneToPilotMeters
+
+                val bearingHostPilot = if (dt.pilotLat != null && dt.pilotLon != null) {
+                    val dLatM = (dt.pilotLat - lastKnownLat) * 111320.0
+                    val dLonM = (dt.pilotLon - lastKnownLon) * 111320.0 * cos(Math.toRadians(lastKnownLat))
+                    var worldAngle = Math.toDegrees(atan2(dLonM, dLatM)).toFloat()
+                    if (worldAngle < 0f) worldAngle += 360f
+                    (worldAngle - lastKnownHeading + 360f) % 360f
+                } else dt.bearingHostToPilotDeg
+
+                dt.copy(
+                    distanceHostToPilotMeters = distHostPilot,
+                    distanceDroneToPilotMeters = distDronePilot,
+                    bearingHostToPilotDeg = bearingHostPilot
+                )
+            }
+
             val classification = TacticalRfClassifier.classify(
                 ssidOrBleName = rawName,
                 macAddress = address,
@@ -1059,7 +1119,7 @@ class TacticalRfScannerManager(
                 serviceUuids = serviceUuids,
                 manufacturerId = manufacturerId,
                 manufacturerData = manufacturerData,
-                sourceTech = if (droneTelemetry != null) DetectionTechnology.OPEN_DRONE_ID else DetectionTechnology.BLE_ADVERTISING
+                sourceTech = if (fullyComputedTelemetry != null) DetectionTechnology.OPEN_DRONE_ID else DetectionTechnology.BLE_ADVERTISING
             )
 
             val dist = TacticalRfClassifier.estimateDistance(rssi, 2402)
@@ -1070,9 +1130,9 @@ class TacticalRfScannerManager(
             val relativeBearing: Float
             val effectiveDistance: Double
 
-            if (droneTelemetry?.droneLat != null && droneTelemetry.droneLon != null) {
-                targetLat = droneTelemetry.droneLat
-                targetLon = droneTelemetry.droneLon
+            if (fullyComputedTelemetry?.droneLat != null && fullyComputedTelemetry.droneLon != null) {
+                targetLat = fullyComputedTelemetry.droneLat
+                targetLon = fullyComputedTelemetry.droneLon
                 effectiveDistance = calculateDistanceMeters(lastKnownLat, lastKnownLon, targetLat, targetLon).coerceIn(1.0, 5000.0)
                 val dLatM = (targetLat - lastKnownLat) * 111320.0
                 val dLonM = (targetLon - lastKnownLon) * 111320.0 * cos(Math.toRadians(lastKnownLat))
@@ -1156,27 +1216,33 @@ class TacticalRfScannerManager(
 
             val sweepCount = stationaryPinpointMap[address]?.sampleCount ?: 1
 
-            val isDrone = droneTelemetry != null || classification.category == RfCategory.DRONE_UAV
+            val isDrone = fullyComputedTelemetry != null || classification.category == RfCategory.DRONE_UAV
             val targetName = when {
-                droneTelemetry?.uasId != null -> "UAV [${droneTelemetry.uasType}] ${droneTelemetry.uasId}"
-                droneTelemetry != null -> "UAV [${droneTelemetry.uasType}] ${if (rawName.isNotBlank()) rawName else address.takeLast(8)}"
+                fullyComputedTelemetry?.modelName != null && fullyComputedTelemetry.modelName != "UAV" -> {
+                    val serialTag = fullyComputedTelemetry.uasId?.takeLast(8) ?: address.takeLast(6)
+                    "${fullyComputedTelemetry.modelName} [$serialTag]"
+                }
+                fullyComputedTelemetry?.uasId != null -> "UAV [${fullyComputedTelemetry.uasType}] ${fullyComputedTelemetry.uasId}"
+                fullyComputedTelemetry != null -> "UAV [${fullyComputedTelemetry.uasType}] ${if (rawName.isNotBlank()) rawName else address.takeLast(8)}"
                 else -> classification.targetName
             }
             val targetCategory = if (isDrone) RfCategory.DRONE_UAV else classification.category
             val targetTech = when {
-                droneTelemetry != null -> DetectionTechnology.OPEN_DRONE_ID
+                fullyComputedTelemetry != null -> DetectionTechnology.OPEN_DRONE_ID
                 TacticalRfClassifier.isLocallyAdministeredMac(address) && rawName.isBlank() -> DetectionTechnology.MAC_SNIFFING
                 else -> DetectionTechnology.BLE_ADVERTISING
             }
-            val targetProtocol = if (droneTelemetry != null) "OpenDroneID (ASTM F3411)" else (classification.protocolOverride ?: "BLE 5.2 / Bluetooth Low Energy")
+            val targetProtocol = if (fullyComputedTelemetry != null) fullyComputedTelemetry.protocolStandard else (classification.protocolOverride ?: "BLE 5.2 / Bluetooth Low Energy")
             val targetThreat = if (isDrone) "AIRSPACE UAV IN FLIGHT" else (if (isStationary && sweepCount >= 3) "PINPOINTED INFRASTRUCTURE" else classification.threatLevel)
 
             val targetDetails = when {
-                droneTelemetry != null -> {
-                    val alt = droneTelemetry.altitudeAglMeters?.let { " • Alt: ${it.toInt()}m AGL" } ?: ""
-                    val spd = droneTelemetry.speedKmh?.let { " • Spd: ${it.toInt()} km/h" } ?: ""
-                    val pilot = droneTelemetry.pilotLat?.let { " • Pilot: ${droneTelemetry.pilotLocationType} (%.4f°N, %.4f°W)".format(it, abs(droneTelemetry.pilotLon ?: 0.0)) } ?: ""
-                    "Airborne UAV (Direct Remote ID)$alt$spd$pilot"
+                fullyComputedTelemetry != null -> {
+                    val mfr = if (fullyComputedTelemetry.manufacturer != "UNKNOWN") "${fullyComputedTelemetry.manufacturer} • " else ""
+                    val alt = fullyComputedTelemetry.altitudeAglMeters?.let { " • Alt: ${it.toInt()}m AGL" } ?: ""
+                    val spd = fullyComputedTelemetry.speedKmh?.let { " • Spd: ${"%.1f".format(it)} km/h" } ?: ""
+                    val pilot = fullyComputedTelemetry.pilotLat?.let { " • Pilot: ${"%.0f".format(fullyComputedTelemetry.distanceHostToPilotMeters ?: 0.0)}m GCS" } ?: ""
+                    val op = fullyComputedTelemetry.operatorId?.let { " • CAA: $it" } ?: ""
+                    "$mfr${fullyComputedTelemetry.modelName}$alt$spd$pilot$op"
                 }
                 isStationary && sweepCount > 1 -> "Pinpointed across $sweepCount sweeps • ${classification.details}"
                 else -> classification.details
@@ -1187,7 +1253,7 @@ class TacticalRfScannerManager(
                 name = targetName,
                 rawSsidOrBleName = rawName,
                 macAddress = address,
-                vendor = classification.vendor,
+                vendor = fullyComputedTelemetry?.manufacturer?.takeIf { it != "UNKNOWN" } ?: classification.vendor,
                 category = targetCategory,
                 rssi = rssi,
                 estimatedDistanceMeters = effectiveDistance,
@@ -1203,7 +1269,7 @@ class TacticalRfScannerManager(
                 motionTrend = motionTrend,
                 savedMetadata = saved,
                 detectionTech = targetTech,
-                droneTelemetry = droneTelemetry
+                droneTelemetry = fullyComputedTelemetry
             )
             val isNewTarget = !targetMap.containsKey(address)
             targetMap[address] = target
