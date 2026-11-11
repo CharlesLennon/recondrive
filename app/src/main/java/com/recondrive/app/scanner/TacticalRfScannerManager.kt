@@ -866,14 +866,14 @@ class TacticalRfScannerManager(
 
                 val wifiDroneTelemetry = TacticalDroneIdParser.parseWifi(ssid, bssid)
                 val isDrone = wifiDroneTelemetry != null
-                val classification = if (isDrone) {
-                    TargetClassification(
+                val classification = if (wifiDroneTelemetry != null) {
+                    TacticalRfClassifier.ClassificationResult(
                         category = RfCategory.DRONE_UAV,
                         targetName = "${wifiDroneTelemetry.modelName} [${wifiDroneTelemetry.uasId ?: bssid.takeLast(6)}]",
-                        threatLevel = "AIRSPACE UAV IN FLIGHT",
                         vendor = wifiDroneTelemetry.manufacturer,
-                        protocolOverride = wifiDroneTelemetry.protocolStandard,
-                        details = "Airborne UAV detected via Wi-Fi Beacon OpenDroneID • ID: ${wifiDroneTelemetry.uasId ?: bssid}"
+                        threatLevel = "AIRSPACE UAV IN FLIGHT",
+                        details = "Airborne UAV detected via Wi-Fi Beacon OpenDroneID • ID: ${wifiDroneTelemetry.uasId ?: bssid}",
+                        protocolOverride = wifiDroneTelemetry.protocolStandard
                     )
                 } else {
                     TacticalRfClassifier.classify(ssid, bssid, sourceTech = DetectionTechnology.WIFI_BEACON)
@@ -1030,7 +1030,7 @@ class TacticalRfScannerManager(
 
                 targetMap[bssid] = target
 
-                if (isDrone && (now - lastDroneAlertTime > 45000L)) {
+                if (wifiDroneTelemetry != null && (now - lastDroneAlertTime > 45000L)) {
                     lastDroneAlertTime = now
                     soundManager.dispatchAlert(
                         category = com.recondrive.app.audio.AlertCategory.OPEN_DRONE_ID,
